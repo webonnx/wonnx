@@ -4,7 +4,10 @@ version = "0.1.0"
 authors = ["haixuanTao <hai-xuan.tao@student.ecp.fr>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
-descriptions = "Wonnx (Web ONNX) is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
+description = "Wonnx (Web ONNX) is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
+repository = "https://github.com/haixuanTao/wonnx.git"
+homepage = "https://github.com/haixuanTao/wonnx"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
