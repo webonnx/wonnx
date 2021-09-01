@@ -1,36 +1,43 @@
-// importing common module.
-use bytemuck;
 use wonnx::*;
 
 fn main() {
+    const n: i32 = i32::pow(2, 20);
     let (device, queue) = pollster::block_on(ressource::request_device_queue());
-    let data = ndarray::array![1.0f32, 2.0, 3.0];
-    let data = data.as_slice().unwrap();
+    let data = [1.0; n as _];
     let buffer = ressource::create_buffer_init(&device, &data);
 
     let binding_group_entry = [wgpu::BindGroupEntry {
         binding: 0,
         resource: buffer.as_entire_binding(),
     }];
-
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    let operators = ["abs"]; //"acos", "asin", "atan", "cos", "sin", "cosh", "sinh"];
-    let computors: Vec<(wgpu::ComputePipeline, wgpu::BindGroup)> = operators
-        .iter()
-        .map(|op| compute::unit_compute(&device, &binding_group_entry, op))
-        .collect();
-    {
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-
-        for (cp, bg) in computors.iter() {
-            cpass.set_pipeline(&cp);
-            cpass.set_bind_group(0, &bg, &[]);
-            // cpass.insert_debug_marker("compute collatz iterations");
-            cpass.dispatch(4, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
-        }
+    let mut i = 1;
+    let mut v = Vec::new();
+    while i < n {
+        v.push(crate::compute::wrapper(
+            &device,
+            &binding_group_entry,
+            &[0],
+            &crate::op::scan(&[1.0; 2], &[i], true),
+        ));
+        i *= 2;
     }
-    queue.submit(Some(encoder.finish()));
+    let mut i = n;
+    {
+        for (cp, bg) in v.iter() {
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                i /= 2;
+                let mut cpass =
+                    encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+                cpass.set_pipeline(&cp);
+                cpass.set_bind_group(0, &bg, &[]);
+                cpass.dispatch(i as _, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
+            }
+            queue.submit(Some(encoder.finish()));
+        }
+        // cpass.insert_debug_marker("compute collatz iterations");
+    }
 
     // Note that we're not calling `.await` here.
     let buffer_slice = buffer.slice(..);
@@ -43,7 +50,8 @@ fn main() {
         let data = buffer_slice.get_mapped_range();
         // Since contents are got in bytes, this converts these bytes back to f32
         let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
-        println!("result: {:#?}", result);
+
+        println!("result: {:#?}", &result[0]);
         drop(data);
     } else {
         panic!("failed to run compute on gpu!")

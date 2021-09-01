@@ -18,7 +18,7 @@ fn test_add() {
     let operators = ["cos", "sin", "cosh", "sinh"];
     let computors: Vec<(wgpu::ComputePipeline, wgpu::BindGroup)> = operators
         .iter()
-        .map(|op| compute::unit_compute(&device, &binding_group_entry, op))
+        .map(|op| compute::wrapper(&device, &binding_group_entry, &[0], &op::map(op)))
         .collect();
     {
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
