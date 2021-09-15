@@ -48,12 +48,18 @@ pub fn create_buffer(device: &wgpu::Device, size: u64) -> wgpu::Buffer {
         label: Some("Storage Buffer"),
         size,
         mapped_at_creation: false,
-        usage: wgpu::BufferUsages::STORAGE
-            | wgpu::BufferUsages::COPY_DST
-            | wgpu::BufferUsages::COPY_SRC
-            | wgpu::BufferUsages::MAP_READ,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
     })
 }
+
+pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Storage Buffer"),
+        contents: bytemuck::cast_slice(array),
+        usage: wgpu::BufferUsages::STORAGE,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

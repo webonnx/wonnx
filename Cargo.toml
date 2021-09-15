@@ -13,11 +13,11 @@ homepage = "https://github.com/haixuanTao/wonnx"
 [dependencies]
 wgpu = {path = "/home/peter/Documents/BLOG/wgpu/wgpu" }
 bytemuck = "1.7.2"
-env_logger = ""
-pollster = ""
-ndarray = ""
-log = "" 
-rayon = ""
+env_logger = "0.9.0"
+pollster = "0.2.4"
+ndarray = "0.15.3"
+log = "0.4.14" 
+rayon = "1.5.1"
 
 [dev-dependencies]
 approx = "0.1.0"
@@ -28,6 +28,8 @@ resolver = "2"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2.76" # remember to change version in wiki as well
+js-sys = "0.3.50"
+wasm-bindgen-futures = "0.4.23"
 web-sys = { version = "0.3.53", features = [
     "Document",
     "Navigator",
@@ -149,11 +151,11 @@ web-sys = { version = "0.3.53", features = [
     "GpuVertexState",
     "GpuVertexStepMode",
     "HtmlCanvasElement",
+    "OffscreenCanvas",
     "Window",
 ]}
-js-sys = "0.3.50"
-wasm-bindgen-futures = "0.4.23"
+parking_lot = { version = "0.11.1", features = ["wasm-bindgen"]}
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.6"
-console_log = "0.1.2"
+console_log = "0.2.0"

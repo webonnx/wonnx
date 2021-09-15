@@ -34,31 +34,24 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         resource: storage_buffer.as_entire_binding(),
     };
 
-    let (compute_pipeline, bind_group) = crate::compute::wrapper(
+    crate::compute::wrapper(
         &device,
+        &queue,
         &[binding_group_entry],
         &[0],
         &crate::op::map(&"cos"),
-    );
+        LEN,
+        1,
+        1,
+    )
+    .unwrap();
     // A command encoder executes one or many pipelines.
     // It is to WebGPU what a command buffer is to Vulkan.
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-    {
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        cpass.set_pipeline(&compute_pipeline);
-        cpass.set_bind_group(0, &bind_group, &[]);
-        // cpass.insert_debug_marker("compute collatz iterations");
-        cpass.dispatch(LEN, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
-    }
-
     // Sets adds copy operation to command encoder.
     // Will copy data from storage buffer on GPU to staging buffer on CPU.
     // encoder.copy_buffer_to_buffer(&output_buffer, 0, &staging_buffer, 0, size);
 
     // Submits command encoder for processing
-    queue.submit(Some(encoder.finish()));
 
     // Note that we're not calling `.await` here.
     let buffer_slice = storage_buffer.slice(..);
