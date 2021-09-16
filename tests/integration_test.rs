@@ -38,7 +38,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         &device,
         &queue,
         &[binding_group_entry],
-        &[0],
+        &[crate::compute::InnerType::ArrayVector],
         &crate::op::map(&"cos"),
         LEN,
         1,

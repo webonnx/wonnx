@@ -1,6 +1,6 @@
 use std::time::Instant;
 use wgpu::util::DeviceExt;
-use wonnx::*;
+use wonnx::{compute::InnerType, *};
 fn main() {
     let time_0 = Instant::now();
     let (device, queue) = pollster::block_on(ressource::request_device_queue());
@@ -39,7 +39,7 @@ fn main() {
         &device,
         &queue,
         &binding_group_entry,
-        &[0, 1, 2],
+        &[InnerType::Array, InnerType::Array, InnerType::Array],
         &crate::op::matmul(224),
         224,
         224,
