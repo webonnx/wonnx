@@ -34,10 +34,7 @@ pub fn create_buffer_init(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer 
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Storage Buffer"),
         contents: bytemuck::cast_slice(array),
-        usage: wgpu::BufferUsages::STORAGE
-            | wgpu::BufferUsages::COPY_DST
-            | wgpu::BufferUsages::COPY_SRC
-            | wgpu::BufferUsages::MAP_READ,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
     })
 }
 

@@ -1,3 +1,43 @@
+pub fn matrix_map(function: &str) -> String {
+    format!(
+        r#"
+[[stage(compute), workgroup_size(1)]]
+fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
+    for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
+        b_0.data[global_id.x][index_mat] = {function};
+    }}
+}}
+"#,
+        function = function,
+    )
+}
+
+pub fn main(nodes: &[&crate::ir::Node]) -> String {
+    format!(
+        r#"
+[[stage(compute), workgroup_size(1)]]
+fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
+    {main_body}
+}}
+"#,
+        main_body = nodes
+            .iter()
+            .map(|node| node.to_string())
+            .fold("".to_string(), |acc, node| acc + "\n\n" + &node),
+    )
+}
+
+pub fn as_vec(function: &str) -> String {
+    format!(
+        r#"
+    for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
+        {function}
+    }}
+"#,
+        function = function,
+    )
+}
+
 pub fn map(function: &str) -> String {
     format!(
         r#"
@@ -20,7 +60,6 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
         for(var k: u32 = 0u; k < {len}u; k = k + 1u) {{
             tmpSum = fma(b_0.data[global_id.x * {len}u + k], b_1.data[global_id.y + k * {len}u], tmpSum);
         }}
-
         b_2.data[i] = tmpSum;
 }}
     "#,

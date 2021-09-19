@@ -20,7 +20,7 @@ pub fn wrapper(
     queue: &wgpu::Queue,
     entries: &[wgpu::BindGroupEntry],
     inner_types: &[InnerType],
-    main: &str,
+    compute_shader: &str,
     x: u32,
     y: u32,
     z: u32,
@@ -47,10 +47,10 @@ var<storage, read_write> b_{i}: {inner_type};
         r#"
 {main}    
 "#,
-        main = main
+        main = compute_shader
     ));
 
-    println!("shader: {}", shader);
+    debug!("shader: {}", shader);
 
     // Generating the compute pipeline and binding group.
     let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {

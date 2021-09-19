@@ -18,11 +18,30 @@ fn matmul() -> Result<f32, ShapeError> {
 }
 fn main() {
     const N: i32 = i32::pow(2, 17);
-    let now = Instant::now();
+    let time_start = Instant::now();
     let v = vec![1.0f32; N as _];
     let sum: f32 = v.par_iter().sum();
-    println!("sum: {:#?}", sum);
-    println!("Instant::now() - now: {:#?}", Instant::now() - now);
+    println!("{}", sum);
+    let time_sum = Instant::now();
+    println!("time: sum -> start: {:#?}", time_sum - time_start);
+    let mut v = vec![1.0f32; 512 * 512 * 128];
+    for _ in 0..100 {
+        v = v.iter().map(|x| f32::cos(*x)).collect();
+    }
+    let time_cos = Instant::now();
+    println!("time: sum -> cos : {:#?}", time_cos - time_sum);
+    let mut v = vec![1.0f32; 512 * 512 * 128];
+    for _ in 0..20 {
+        v = v
+            .par_iter()
+            .map(|x| f32::cos(f32::cos(f32::cos(f32::cos(f32::cos(*x))))))
+            .collect();
+    }
+    let time_cos_parallel = Instant::now();
+    println!(
+        "time: cos_parallel -> cos : {:#?}",
+        time_cos_parallel - time_cos
+    );
     let now = Instant::now();
     let result = matmul().unwrap();
     println!("result: {:#?}", result);

@@ -9,7 +9,7 @@ fn main() {
     println!("time - time_0: {:#?}", time - time_0);
 
     let n = 1024;
-    let n16 = n / 16;
+    let n4 = n / 4;
     let n2 = n * n;
     let a: Vec<f32> = (0..n2).map(|x| x as f32).collect();
     let b: Vec<f32> = (0..n2).map(|x| x as f32).collect();
@@ -35,36 +35,35 @@ fn main() {
 
     let time_shader = Instant::now();
     println!("time_shader - time: {:#?}", time_shader - time);
-    for i in 0..10 {
-        crate::compute::wrapper(
-            &device,
-            &queue,
-            &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer_a.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: buffer_b.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: buffer_c.as_entire_binding(),
-                },
-            ],
-            &[
-                compute::InnerType::ArrayMatrix,
-                compute::InnerType::ArrayMatrix,
-                compute::InnerType::ArrayMatrix,
-            ],
-            &crate::op::vector_matmul(n16),
-            n16 as u32,
-            n16 as u32,
-            1,
-        )
-        .unwrap();
-    }
+    crate::compute::wrapper(
+        &device,
+        &queue,
+        &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer_a.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: buffer_b.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: buffer_c.as_entire_binding(),
+            },
+        ],
+        &[
+            compute::InnerType::ArrayMatrix,
+            compute::InnerType::ArrayMatrix,
+            compute::InnerType::ArrayMatrix,
+        ],
+        &crate::op::vector_matmul(n4),
+        n4 as u32,
+        n4 as u32,
+        1,
+    )
+    .unwrap();
+
     // cpass.insert_debug_marker("compute collatz iterations");
     let time_ressource = Instant::now();
     println!(
