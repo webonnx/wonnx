@@ -22,7 +22,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let mut input_data = HashMap::new();
 
     let data = vec![-1.0f32; n];
-    let dims = vec![n as i32];
+    let dims = vec![n as i64];
     input_data.insert("X", (data.as_slice(), dims.as_slice()));
 
     // ONNX INPUTS

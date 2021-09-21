@@ -19,7 +19,7 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 ///
 /// Basic usage:
 ///
-/// ```
+/// ```ignore
 /// let session = Session::from_path("path/to/model.onnx").await.unwrap();
 /// ```
 pub struct Session {
@@ -58,7 +58,7 @@ impl Session {
         })
     }
 
-    pub async fn run(&self, input_data: HashMap<&str, (&[f32], &[i32])>) -> Option<Vec<f32>> {
+    pub async fn run(&self, input_data: HashMap<&str, (&[f32], &[i64])>) -> Option<Vec<f32>> {
         let graph = self.model.get_graph();
         let device = &self.device;
         let queue = &self.queue;
@@ -66,6 +66,7 @@ impl Session {
         let mut buffers = HashMap::new();
 
         let inputs = graph.get_input();
+        let value_infos = graph.get_value_info();
         let outputs = graph.get_output();
 
         let mut dims = vec![];
@@ -82,23 +83,18 @@ impl Session {
         for output in outputs.iter() {
             buffers.insert(
                 output.get_name(),
-                crate::resource::create_buffer(&device, crate::resource::get_size(output) as _),
+                crate::resource::create_buffer(&device, crate::resource::size(output) as _),
             );
         }
 
-        crate::compute::wrapper(
-            device,
-            queue,
-            graph,
-            &inputs,
-            &outputs,
-            &buffers,
-            graph.get_node(),
-            (dims[0][0] / 16) as _,
-            1,
-            1,
-        )
-        .unwrap();
+        for value_info in value_infos.iter() {
+            buffers.insert(
+                value_info.get_name(),
+                crate::resource::create_buffer(&device, crate::resource::size(value_info) as _),
+            );
+        }
+
+        crate::compute::wrapper(device, queue, graph, &buffers).unwrap();
 
         // TODO: Define behavior for multi output.
         let buffer_slice = buffers.get(outputs[0].get_name()).unwrap().slice(..);

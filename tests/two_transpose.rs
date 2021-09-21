@@ -19,7 +19,7 @@ async fn run() {
 async fn execute_gpu() -> Option<Vec<f32>> {
     // USER INPUT
 
-    let n: i32 = 1024;
+    let n: i64 = 1024;
     let mut input_data = HashMap::new();
     let data = (0..n).map(|x| x as f32).collect::<Vec<f32>>();
     let dims = vec![n, n];

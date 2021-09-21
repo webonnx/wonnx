@@ -72,7 +72,7 @@ mod tests {
     }
 }
 
-pub fn get_size(tensor: &crate::onnx::ValueInfoProto) -> i64 {
+pub fn size(tensor: &crate::onnx::ValueInfoProto) -> i64 {
     i64::max(
         tensor
             .get_field_type()
@@ -84,4 +84,23 @@ pub fn get_size(tensor: &crate::onnx::ValueInfoProto) -> i64 {
             * std::mem::size_of::<f32>() as i64,
         16,
     )
+}
+
+pub fn len(tensor: &crate::onnx::ValueInfoProto) -> i64 {
+    tensor
+        .get_field_type()
+        .get_tensor_type()
+        .get_shape()
+        .get_dim()
+        .iter()
+        .fold(1, |acc, dim| acc * dim.get_dim_value())
+}
+
+pub fn len_index(tensor: &crate::onnx::ValueInfoProto, index: usize) -> i64 {
+    tensor
+        .get_field_type()
+        .get_tensor_type()
+        .get_shape()
+        .get_dim()[index]
+        .get_dim_value()
 }

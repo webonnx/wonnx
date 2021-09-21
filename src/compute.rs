@@ -7,7 +7,6 @@ use std::fmt;
 pub enum InnerType {
     Array,
     ArrayVector,
-    ArrayMatrix,
 }
 
 impl fmt::Display for InnerType {
@@ -20,14 +19,13 @@ pub fn wrapper(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     graph: &crate::onnx::GraphProto,
-    inputs: &[crate::onnx::ValueInfoProto],
-    outputs: &[crate::onnx::ValueInfoProto],
     buffers: &HashMap<&str, wgpu::Buffer>,
-    nodes: &[crate::onnx::NodeProto],
-    x: u32,
-    y: u32,
-    z: u32,
 ) -> Result<(), wgpu::Error> {
+    let inputs = graph.get_input();
+    let value_infos = graph.get_value_info();
+    let outputs = graph.get_output();
+    let nodes = graph.get_node();
+
     // Generating the shader
     let mut shader = crate::boilerplate::INIT.to_string();
 
@@ -35,7 +33,14 @@ pub fn wrapper(
     let mut binding_key: HashMap<&str, u32> = HashMap::new();
     let mut entries = vec![];
     for tensor in inputs.iter() {
-        shader.push_str(crate::ir::format_tensor(binding_counter, tensor).as_str());
+        shader.push_str(
+            crate::ir::format_tensor(
+                binding_counter,
+                tensor,
+                &crate::compute::InnerType::ArrayVector,
+            )
+            .as_str(),
+        );
         binding_key.insert(tensor.get_name(), binding_counter);
         entries.push(wgpu::BindGroupEntry {
             binding: binding_counter,
@@ -45,7 +50,14 @@ pub fn wrapper(
     }
 
     for tensor in outputs.iter() {
-        shader.push_str(crate::ir::format_tensor(binding_counter, tensor).as_str());
+        shader.push_str(
+            crate::ir::format_tensor(
+                binding_counter,
+                tensor,
+                &crate::compute::InnerType::ArrayVector,
+            )
+            .as_str(),
+        );
         binding_key.insert(tensor.get_name(), binding_counter);
         entries.push(wgpu::BindGroupEntry {
             binding: binding_counter,
@@ -53,6 +65,28 @@ pub fn wrapper(
         });
         binding_counter += 1;
     }
+
+    for tensor in value_infos.iter() {
+        shader.push_str(
+            crate::ir::format_tensor(
+                binding_counter,
+                tensor,
+                &crate::compute::InnerType::ArrayVector,
+            )
+            .as_str(),
+        );
+        binding_key.insert(tensor.get_name(), binding_counter);
+        entries.push(wgpu::BindGroupEntry {
+            binding: binding_counter,
+            resource: buffers.get(tensor.get_name()).unwrap().as_entire_binding(),
+        });
+        binding_counter += 1;
+    }
+
+    let shaders = nodes
+        .iter()
+        .map(|node| crate::ir::format_node(node, graph))
+        .collect::<Vec<(String, u32, u32, u32)>>();
 
     shader.push_str(&format!(
         r#"
@@ -62,21 +96,22 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
     {main_body}
 }}
 "#,
-        main_body = nodes
+        main_body = shaders
             .iter()
-            .map(|node| crate::ir::format_node(node, graph))
+            .map(|(shader, _, _, _)| shader)
             .fold("".to_string(), |acc, node| acc + "\n" + &node),
     ));
 
     debug!("shader: {}", shader);
+
+    // TODO: Make defining threads more clean.
+    let (_, x, y, z) = shaders.iter().next().unwrap();
 
     // Generating the compute pipeline and binding group.
     let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
     });
-
-    debug!("Successfully generated cs module!");
 
     // Instantiates the pipeline.
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -88,8 +123,6 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
 
     // Instantiates the bind group, once again specifying the binding of buffers.
     let bind_group_layout = compute_pipeline.get_bind_group_layout(0 as _);
-
-    debug!("Successfully created bind group layout!");
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
@@ -105,7 +138,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
         cpass.set_bind_group(0, &bind_group, &[]);
         debug!("Ready for dispatch!");
         cpass.insert_debug_marker("compute");
-        cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
+        cpass.dispatch(*x, *y, *z); // Number of cells to run, the (x,y,z) size of item being processed
     }
     queue.submit(Some(encoder.finish()));
     Ok(())
