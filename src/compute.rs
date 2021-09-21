@@ -19,6 +19,7 @@ impl fmt::Display for InnerType {
 pub fn wrapper(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    graph: &crate::onnx::GraphProto,
     inputs: &[crate::onnx::ValueInfoProto],
     outputs: &[crate::onnx::ValueInfoProto],
     buffers: &HashMap<&str, wgpu::Buffer>,
@@ -63,7 +64,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
 "#,
         main_body = nodes
             .iter()
-            .map(|node| crate::ir::format_node(node))
+            .map(|node| crate::ir::format_node(node, graph))
             .fold("".to_string(), |acc, node| acc + "\n" + &node),
     ));
 

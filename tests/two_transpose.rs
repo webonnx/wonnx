@@ -1,15 +1,18 @@
 use log::debug;
 use std::collections::HashMap;
 use std::time::Instant;
+use wasm_bindgen_test::*;
 // Indicates a f32 overflow in an intermediate Collatz value
 
 // Args Management
 async fn run() {
     let steps = execute_gpu().await.unwrap();
 
+    assert_eq!(steps[0..5], [0.0, 0.0, 0.0, 0.0, 0.0]);
     println!("steps[0..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
-    log::info!("Steps: [{}]", disp_steps.join(", "));
+    // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
+    assert_eq!(steps[0..5], [0.0, 0.0, 0.0, 0.0, 0.0]);
 }
 
 // Hardware management
@@ -31,7 +34,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     // let initializers = graph.mut_initializer();
     // initializers.insert(initializers.len(), initializer);
     let time_start = Instant::now();
-    let session = wonnx::Session::new("tests/two_transposes.onnx")
+    let session = wonnx::Session::from_path("tests/two_transposes.onnx")
         .await
         .unwrap();
     debug!("session.model: {:#?}", session.model.get_graph());
@@ -46,6 +49,8 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     res
 }
 
+// #[test]
+// #[wasm_bindgen_test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {

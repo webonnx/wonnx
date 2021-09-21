@@ -1,4 +1,4 @@
-pub fn format_node(node: &crate::onnx::NodeProto) -> String {
+pub fn format_node(node: &crate::onnx::NodeProto, graph: &crate::onnx::GraphProto) -> String {
     match node.get_op_type() {
             "_Convert_Vec_to_Block_Matrix" => {
                     format!(
@@ -15,7 +15,7 @@ pub fn format_node(node: &crate::onnx::NodeProto) -> String {
                         len = todo!()
                     )
             }
-            "abs" => {
+            "Abs" => {
                 crate::op::as_vec(
                     format!(
                         "{output}.data[global_id.x][index_mat] = {op_type}({input}.data[global_id.x][index_mat]);",
@@ -26,7 +26,7 @@ pub fn format_node(node: &crate::onnx::NodeProto) -> String {
                     .as_str(),
                 )
             }
-            "add" => {
+            "Add" => {
                 crate::op::as_vec(
                     format!(
                         "{output}.data[global_id.x][index_mat] = {input_0}.data[global_id.x][index_mat] + {input_1}.data[global_id.x][index_mat];",
@@ -35,7 +35,7 @@ pub fn format_node(node: &crate::onnx::NodeProto) -> String {
                         output = node.get_output()[0],
                     ).as_str())
             }
-            "matmul" => {
+            "Matmul" => {
                 format!(
                     r#"
             var i: u32 = global_id.x * {len}u + global_id.y;
@@ -60,7 +60,7 @@ pub fn format_node(node: &crate::onnx::NodeProto) -> String {
                         .get_i()
                     )
             },
-            "relu" => {
+            "Relu" => {
                 crate::op::as_vec(
                     format!(
                         "{output}.data[global_id.x][index_mat] = max({input}.data[global_id.x][index_mat], vec4<f32>(0.0, 0.0, 0.0, 0.0));",
@@ -70,10 +70,10 @@ pub fn format_node(node: &crate::onnx::NodeProto) -> String {
                     .as_str(),
                 )
             },
-            "sum" => {
+            "Sum" => {
                 unimplemented!()
             },
-            "transpose" => {
+            "Transpose" => {
                     format!(
                         r#"
                         

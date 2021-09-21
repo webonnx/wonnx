@@ -7,11 +7,12 @@ license = "MIT OR Apache-2.0"
 description = "wonnx (Web ONNX) is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
 repository = "https://github.com/haixuanTao/wonnx.git"
 homepage = "https://github.com/haixuanTao/wonnx"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu = {path = "/home/peter/Documents/BLOG/wgpu/wgpu" }
+wgpu = {git = "https://github.com/gfx-rs/wgpu.git", version = "0.10.1"}
 bytemuck = "1.7.2"
 env_logger = "0.9.0"
 pollster = "0.2.4"
@@ -25,17 +26,18 @@ serde-protobuf = "0.8.2"
 serde-value = "0.7.0"
 
 [dev-dependencies]
-approx = "0.1.0"
+approx = "0.5.0"
+wasm-bindgen-test = "0.3.28"
 
 [workspace]
 resolver = "2"
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2.76" # remember to change version in wiki as well
-js-sys = "0.3.50"
-wasm-bindgen-futures = "0.4.23"
-web-sys = { version = "0.3.53", features = [
+wasm-bindgen = "0.2.78" # remember to change version in wiki as well
+js-sys = "0.3.55"
+wasm-bindgen-futures = "0.4.28"
+web-sys = { version = "0.3.55", features = [
     "Document",
     "Navigator",
     "Node",
@@ -159,8 +161,11 @@ web-sys = { version = "0.3.53", features = [
     "OffscreenCanvas",
     "Window",
 ]}
-parking_lot = { version = "0.11.1", features = ["wasm-bindgen"]}
+parking_lot = { version = "0.11.2", features = ["wasm-bindgen"]}
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.6"
 console_log = "0.2.0"
+
+[target.wasm32-unknown-unknown]
+runner = 'wasm-bindgen-test-runner'

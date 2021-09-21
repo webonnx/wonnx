@@ -11,6 +11,17 @@ use std::collections::HashMap;
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
+/// Creates a new session connectedd to the GPU.
+///
+/// Generate a session that will translate the onnx format into WGSL instructions.
+///
+/// # Examples
+///
+/// Basic usage:
+///
+/// ```
+/// let session = Session::from_path("path/to/model.onnx").await.unwrap();
+/// ```
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -18,13 +29,25 @@ pub struct Session {
 }
 
 impl Session {
-    pub async fn new(path: &str) -> Result<Session> {
+    pub async fn from_path(path: &str) -> Result<Session> {
         let (device, queue) = resource::request_device_queue().await;
 
         let model = onnx::ModelProto::parse_from_bytes(
             &std::fs::read(path).expect("ONNX Model path not found."),
         )
         .expect("Could not deserialize the Model");
+
+        debug!("model: {:#?}", model);
+
+        Ok(Session {
+            device,
+            queue,
+            model,
+        })
+    }
+
+    pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
+        let (device, queue) = resource::request_device_queue().await;
 
         debug!("model: {:#?}", model);
 
@@ -64,8 +87,9 @@ impl Session {
         }
 
         crate::compute::wrapper(
-            &device,
-            &queue,
+            device,
+            queue,
+            graph,
             &inputs,
             &outputs,
             &buffers,
@@ -76,6 +100,7 @@ impl Session {
         )
         .unwrap();
 
+        // TODO: Define behavior for multi output.
         let buffer_slice = buffers.get(outputs[0].get_name()).unwrap().slice(..);
         let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
         device.poll(wgpu::Maintain::Wait);

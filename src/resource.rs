@@ -9,7 +9,7 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptionsBase {
-            power_preference: wgpu::PowerPreference::HighPerformance,
+            power_preference: wgpu::PowerPreference::LowPower,
             compatible_surface: None,
         })
         .await
