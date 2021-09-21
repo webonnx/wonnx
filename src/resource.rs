@@ -45,7 +45,7 @@ pub fn create_buffer(device: &wgpu::Device, size: u64) -> wgpu::Buffer {
         label: Some("Storage Buffer"),
         size,
         mapped_at_creation: false,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
     })
 }
 
@@ -53,7 +53,7 @@ pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Storage Buffer"),
         contents: bytemuck::cast_slice(array),
-        usage: wgpu::BufferUsages::STORAGE,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
     })
 }
 
@@ -61,13 +61,27 @@ pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
 mod tests {
     #[test]
     fn test_request_device_queue() {
-        pollster::block_on(crate::ressource::request_device_queue());
+        pollster::block_on(crate::resource::request_device_queue());
     }
 
     #[test]
     fn test_create_buffer_init() {
-        let (device, _) = pollster::block_on(crate::ressource::request_device_queue());
+        let (device, _) = pollster::block_on(crate::resource::request_device_queue());
         let data = [1.0, 2.0, 3.0, 4.0];
-        let _ = crate::ressource::create_buffer_init(&device, &data);
+        let _ = crate::resource::create_buffer_init(&device, &data);
     }
+}
+
+pub fn get_size(tensor: &crate::onnx::ValueInfoProto) -> i64 {
+    i64::max(
+        tensor
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .fold(1, |acc, dim| acc * dim.get_dim_value())
+            * std::mem::size_of::<f32>() as i64,
+        16,
+    )
 }

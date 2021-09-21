@@ -4,7 +4,7 @@ use wonnx::*;
 
 fn main() {
     let time_0 = Instant::now();
-    let (device, queue) = pollster::block_on(ressource::request_device_queue());
+    let (device, queue) = pollster::block_on(resource::request_device_queue());
     let time = Instant::now();
     println!("time - time_0: {:#?}", time - time_0);
 
@@ -65,10 +65,10 @@ fn main() {
     .unwrap();
 
     // cpass.insert_debug_marker("compute collatz iterations");
-    let time_ressource = Instant::now();
+    let time_resource = Instant::now();
     println!(
-        "time_ressource - time_shader: {:#?}",
-        time_ressource - time_shader
+        "time_resource - time_shader: {:#?}",
+        time_resource - time_shader
     );
     // Note that we're not calling `.await` here.
     let buffer_slice = buffer_c.slice(..);
@@ -83,7 +83,7 @@ fn main() {
         let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
         println!(
             "Instant::now() - time: {:#?}",
-            Instant::now() - time_ressource
+            Instant::now() - time_resource
         );
         println!("result: {:#?}", &result[0]);
         drop(data);

@@ -14,11 +14,11 @@ async fn run() {
 
 // Hardware management
 async fn execute_gpu() -> Option<Vec<f32>> {
-    let (device, queue) = ressource::request_device_queue().await;
+    let (device, queue) = resource::request_device_queue().await;
 
     let numbers: &[f32] = &vec![1.0; LEN as usize];
 
-    let storage_buffer = ressource::create_buffer_init(&device, numbers);
+    let storage_buffer = resource::create_buffer_init(&device, numbers);
 
     let time_preprocess = Instant::now();
 

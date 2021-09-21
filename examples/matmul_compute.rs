@@ -3,15 +3,15 @@ use wgpu::util::DeviceExt;
 use wonnx::{compute::InnerType, *};
 fn main() {
     let time_0 = Instant::now();
-    let (device, queue) = pollster::block_on(ressource::request_device_queue());
+    let (device, queue) = pollster::block_on(resource::request_device_queue());
     let time = Instant::now();
     println!("time - time_0: {:#?}", time - time_0);
     let a: Vec<f32> = (0..50_176).map(|x| x as f32).collect();
     let b = vec![4.0; 50_176];
 
-    let buffer_a = ressource::read_only_buffer(&device, &a);
-    let buffer_b = ressource::read_only_buffer(&device, &b);
-    let buffer_c = ressource::create_buffer(&device, 50_176);
+    let buffer_a = resource::read_only_buffer(&device, &a);
+    let buffer_b = resource::read_only_buffer(&device, &b);
+    let buffer_c = resource::create_buffer(&device, 50_176);
     let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size: 50_176,
@@ -54,10 +54,10 @@ fn main() {
     println!("aa: {:#?}", 1);
     queue.submit(Some(encoder.finish()));
     // cpass.insert_debug_marker("compute collatz iterations");
-    let time_ressource = Instant::now();
+    let time_resource = Instant::now();
     println!(
-        "time_ressource - time_shader: {:#?}",
-        time_ressource - time_shader
+        "time_resource - time_shader: {:#?}",
+        time_resource - time_shader
     );
     // Note that we're not calling `.await` here.
     let buffer_slice = staging_buffer.slice(..);
@@ -72,7 +72,7 @@ fn main() {
         let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
         println!(
             "Instant::now() - time: {:#?}",
-            Instant::now() - time_ressource
+            Instant::now() - time_resource
         );
         println!("result: {:#?}", &result[0]);
         drop(data);
