@@ -9,7 +9,7 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptionsBase {
-            power_preference: wgpu::PowerPreference::LowPower,
+            power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: None,
         })
         .await
@@ -96,11 +96,17 @@ pub fn len(tensor: &crate::onnx::ValueInfoProto) -> i64 {
         .fold(1, |acc, dim| acc * dim.get_dim_value())
 }
 
-pub fn len_index(tensor: &crate::onnx::ValueInfoProto, index: usize) -> i64 {
-    tensor
+pub fn len_index(tensor: &crate::onnx::ValueInfoProto, index: usize) -> Option<i64> {
+    let shape = tensor
         .get_field_type()
         .get_tensor_type()
         .get_shape()
-        .get_dim()[index]
-        .get_dim_value()
+        .get_dim();
+
+    let len = shape.len();
+    if index < len {
+        Some(shape[index].get_dim_value())
+    } else {
+        None
+    }
 }

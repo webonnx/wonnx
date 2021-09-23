@@ -109,7 +109,7 @@ impl Session {
             // Since contents are got in bytes, this converts these bytes back to f32
             let result = bytemuck::cast_slice(&data).to_vec();
 
-            drop(data);
+            //            drop(data);
 
             Some(result)
         } else {

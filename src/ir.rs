@@ -121,26 +121,32 @@ pub fn format_node(
             unimplemented!()
         }
         "Transpose" => {
-            let len = crate::resource::len_index(value_infos.get(&inputs[0]).unwrap(), 1)/4; 
+            let len_0 = crate::resource::len_index(value_infos.get(&inputs[0]).unwrap(), 0).expect("Dimension value not found"); 
+            let len_1 = crate::resource::len_index(value_infos.get(&inputs[0]).unwrap(), 1).expect("Dimension value not found")/4;
+
             (format!(
                 r#"
-                let tmpMat = transpose(mat4x4<f32>({input}.data[global_id.x * {len}u + global_id.y], 
-                                    {input}.data[(global_id.x + 1u) * {len}u + global_id.y],
-                                    {input}.data[(global_id.x + 2u) * {len}u + global_id.y],
-                                    {input}.data[(global_id.x + 3u) * {len}u + global_id.y],
+                let gidy = global_id.y * {len_0}u + global_id.x;
+                let gidx = global_id.x * {len_1_x_4}u + global_id.y; 
+                let tmpMat_{input} = transpose(mat4x4<f32>({input}.data[gidx], 
+                                    {input}.data[gidx + {len_1}u],
+                                    {input}.data[gidx + 2u * {len_1}u],
+                                    {input}.data[gidx + 3u * {len_1}u],
                                 ));
-                {output}.data[global_id.y * {len4}u + global_id.x] = tmpMat[0u];
-                {output}.data[global_id.y * {len4}u + 1u * {len}u + global_id.x] = tmpMat[1u];
-                {output}.data[global_id.y * {len4}u + 2u * {len}u + global_id.x] = tmpMat[2u];
-                {output}.data[global_id.y * {len4}u + 3u * {len}u + global_id.x] = tmpMat[3u];
+                {output}.data[gidy] = tmpMat_{input}[0u];
+                {output}.data[gidy + {len_0_div_4}u] = tmpMat_{input}[1u];
+                {output}.data[gidy + 2u * {len_0_div_4}u] = tmpMat_{input}[2u];
+                {output}.data[gidy + 3u * {len_0_div_4}u] = tmpMat_{input}[3u];
                 "#,
                 input = inputs[0],
                 output = outputs[0],
-                len = len,
-                len4 = len * 4
+                len_1 = len_1,
+                len_1_x_4 = len_1 * 4,
+                len_0 = len_0,
+                len_0_div_4 = len_0 / 4
             ),
-            (crate::resource::len_index(value_infos.get(&inputs[0]).unwrap(), 0)/4) as _,
-            len as _,
+            (len_0/4) as _,
+            len_1 as _,
             1)
         }
         _ => unimplemented!(),
@@ -149,7 +155,7 @@ pub fn format_node(
 
 pub fn format_tensor(
     binding_group: u32,
-    tensor: &crate::onnx::ValueInfoProto,
+    tensor: &str,
     inner_type: &crate::compute::InnerType,
 ) -> String {
     format!(
@@ -159,7 +165,7 @@ var<storage, read_write> {tensor}: {inner_type};
 
 "#,
         i = binding_group,
-        tensor = tensor.get_name(),
+        tensor = tensor,
         inner_type = inner_type,
     )
 }

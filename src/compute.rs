@@ -36,7 +36,7 @@ pub fn wrapper(
         shader.push_str(
             crate::ir::format_tensor(
                 binding_counter,
-                tensor,
+                tensor.get_name(),
                 &crate::compute::InnerType::ArrayVector,
             )
             .as_str(),
@@ -53,7 +53,7 @@ pub fn wrapper(
         shader.push_str(
             crate::ir::format_tensor(
                 binding_counter,
-                tensor,
+                tensor.get_name(),
                 &crate::compute::InnerType::ArrayVector,
             )
             .as_str(),
@@ -70,7 +70,7 @@ pub fn wrapper(
         shader.push_str(
             crate::ir::format_tensor(
                 binding_counter,
-                tensor,
+                tensor.get_name(),
                 &crate::compute::InnerType::ArrayVector,
             )
             .as_str(),
@@ -82,7 +82,6 @@ pub fn wrapper(
         });
         binding_counter += 1;
     }
-
     let shaders = nodes
         .iter()
         .map(|node| crate::ir::format_node(node, graph))
@@ -99,7 +98,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
         main_body = shaders
             .iter()
             .map(|(shader, _, _, _)| shader)
-            .fold("".to_string(), |acc, node| acc + "\n" + &node),
+            .fold("".to_string(), |acc, node| acc
+                + "\nstorageBarrier();\n"
+                + &node),
     ));
 
     debug!("shader: {}", shader);
