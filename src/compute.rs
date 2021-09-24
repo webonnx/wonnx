@@ -37,7 +37,7 @@ pub fn wrapper(
         let mut entries = vec![];
         for tensor in inputs.iter() {
             shader.push_str(
-                crate::ir::format_tensor(
+                crate::format_tensor(
                     binding_counter,
                     tensor,
                     &crate::compute::InnerType::ArrayVector,
@@ -58,7 +58,7 @@ pub fn wrapper(
 
         for tensor in outputs.iter() {
             shader.push_str(
-                crate::ir::format_tensor(
+                crate::format_tensor(
                     binding_counter,
                     tensor,
                     &crate::compute::InnerType::ArrayVector,
@@ -81,7 +81,7 @@ pub fn wrapper(
 
         let mut main_body = "".to_string();
         let mut threads = vec![];
-        let (shader_node, x, y, z) = crate::ir::format_node(node, inner_infos);
+        let (shader_node, x, y, z) = crate::format_node(node, inner_infos);
         main_body.push_str(&shader_node);
         threads.push([x, y, z]);
 
@@ -96,7 +96,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
             main_body = main_body
         ));
 
-        let [x, y, z] = threads.iter().next().unwrap();
+        let [x, y, z] = threads.get(0).unwrap();
 
         debug!("shader: {}", shader);
         debug!("x: {:#?}", x);
@@ -117,7 +117,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
         });
 
         // Instantiates the bind group, once again specifying the binding of buffers.
-        let bind_group_layout = compute_pipeline.get_bind_group_layout(0 as _);
+        let bind_group_layout = compute_pipeline.get_bind_group_layout(0u32);
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,

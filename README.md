@@ -1,6 +1,6 @@
 # wonnx
 
-Wonnx aimed at being an ONNX Runtime for every GPU on all platform written in 100% Rust.
+Wonnx aimed at being an ONNX Runtime for every GPU on all platforms written in 100% Rust.
 
 ## Supported Platforms (enabled by wgpu)
 

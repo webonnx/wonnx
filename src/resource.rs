@@ -57,21 +57,6 @@ pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_request_device_queue() {
-        pollster::block_on(crate::resource::request_device_queue());
-    }
-
-    #[test]
-    fn test_create_buffer_init() {
-        let (device, _) = pollster::block_on(crate::resource::request_device_queue());
-        let data = [1.0, 2.0, 3.0, 4.0];
-        let _ = crate::resource::create_buffer_init(&device, &data);
-    }
-}
-
 pub fn size(tensor: &crate::onnx::ValueInfoProto) -> i64 {
     i64::max(
         tensor
@@ -86,21 +71,17 @@ pub fn size(tensor: &crate::onnx::ValueInfoProto) -> i64 {
     )
 }
 
-pub fn len(dims: &Vec<i64>) -> i64 {
-    dims.iter().fold(1, |acc, dim| acc * dim) / 4
-}
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_request_device_queue() {
+        pollster::block_on(crate::resource::request_device_queue());
+    }
 
-pub fn len_index(tensor: &crate::onnx::ValueInfoProto, index: usize) -> Option<i64> {
-    let shape = tensor
-        .get_field_type()
-        .get_tensor_type()
-        .get_shape()
-        .get_dim();
-
-    let len = shape.len();
-    if index < len {
-        Some(shape[index].get_dim_value())
-    } else {
-        None
+    #[test]
+    fn test_create_buffer_init() {
+        let (device, _) = pollster::block_on(crate::resource::request_device_queue());
+        let data = [1.0, 2.0, 3.0, 4.0];
+        let _ = crate::resource::create_buffer_init(&device, &data);
     }
 }
