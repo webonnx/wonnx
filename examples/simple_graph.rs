@@ -8,7 +8,7 @@ async fn run() {
     let steps = execute_gpu().await.unwrap();
 
     let n = 32;
-    for i in 0..n {
+    for i in 0..n / 2 {
         println!("steps: {:?}", &steps[n * i..n * (i + 1)]);
     }
     #[cfg(target_arch = "wasm32")]
@@ -22,8 +22,8 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let n: usize = 32;
     let mut input_data = HashMap::new();
 
-    let data: Vec<f32> = (0..n * n).map(|x| x as f32).collect();
-    let dims = vec![n as i64, n as i64];
+    let data: Vec<f32> = (0..n * n / 2).map(|x| x as f32).collect();
+    let dims = vec![n as i64, (n / 2) as i64];
     input_data.insert("X", (data.as_slice(), dims.as_slice()));
 
     // ONNX INPUTS

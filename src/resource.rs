@@ -86,14 +86,8 @@ pub fn size(tensor: &crate::onnx::ValueInfoProto) -> i64 {
     )
 }
 
-pub fn len(tensor: &crate::onnx::ValueInfoProto) -> i64 {
-    tensor
-        .get_field_type()
-        .get_tensor_type()
-        .get_shape()
-        .get_dim()
-        .iter()
-        .fold(1, |acc, dim| acc * dim.get_dim_value())
+pub fn len(dims: &Vec<i64>) -> i64 {
+    dims.iter().fold(1, |acc, dim| acc * dim) / 4
 }
 
 pub fn len_index(tensor: &crate::onnx::ValueInfoProto, index: usize) -> Option<i64> {

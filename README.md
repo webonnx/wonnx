@@ -1,30 +1,60 @@
 # wonnx
 
-Wonnx (Web ONNX) is an ONNX runtime based on `wgpu` aimed at being a universal GPU runtime, written in Rust.
+Wonnx aimed at being an ONNX Runtime for every GPU on all platform written in 100% Rust.
 
-## Why ONNX?
+## Supported Platforms (enabled by wgpu)
 
-The problem I faced, was that I was using ONNX models and could not run it on my work computer with GPU.
-Microsoft DirectML, and Intel OpenVino provider did not really match my expectations, and so I needed something different.
+   API   |    Windows                    |  Linux & Android   |    macOS & iOS     |
+  -----  | ----------------------------- | ------------------ | ------------------ |
+  Vulkan | :white_check_mark:            | :white_check_mark: |                    |
+  Metal  |                               |                    | :white_check_mark: |
+  DX12   | :white_check_mark: (W10 only) |                    |                    |
+  DX11   | :construction:                |                    |                    |
+  GLES3  |                               | :ok:               |                    |
 
-The idea then grew to build a Rust based ONNX runtime with `wgpu` for fun and being able to run everywhere. I think that a lot of gpu acceleration are 
-closed sourced largely targeting C/C++, making it difficult to build cross-platform applications without requring CUDA, ROCm, which are not fun to install.
+:white_check_mark: = First Class Support — :ok: = Best Effort Support — :construction: = Unsupported, but support in progress
 
-Wonnx aimed at being:
-- Cross-platform (including Web) and Hardware agnostic.
-- 100% Open Source Rust ( No CUDA / ... )
-- Non-Profit
+## Getting Started
 
-## Command Encoder should be as full as possible.
+- Install Rust
+- Install Vulkan, Metal, or DX12 for the GPU API.
+- Then: 
+```bash
+cargo run --example custom_graph
+```
 
-To make it as complete as possible
+## To use
 
-- Use vec4 and mat4x4 as much as possible.
-- Put as much instruction within one command encoder as possible.
+```rust
+async fn execute_gpu() -> Option<Vec<f32>> {
+    // USER INPUT
 
-compiling. parallelazable task.
+    let n: usize = 512 * 512 * 128;
+    let mut input_data = HashMap::new();
+    let data = vec![-1.0f32; n];
+    let dims = vec![n as i64];
+    input_data.insert("x", (data.as_slice(), dims.as_slice()));
 
-such as multiplication + activation
-therefore, some thing should be executed.
-some thing should be added.
+    let session = wonnx::Session::from_path("tests/single_relu.onnx")
+        .await
+        .unwrap();
+
+    session.run(input_data).await
+}
+```
+
+## Test 
+
+```bash
+cargo test
+```
+
+## Test WASM (not yet implemented)
+```bash
+export RUSTFLAGS=--cfg=web_sys_unstable_apis
+wasm-pack test --node
+```
+
+## Examples are available in the `tests` folder
+
 

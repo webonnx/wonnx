@@ -15,8 +15,6 @@ async fn run() {
 
 // Hardware management
 async fn execute_gpu() -> Option<Vec<f32>> {
-    // USER INPUT
-
     let n: usize = 512 * 512 * 128;
     let mut input_data = HashMap::new();
     let data = vec![-1.0f32; n];

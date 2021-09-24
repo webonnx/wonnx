@@ -7,6 +7,8 @@ use wonnx::*;
 async fn run() {
     let steps = execute_gpu().await.unwrap();
     let n = 32;
+
+    assert_eq!(steps[0..5], [0.0, 1.0, 2.0, 3.0, 4.0]);
     for i in 0..n {
         println!("steps: {:?}", &steps[n / 2 * i..n / 2 * (i + 1)]);
     }
@@ -86,6 +88,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     session.run(input_data).await
 }
 
+#[test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {

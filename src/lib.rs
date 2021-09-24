@@ -63,41 +63,59 @@ impl Session {
         let device = &self.device;
         let queue = &self.queue;
 
-        let mut buffers = HashMap::new();
+        let mut inner_infos = HashMap::new();
 
         let inputs = graph.get_input();
         let value_infos = graph.get_value_info();
         let outputs = graph.get_output();
-
-        let mut dims = vec![];
 
         for input in inputs.iter() {
             let name = input.get_name();
             let (data, dim) = input_data.get(name).expect(
                 format!("Input: {name} was not found in user HashMap.", name = name,).as_str(),
             );
-            dims.push(dim);
-            buffers.insert(name, crate::resource::create_buffer_init(&device, data));
+            inner_infos.insert(
+                name,
+                InnerInfo {
+                    attribute_info: &input,
+                    buffer: resource::create_buffer_init(&device, data),
+                    dims: Some(dim.to_vec()),
+                },
+            );
         }
 
         for output in outputs.iter() {
-            buffers.insert(
+            inner_infos.insert(
                 output.get_name(),
-                crate::resource::create_buffer(&device, crate::resource::size(output) as _),
+                InnerInfo {
+                    attribute_info: &output,
+                    buffer: resource::create_buffer(&device, resource::size(output) as _),
+                    dims: None,
+                },
             );
         }
 
         for value_info in value_infos.iter() {
-            buffers.insert(
+            inner_infos.insert(
                 value_info.get_name(),
-                crate::resource::create_buffer(&device, crate::resource::size(value_info) as _),
+                InnerInfo {
+                    attribute_info: &value_info,
+                    buffer: resource::create_buffer(&device, resource::size(value_info) as _),
+                    dims: None,
+                },
             );
         }
 
-        crate::compute::wrapper(device, queue, graph, &buffers).unwrap();
+        infer_shape(&mut inner_infos, graph);
+
+        compute::wrapper(device, queue, graph, &inner_infos).unwrap();
 
         // TODO: Define behavior for multi output.
-        let buffer_slice = buffers.get(outputs[0].get_name()).unwrap().slice(..);
+        let buffer_slice = inner_infos
+            .get(outputs[0].get_name())
+            .unwrap()
+            .buffer
+            .slice(..);
         let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
         device.poll(wgpu::Maintain::Wait);
 
@@ -114,6 +132,37 @@ impl Session {
             Some(result)
         } else {
             panic!("failed to run compute on gpu!")
+        }
+    }
+}
+
+pub struct InnerInfo<'a> {
+    attribute_info: &'a onnx::ValueInfoProto,
+    buffer: wgpu::Buffer,
+    dims: Option<Vec<i64>>,
+}
+
+pub fn infer_shape(inner_infos: &mut HashMap<&str, InnerInfo>, graph: &onnx::GraphProto) {
+    let nodes = graph.get_node();
+
+    for node in nodes.iter() {
+        let input = node.get_input();
+        let output = node.get_output();
+
+        let input_dims = inner_infos.get(input[0].as_str()).unwrap().dims.clone();
+
+        match node.get_op_type() {
+            "Abs" | "Add" | "Relu" => {
+                let mut output_info = inner_infos.get_mut(output[0].as_str()).unwrap();
+                output_info.dims = input_dims;
+            }
+            "Transpose" => {
+                let mut output_info = inner_infos.get_mut(output[0].as_str()).unwrap();
+                let dims = input_dims.unwrap();
+                output_info.dims = Some(vec![dims[1], dims[0]]);
+            }
+
+            _ => unimplemented!(),
         }
     }
 }
