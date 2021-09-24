@@ -1,10 +1,10 @@
 [package]
 name = "wonnx"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["haixuanTao <hai-xuan.tao@student.ecp.fr>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
-description = "wonnx (Web ONNX) is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
+description = "Wonnx is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
 repository = "https://github.com/haixuanTao/wonnx.git"
 homepage = "https://github.com/haixuanTao/wonnx"
 readme = "README.md"
@@ -12,7 +12,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu = {git = "https://github.com/gfx-rs/wgpu.git", version = "0.10.1"}
+wgpu= "0.10.2"
 bytemuck = "1.7.2"
 env_logger = "0.9.0"
 pollster = "0.2.4"
@@ -21,25 +21,13 @@ log = "0.4.14"
 rayon = "1.5.1"
 bytemuck_derive = "1.0.1"
 protobuf = { version = "2", features = ["with-bytes"] }
-serde = "1.0.130"
-serde-protobuf = "0.8.2"
-serde-value = "0.7.0"
 
 [dev-dependencies]
 approx = "0.5.0"
-wasm-bindgen-test = "0.3.28"
 
 [workspace]
 resolver = "2"
 
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2.78" # remember to change version in wiki as well
-js-sys = "0.3.55"
-wasm-bindgen-futures = "0.4.28"
-parking_lot = { version = "0.11.2", features = ["wasm-bindgen"]}
-
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.6"
-console_log = "0.2.0"
 

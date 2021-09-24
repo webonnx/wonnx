@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
-use wasm_bindgen_test::*;
+// use wasm_bindgen_test::*;
 
 // Args Management
 async fn run() {
@@ -29,7 +29,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 }
 
 #[test]
-#[wasm_bindgen_test]
+// #[wasm_bindgen_test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {

@@ -1,6 +1,6 @@
 use protobuf;
 use std::collections::HashMap;
-use wasm_bindgen_test::*;
+// use wasm_bindgen_test::*;
 use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
 
@@ -72,7 +72,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 }
 
 #[test]
-#[wasm_bindgen_test]
+// #[wasm_bindgen_test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {
