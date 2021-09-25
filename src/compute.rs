@@ -19,7 +19,7 @@ pub fn wrapper(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     graph: &crate::onnx::GraphProto,
-    inner_infos: &HashMap<&str, crate::InnerInfo>,
+    inner_infos: &HashMap<String, crate::InnerInfo>,
 ) -> Result<(), wgpu::Error> {
     let nodes = graph.get_node();
 

@@ -2,7 +2,7 @@
 
 Wonnx aimed at being an ONNX Runtime for every GPU on all platforms written in 100% Rust.
 
-## Supported Platforms (enabled by wgpu)
+## Supported Platforms (enabled by `wgpu`)
 
    API   |    Windows                    |  Linux & Android   |    macOS & iOS     |
   -----  | ----------------------------- | ------------------ | ------------------ |

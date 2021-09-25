@@ -24,7 +24,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 
     let data: Vec<f32> = (0..n * n / 2).map(|x| x as f32).collect();
     let dims = vec![n as i64, (n / 2) as i64];
-    input_data.insert("X", (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
 
     // ONNX INPUTS
 
@@ -53,11 +53,16 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     output.set_name("Y".to_string());
     output.set_field_type(type_proto.clone());
 
+    let mut perm = onnx::AttributeProto::new();
+    perm.set_name("perm".to_string());
+    perm.set_ints(vec![1, 0]);
+
     let mut node = crate::onnx::NodeProto::new();
     node.set_op_type("Transpose".to_string());
     node.set_name("node".to_string());
     node.set_input(protobuf::RepeatedField::from(vec!["X".to_string()]));
     node.set_output(protobuf::RepeatedField::from(vec!["Y".to_string()]));
+    node.set_attribute(protobuf::RepeatedField::from(vec![perm]));
 
     let mut graph = wonnx::onnx::GraphProto::new();
     graph.set_node(protobuf::RepeatedField::from(vec![node]));

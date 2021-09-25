@@ -10,7 +10,7 @@ use std::collections::HashMap;
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
-/// Creates a new session connectedd to the GPU.
+/// Creates a new session connected to the GPU.
 ///
 /// Generate a session that will translate the onnx format into WGSL instructions.
 ///
@@ -57,55 +57,16 @@ impl Session {
         })
     }
 
-    pub async fn run(&self, input_data: HashMap<&str, (&[f32], &[i64])>) -> Option<Vec<f32>> {
+    pub async fn run(&self, input_data: HashMap<String, (&[f32], &[i64])>) -> Option<Vec<f32>> {
         let graph = self.model.get_graph();
         let device = &self.device;
         let queue = &self.queue;
 
-        let mut inner_infos = HashMap::new();
-
-        let inputs = graph.get_input();
-        let value_infos = graph.get_value_info();
-        let outputs = graph.get_output();
-
-        for input in inputs.iter() {
-            let name = input.get_name();
-            let (data, dim) = input_data.get(name).unwrap_or_else(|| {
-                panic!("Input: {name} was not found in user HashMap.", name = name)
-            });
-            inner_infos.insert(
-                name,
-                InnerInfo {
-                    buffer: resource::create_buffer_init(device, data),
-                    dims: Some(dim.to_vec()),
-                },
-            );
-        }
-
-        for output in outputs.iter() {
-            inner_infos.insert(
-                output.get_name(),
-                InnerInfo {
-                    buffer: resource::create_buffer(device, resource::size(output) as _),
-                    dims: None,
-                },
-            );
-        }
-
-        for value_info in value_infos.iter() {
-            inner_infos.insert(
-                value_info.get_name(),
-                InnerInfo {
-                    buffer: resource::create_buffer(device, resource::size(value_info) as _),
-                    dims: None,
-                },
-            );
-        }
-
-        infer_shape(&mut inner_infos, graph);
+        let inner_infos = generate_buffer(input_data, graph, device);
 
         compute::wrapper(device, queue, graph, &inner_infos).unwrap();
 
+        let outputs = graph.get_output();
         // TODO: Define behavior for multi output.
         let buffer_slice = inner_infos
             .get(outputs[0].get_name())
@@ -134,55 +95,101 @@ impl Session {
 
 pub struct InnerInfo {
     buffer: wgpu::Buffer,
-    dims: Option<Vec<i64>>,
+    dims: Vec<i64>,
 }
 
-pub fn infer_shape(inner_infos: &mut HashMap<&str, InnerInfo>, graph: &onnx::GraphProto) {
-    let nodes = graph.get_node();
+pub fn generate_buffer(
+    input_data: HashMap<String, (&[f32], &[i64])>,
+    graph: &onnx::GraphProto,
+    device: &wgpu::Device,
+) -> HashMap<String, InnerInfo> {
+    let mut inner_infos = HashMap::new();
 
-    for node in nodes.iter() {
+    for input in graph.get_input().iter() {
+        let name = input.get_name();
+        let (data, dim) = input_data
+            .get(name)
+            .unwrap_or_else(|| panic!("Input: {name} was not found in user HashMap.", name = name));
+        inner_infos.insert(
+            name.to_string(),
+            InnerInfo {
+                buffer: resource::create_buffer_init(device, data, name),
+                dims: dim.to_vec(),
+            },
+        );
+    }
+
+    for node in graph.get_node().iter() {
         let input = node.get_input();
         let output = node.get_output();
+        let attributes = node.get_attribute();
 
-        let input_dims = inner_infos.get(input[0].as_str()).unwrap().dims.clone();
-
+        let input_dims = inner_infos.get(&input[0]).unwrap().dims.clone();
+        debug!(
+            "resource::size(input_dims): {:#?}",
+            resource::size(&input_dims)
+        );
         match node.get_op_type() {
             "Abs" | "Add" | "Relu" => {
-                let mut output_info = inner_infos.get_mut(output[0].as_str()).unwrap();
-                output_info.dims = input_dims;
+                inner_infos.insert(
+                    output[0].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer(
+                            device,
+                            resource::size(&input_dims) as _,
+                            output[0].as_str(),
+                        ),
+                        dims: input_dims,
+                    },
+                );
             }
             "Transpose" => {
-                let mut output_info = inner_infos.get_mut(output[0].as_str()).unwrap();
-                let dims = input_dims.unwrap();
-                output_info.dims = Some(vec![dims[1], dims[0]]);
-            }
+                let perm = attributes
+                    .iter()
+                    .find(|attr| attr.get_name() == "perm")
+                    .expect(format!("Required attribute '{}' not found", "perm").as_str())
+                    .get_ints();
 
+                let mut output_dims = input_dims.clone();
+                for (i, j) in input_dims.iter().zip(perm) {
+                    output_dims[*j as usize] = *i;
+                }
+
+                inner_infos.insert(
+                    output[0].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer(
+                            device,
+                            resource::size(&output_dims) as _,
+                            output[0].as_str(),
+                        ),
+                        dims: output_dims,
+                    },
+                );
+            }
             _ => unimplemented!(),
         }
     }
+
+    inner_infos
 }
 
 pub fn get_value_info() {}
 
 pub fn format_node(
     node: &crate::onnx::NodeProto,
-    inner_infos: &HashMap<&str, crate::InnerInfo>,
+    inner_infos: &HashMap<String, crate::InnerInfo>,
 ) -> (String, u32, u32, u32) {
     let inputs = node.get_input();
     let outputs = node.get_output();
 
-    let dims = inner_infos
-        .get(&inputs[0].as_str())
-        .unwrap()
-        .dims
-        .as_ref()
-        .unwrap();
+    let dims = &inner_infos.get(&inputs[0]).unwrap().dims;
 
     let length = crate::utils::len(dims);
 
     match node.get_op_type() {
         "Abs" => (
-            format!("let gidx = global_id.x * {}u + global_id.y;", length)
+            "let gidx = global_id.x;".to_string()
                 + format!(
                     "{output}.data[gidx] = {op_type}({input}.data[gidx]);",
                     input = inputs[0],
@@ -195,7 +202,7 @@ pub fn format_node(
             1,
         ),
         "Add" => (
-            format!("let gidx = global_id.x * {}u + global_id.y;", length)
+            "let gidx = global_id.x;".to_string()
                 + format!(
                     "{output}.data[gidx] = {input_0}.data[gidx] + {input_1}.data[gidx];",
                     input_0 = inputs[0],
@@ -235,7 +242,7 @@ pub fn format_node(
             1,
         ),
         "Relu" => (
-            format!("let gidx = global_id.x * {}u + global_id.y;", length)
+            "let gidx = global_id.x;".to_string()
                 + format!(
                     "{output}.data[gidx] = max({input}.data[gidx], vec4<f32>(0.0, 0.0, 0.0, 0.0));",
                     input = inputs[0],
@@ -253,6 +260,13 @@ pub fn format_node(
             let len_0 = dims[0];
             let len_1 = dims[1] / 4;
 
+            let perm = node
+                .get_attribute()
+                .iter()
+                .find(|attr| attr.get_name() == "perm")
+                .expect(format!("Required attribute '{}' not found", "perm").as_str())
+                .get_ints();
+
             (
                 format!(
                     r#"
@@ -267,9 +281,9 @@ pub fn format_node(
                                     {input}.data[index + 3u * {len_1}u],
                                 ));
 
-                let y = global_id.x % {len_0_div_4}u;
-                let x = global_id.x / {len_0_div_4}u;
-                let index = x * {len_0}u + y;
+            //    let y = global_id.x % {len_0_div_4}u;
+            //    let x = global_id.x / {len_0_div_4}u;
+                let index = y * {len_0}u + x;
 
                 {output}.data[index] = tmpMat_{input}[0u];
                 {output}.data[index + {len_0_div_4}u] = tmpMat_{input}[1u];
@@ -283,7 +297,7 @@ pub fn format_node(
                     len_0 = len_0,
                     len_0_div_4 = len_0 / 4
                 ),
-                length as _,
+                (length / 4) as _,
                 1,
                 1,
             )

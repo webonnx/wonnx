@@ -30,19 +30,19 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
         .expect("Could not create adapter for GPU device")
 }
 
-pub fn create_buffer_init(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
+pub fn create_buffer_init(device: &wgpu::Device, array: &[f32], name: &str) -> wgpu::Buffer {
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Storage Buffer"),
+        label: Some(name),
         contents: bytemuck::cast_slice(array),
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
     })
 }
 
-pub fn create_buffer(device: &wgpu::Device, size: u64) -> wgpu::Buffer {
+pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
     let slice_size = size as usize * std::mem::size_of::<f32>();
     let size = slice_size as wgpu::BufferAddress;
     device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Storage Buffer"),
+        label: Some(name),
         size,
         mapped_at_creation: false,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
@@ -57,18 +57,8 @@ pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
     })
 }
 
-pub fn size(tensor: &crate::onnx::ValueInfoProto) -> i64 {
-    i64::max(
-        tensor
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .fold(1, |acc, dim| acc * dim.get_dim_value())
-            * std::mem::size_of::<f32>() as i64,
-        16,
-    )
+pub fn size(dims: &Vec<i64>) -> i64 {
+    i64::max(dims.iter().product::<i64>(), 16)
 }
 
 #[cfg(test)]
@@ -82,6 +72,6 @@ mod tests {
     fn test_create_buffer_init() {
         let (device, _) = pollster::block_on(crate::resource::request_device_queue());
         let data = [1.0, 2.0, 3.0, 4.0];
-        let _ = crate::resource::create_buffer_init(&device, &data);
+        let _ = crate::resource::create_buffer_init(&device, &data, "test");
     }
 }

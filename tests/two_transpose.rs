@@ -23,7 +23,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let mut input_data = HashMap::new();
     let data = (0..n).map(|x| x as f32).collect::<Vec<f32>>();
     let dims = vec![n, n];
-    input_data.insert("X", (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
     // LOGIC
 
     // Add Input to Graph
