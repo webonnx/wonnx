@@ -137,7 +137,7 @@ pub fn generate_buffer(
             "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor"
             | "Log" | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Add"
             | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
-            | "Mod" | "Mul" | "Or" | "Sub" | "Celu" |"Relu" | "Sigmoid" | "Softsign" | "Softplus" => {
+            | "Mod" | "Mul" | "Or" | "Sub" | "Celu" | "Elu" | "Relu" | "Sigmoid" | "Softsign" | "Softplus" => {
                 inner_infos.insert(
                     output[0].clone(),
                     InnerInfo {
@@ -305,7 +305,18 @@ pub fn format_node(
             (
             "let gidx = global_id.x;".to_string()
                 + format!(
-                    "{output}.data[gidx] = min(vec4<f32>(0.0, 0.0, 0.0, 0.0), {alpha} * exp({input_0}.data[gidx]);",
+                    r#"
+        let tmp_vec = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        let input_vec = {input_0}.data[gidx]; 
+        for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {{
+            if (input_vec[index_vec] < 0.0) {{
+	            tmp_vec[index_vec] = {alpha} * (exp(input_vec[index_vec]) - 1.0);
+            }} else {{  
+	            tmp_vec[index_vec] = input_vec[index_vec];
+            }}
+	    }}
+        {output}.data[gidx] = tmp_vec;
+                    "#,
                     input_0 = inputs[0],
                     alpha = alpha,
                     output = outputs[0],
