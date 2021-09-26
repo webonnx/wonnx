@@ -3,7 +3,7 @@ use rayon::prelude::*;
 use std::time::Instant;
 
 fn matmul() -> Result<f32, ShapeError> {
-    let n = 1024;
+    let n = 1024 * 4;
     let n2 = n * n;
     let a: Vec<f32> = (0..n2).map(|x| x as f32).collect();
     let b: Vec<f32> = (0..n2).map(|_| 4.0 as f32).collect();
@@ -11,7 +11,7 @@ fn matmul() -> Result<f32, ShapeError> {
     let b = Array::from_shape_vec((n, n), b)?;
 
     let mut c = a.dot(&b);
-    for _ in 0..10 {
+    for _ in 0..20 {
         c = c + a.dot(&b);
     }
     Ok(c[[0, 0]])
@@ -42,5 +42,5 @@ fn main() {
     let now = Instant::now();
     let result = matmul().unwrap();
     println!("result: {:#?}", result);
-    println!("Instant::now() - now: {:#?}", Instant::now() - now);
+    println!("MatMul: {:#?}", Instant::now() - now);
 }

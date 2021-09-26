@@ -124,7 +124,11 @@ pub fn generate_buffer(
         let output = node.get_output();
         let attributes = node.get_attribute();
 
-        let input_dims = inner_infos.get(&input[0]).unwrap().dims.clone();
+        let input_dims = inner_infos
+            .get(&input[0])
+            .expect(format!("Input: {} has not been provided", input[0]).as_str())
+            .dims
+            .clone();
         debug!(
             "resource::size(input_dims): {:#?}",
             resource::size(&input_dims)
@@ -155,6 +159,26 @@ pub fn generate_buffer(
                     output_dims[*j as usize] = *i;
                 }
 
+                inner_infos.insert(
+                    output[0].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer(
+                            device,
+                            resource::size(&output_dims) as _,
+                            output[0].as_str(),
+                        ),
+                        dims: output_dims,
+                    },
+                );
+            }
+            "MatMul" => {
+                let mut output_dims = input_dims.clone();
+                let input_right_dims = inner_infos
+                    .get(&input[1])
+                    .expect(format!("Input: {} has not been provided", input[0]).as_str())
+                    .dims
+                    .clone();
+                output_dims[1] = input_right_dims[1];
                 inner_infos.insert(
                     output[0].clone(),
                     InnerInfo {
@@ -214,47 +238,62 @@ pub fn format_node(
             1,
             1,
         ),
-        "Matmul" => {
-            let len_left = &inner_infos.get(&inputs[0]).unwrap().dims[1];
-            let len_right = &inner_infos.get(&inputs[1]).unwrap().dims[1];
+        "MatMul" => {
+            let left_columns = &inner_infos.get(&inputs[0]).unwrap().dims[1];
+            let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
+            let threads = (&inner_infos.get(&inputs[0]).unwrap().dims[0] / 4) * right_columns / 4;
 
             (
                 format!(
                     r#"
-            let y = global_id.x % {len_right}u;
-            let x = global_id.x / {len_right}u;
+    let y = global_id.x % {right_columns_div_4}u;
+    let x = global_id.x / {right_columns_div_4}u;
+    let index = x * {right_columns}u + y;
 
-		    var tmpsum = {output}.data[i];
-		    var product = {output}.data[i];
-		    for(var k: u32 = 0u; k < {len_left}u; k = k + 1u) {{
-                
-                let mat_left = mat4x4<f32>({input_left}.data[x * {len_left_x_4}u + k], 
-                                    {input_left}.data[x * {len_left_x_4}u + {len_left}u + k],
-                                    {input_left}.data[x * {len_left_x_4}u + 2u * {len_left}u + k],
-                                    {input_left}.data[x * {len_left_x_4}u + 3u * {len_left}u + k],
-                                );
-                
-                let mat_right = mat4x4<f32>({input_right}.data[k * {len_right_x_4}u + y], 
-                                    {input_right}.data[k * {len_right_x_4}u + {len_right}u + y],
-                                    {input_right}.data[k * {len_right_x_4}u + 2u * {len_right}u + y],
-                                    {input_right}.data[k * {len_right_x_4}u + 3u * {len_right}u + y],
-                                );
+    var tmpsum = mat4x4<f32>(vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0));
+    var product = mat4x4<f32>(vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0));
 
-			product = mat_left * mat_right;
-			for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
-			    tmpsum[index_mat] = tmpsum[index_mat] + product[index_mat];
-			}}
-		    }}
-		    {output}.data[i] = tmpsum;"#,
+    for(var k: u32 = 0u; k < {left_columns_div_4}u; k = k + 1u) {{
+        let index_left = x * {left_columns}u + k; 
+        let index_right = k * {left_columns}u + y; 
+
+        let mat_left = mat4x4<f32>(
+                              {input_left}.data[index_left], 
+                              {input_left}.data[index_left + {left_columns_div_4}u],
+                              {input_left}.data[index_left + 2u * {left_columns_div_4}u],
+                              {input_left}.data[index_left + 3u * {left_columns_div_4}u],
+                          );
+          
+        let mat_right = mat4x4<f32>(
+                              {input_right}.data[index_right], 
+                              {input_right}.data[index_right + {right_columns_div_4}u],
+                              {input_right}.data[index_right + 2u * {right_columns_div_4}u],
+                              {input_right}.data[index_right + 3u * {right_columns_div_4}u],
+                          );
+	
+        product = mat_right * mat_left;
+	
+        for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
+	        tmpsum[index_mat] = tmpsum[index_mat] + product[index_mat];
+	    }}
+    }}
+
+    {output}.data[index] = tmpsum[0];
+    {output}.data[index + {right_columns_div_4}u] = tmpsum[1];
+    {output}.data[index + 2u * {right_columns_div_4}u] = tmpsum[2];
+    {output}.data[index + 3u * {right_columns_div_4}u] = tmpsum[3];
+      
+            "#,
                     input_left = inputs[0],
                     input_right = inputs[1],
                     output = outputs[0],
-                    len_left = len_left,
-                    len_left_x_4 = len_left * 4,
-                    len_right = len_right,
-                    len_right_x_4 = len_right * 4,
+                    left_columns = left_columns,
+                    left_columns_div_4 = left_columns / 4,
+                    // The right columns is composed of 4 vector of size 4
+                    right_columns = right_columns,
+                    right_columns_div_4 = right_columns / 4,
                 ),
-                1,
+                threads as _,
                 1,
                 1,
             )
