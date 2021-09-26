@@ -134,7 +134,10 @@ pub fn generate_buffer(
             resource::size(&input_dims)
         );
         match node.get_op_type() {
-            "Abs" | "Add" | "Relu" => {
+            "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor"
+            | "Log" | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Add"
+            | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
+            | "Mod" | "Mul" | "Or" | "Sub" | "Relu" => {
                 inner_infos.insert(
                     output[0].clone(),
                     InnerInfo {
@@ -212,7 +215,8 @@ pub fn format_node(
     let length = crate::utils::len(dims);
 
     match node.get_op_type() {
-        "Abs" => (
+        "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
+        | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => (
             "let gidx = global_id.x;".to_string()
                 + format!(
                     "{output}.data[gidx] = {op_type}({input}.data[gidx]);",
@@ -225,13 +229,29 @@ pub fn format_node(
             1,
             1,
         ),
-        "Add" => (
+        "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
+        | "Mod" | "Mul" | "Or" | "Sub" => (
             "let gidx = global_id.x;".to_string()
                 + format!(
-                    "{output}.data[gidx] = {input_0}.data[gidx] + {input_1}.data[gidx];",
+                    "{output}.data[gidx] = {input_0}.data[gidx] {op_type} {input_1}.data[gidx];",
                     input_0 = inputs[0],
                     input_1 = inputs[1],
                     output = outputs[0],
+                    op_type = match node.get_op_type() {
+                        "Add" => "+",
+                        "And" => "&",
+                        "Div" => "/",
+                        "Equal" => "==",
+                        "Greater" => ">",
+                        "GreaterOrEqual" => ">=",
+                        "Less" => "<",
+                        "LessOrEqual" => "<=",
+                        "Mod" => "%",
+                        "Mul" => "*",
+                        "Or" => "|",
+                        "Sub" => "-",
+                        _ => unimplemented!(),
+                    }
                 )
                 .as_str(),
             length as _,
@@ -338,8 +358,6 @@ pub fn format_node(
                                     {input}.data[index + 3u * {len_1}u],
                                 ));
 
-            //    let y = global_id.x % {len_0_div_4}u;
-            //    let x = global_id.x / {len_0_div_4}u;
                 let index = y * {len_0}u + x;
 
                 {output}.data[index] = tmpMat_{input}[0u];

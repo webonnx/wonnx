@@ -3,33 +3,27 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
-use std::time::Instant;
 
 async fn run() {
     let steps = execute_gpu().await.unwrap();
 
-    let n: usize = 1024 * 16;
-    for i in 0..10 {
-        // println!("steps: {:?}", &steps[n * i..n * (i + 1)]);
-    }
-    //assert_eq!(steps[0..5], [16.0, 16.0, 16.0, 16.0, 16.0]);
+    assert_eq!(steps[0..5], [1.0, 1.0, 1.0, 1.0, 1.0]);
+    println!("steps[0..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
     log::info!("steps[0..5]: {:#?}", &steps[0..5]);
+    assert_eq!(steps[0..5], [1.0, 1.0, 1.0, 1.0, 1.0]);
 }
 
 // Hardware management
 async fn execute_gpu() -> Option<Vec<f32>> {
     // USER INPUT
 
-    let n: usize = 1024 * 4;
+    let n: usize = 16;
     let mut input_data = HashMap::new();
 
-    let data_a: Vec<f32> = (0..n * n).map(|x| x as f32).collect();
-    let dims_a = vec![n as i64, n as i64];
-    let data_b: Vec<f32> = (0..n * n).map(|x| 1 as f32).collect();
-    let dims_b = vec![n as i64, n as i64];
-    input_data.insert("A".to_string(), (data_a.as_slice(), dims_a.as_slice()));
-    input_data.insert("B".to_string(), (data_b.as_slice(), dims_b.as_slice()));
+    let data = vec![0.0f32; n];
+    let dims = vec![n as i64];
+    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
 
     // ONNX INPUTS
 
@@ -46,56 +40,39 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let mut type_proto = crate::onnx::TypeProto::new();
     type_proto.set_tensor_type(type_proto_tensor);
 
-    let mut input_a = crate::onnx::ValueInfoProto::new();
-    input_a.set_name("A".to_string());
-    input_a.set_field_type(type_proto.clone());
-
-    let mut input_b = crate::onnx::ValueInfoProto::new();
-    input_b.set_name("B".to_string());
-    input_b.set_field_type(type_proto.clone());
+    let mut input = crate::onnx::ValueInfoProto::new();
+    input.set_name("X".to_string());
+    input.set_field_type(type_proto.clone());
 
     let mut output = crate::onnx::ValueInfoProto::new();
-    output.set_name("C".to_string());
+    output.set_name("Y".to_string());
     output.set_field_type(type_proto.clone());
 
     let mut node = crate::onnx::NodeProto::new();
-    node.set_op_type("MatMul".to_string());
+    node.set_op_type("Cos".to_string());
     node.set_name("node".to_string());
-    node.set_input(protobuf::RepeatedField::from(vec![
-        "A".to_string(),
-        "B".to_string(),
-    ]));
-    node.set_output(protobuf::RepeatedField::from(vec!["C".to_string()]));
+    node.set_input(protobuf::RepeatedField::from(vec!["X".to_string()]));
+    node.set_output(protobuf::RepeatedField::from(vec!["Y".to_string()]));
 
     let mut graph = wonnx::onnx::GraphProto::new();
-
-    graph.set_node(protobuf::RepeatedField::from(vec![node.clone()]));
-    graph.set_input(protobuf::RepeatedField::from(vec![input_a, input_b]));
+    graph.set_node(protobuf::RepeatedField::from(vec![node]));
+    graph.set_input(protobuf::RepeatedField::from(vec![input]));
     graph.set_output(protobuf::RepeatedField::from(vec![output]));
 
     let mut model = crate::onnx::ModelProto::new();
     model.set_graph(graph);
 
     // LOGIC
-    let time_session = Instant::now();
+
     let session = wonnx::Session::from_model(model)
         .await
         .expect("Session did not create");
 
-    let time_finished_creation = Instant::now();
-    println!(
-        "time: finished_creation_session: {:#?}",
-        time_finished_creation - time_session
-    );
-    let a = session.run(input_data).await;
-    let time_finished_computation = Instant::now();
-    println!(
-        "time: finished_computation: {:#?}",
-        time_finished_computation - time_finished_creation
-    );
-    a
+    session.run(input_data).await
 }
 
+#[test]
+// #[wasm_bindgen_test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {

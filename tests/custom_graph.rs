@@ -75,8 +75,8 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     node2.set_name("node".to_string());
     node2.set_input(protobuf::RepeatedField::from(vec!["Y".to_string()]));
     node2.set_output(protobuf::RepeatedField::from(vec!["Z".to_string()]));
-
     node2.set_attribute(protobuf::RepeatedField::from(vec![perm]));
+
     let mut graph = wonnx::onnx::GraphProto::new();
     graph.set_node(protobuf::RepeatedField::from(vec![node1, node2]));
     graph.set_input(protobuf::RepeatedField::from(vec![input]));
