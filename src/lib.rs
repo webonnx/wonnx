@@ -137,7 +137,7 @@ pub fn generate_buffer(
             "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor"
             | "Log" | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Add"
             | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
-            | "Mod" | "Mul" | "Or" | "Sub" | "Relu" => {
+            | "Mod" | "Mul" | "Or" | "Sub" | "Relu" | "Sigmoid" | "Softsign" | "Softplus" => {
                 inner_infos.insert(
                     output[0].clone(),
                     InnerInfo {
@@ -318,13 +318,35 @@ pub fn format_node(
                 1,
             )
         }
-        "Relu" => (
+        "Relu" | "Sigmoid" | "Softsign" | "Softplus" => (
             "let gidx = global_id.x;".to_string()
-                + format!(
+                + match node.get_op_type() {
+                    "Relu" => 
+                        format!(
                     "{output}.data[gidx] = max({input}.data[gidx], vec4<f32>(0.0, 0.0, 0.0, 0.0));",
                     input = inputs[0],
                     output = outputs[0],
-                )
+                    ),
+                    "Sigmoid" => 
+                        format!(
+                    "{output}.data[gidx] = vec4<f32>(1.0, 1.0, 1.0, 1.0) / (vec4<f32>(1.0, 1.0, 1.0, 1.0) + exp(-{input}.data[gidx]));",
+                    input = inputs[0],
+                    output = outputs[0],
+                    ),
+                    "Softsign" => 
+                        format!(
+                    "{output}.data[gidx] = {input}.data[gidx] / (vec4<f32>(1.0, 1.0, 1.0, 1.0) + abs({input}.data[gidx]));",
+                    input = inputs[0],
+                    output = outputs[0],
+                    ),
+                    "Softplus" => 
+                        format!(
+                    "{output}.data[gidx] = log(vec4<f32>(1.0, 1.0, 1.0, 1.0) + exp({input}.data[gidx]));",
+                    input = inputs[0],
+                    output = outputs[0],
+                    ),
+                    _ => unimplemented!("Unsupported activation"),
+                }
                 .as_str(),
             length as _,
             1,
