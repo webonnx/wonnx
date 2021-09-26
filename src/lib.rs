@@ -137,7 +137,7 @@ pub fn generate_buffer(
             "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor"
             | "Log" | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Add"
             | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
-            | "Mod" | "Mul" | "Or" | "Sub" | "Relu" | "Sigmoid" | "Softsign" | "Softplus" => {
+            | "Mod" | "Mul" | "Or" | "Sub" | "Celu" |"Relu" | "Sigmoid" | "Softsign" | "Softplus" => {
                 inner_infos.insert(
                     output[0].clone(),
                     InnerInfo {
@@ -201,7 +201,24 @@ pub fn generate_buffer(
     inner_infos
 }
 
-pub fn get_value_info() {}
+pub fn get_attribute<'a>(
+    attribute: &'a str,
+    defaults: Option<&'a onnx::AttributeProto>,
+    node: &'a onnx::NodeProto,
+) -> &'a onnx::AttributeProto {
+    match defaults {
+        Some(default) => node
+            .get_attribute()
+            .iter()
+            .find(|attr| attr.get_name() == attribute)
+            .unwrap_or(&default),
+        None => node
+            .get_attribute()
+            .iter()
+            .find(|attr| attr.get_name() == attribute)
+            .expect("Did not find required attribute"),
+    }
+}
 
 pub fn format_node(
     node: &crate::onnx::NodeProto,
@@ -258,6 +275,116 @@ pub fn format_node(
             1,
             1,
         ),
+        "Celu" => {
+            
+            let mut alpha_default = onnx::AttributeProto::new();
+            alpha_default.set_f(1.0);
+
+            let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+            (
+            "let gidx = global_id.x;".to_string()
+                + format!(
+                    "{output}.data[gidx] = max(vec4<f32>(0.0, 0.0, 0.0, 0.0), {input_0}.data[gidx]) + min(
+                        vec4<f32>(0.0, 0.0, 0.0, 0.0), 
+                        {alpha} * (exp({input_0}.data[gidx] / {alpha} ) - vec4<f32>(1.0, 1.0, 1.0, 1.0) ));",
+                    input_0 = inputs[0],
+                    alpha = alpha,
+                    output = outputs[0],
+                )
+                .as_str(),
+            length as _,
+            1,
+            1,
+        )},
+        "Elu" => {
+            
+            let mut alpha_default = onnx::AttributeProto::new();
+            alpha_default.set_f(1.0);
+
+            let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+            (
+            "let gidx = global_id.x;".to_string()
+                + format!(
+                    "{output}.data[gidx] = min(vec4<f32>(0.0, 0.0, 0.0, 0.0), {alpha} * exp({input_0}.data[gidx]);",
+                    input_0 = inputs[0],
+                    alpha = alpha,
+                    output = outputs[0],
+                )
+                .as_str(),
+            length as _,
+            1,
+            1,
+        )},
+        "Gemm" => {
+            let mut alpha_default = onnx::AttributeProto::new();
+            alpha_default.set_f(1.0);
+
+            let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+
+            let mut beta_default = onnx::AttributeProto::new();
+            beta_default.set_f(1.0);
+
+            let beta = get_attribute("beta", Some(&beta_default), node).get_f();
+
+            let left_columns = &inner_infos.get(&inputs[0]).unwrap().dims[1];
+            let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
+            let threads = (&inner_infos.get(&inputs[0]).unwrap().dims[0] / 4) * right_columns / 4;
+
+            (
+                format!(
+                    r#"
+    let y = global_id.x % {right_columns_div_4}u;
+    let x = global_id.x / {right_columns_div_4}u;
+    let index = x * {right_columns}u + y;
+
+    var tmpsum = mat4x4<f32>(vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0));
+    var product = mat4x4<f32>(vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0));
+
+    for(var k: u32 = 0u; k < {left_columns_div_4}u; k = k + 1u) {{
+        let index_left = x * {left_columns}u + k; 
+        let index_right = k * {left_columns}u + y; 
+
+        let mat_left = mat4x4<f32>(
+                              {input_left}.data[index_left], 
+                              {input_left}.data[index_left + {left_columns_div_4}u],
+                              {input_left}.data[index_left + 2u * {left_columns_div_4}u],
+                              {input_left}.data[index_left + 3u * {left_columns_div_4}u],
+                          );
+          
+        let mat_right = mat4x4<f32>(
+                              {input_right}.data[index_right], 
+                              {input_right}.data[index_right + {right_columns_div_4}u],
+                              {input_right}.data[index_right + 2u * {right_columns_div_4}u],
+                              {input_right}.data[index_right + 3u * {right_columns_div_4}u],
+                          );
+	
+        product = mat_right * mat_left;
+	
+        for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
+	        tmpsum[index_mat] = tmpsum[index_mat] + product[index_mat];
+	    }}
+    }}
+
+    {output}.data[index] = tmpsum[0];
+    {output}.data[index + {right_columns_div_4}u] = tmpsum[1];
+    {output}.data[index + 2u * {right_columns_div_4}u] = tmpsum[2];
+    {output}.data[index + 3u * {right_columns_div_4}u] = tmpsum[3];
+      
+            "#,
+                    input_left = inputs[0],
+                    input_right = inputs[1],
+                    output = outputs[0],
+                    left_columns = left_columns,
+                    left_columns_div_4 = left_columns / 4,
+                    // The right columns is composed of 4 vector of size 4
+                    right_columns = right_columns,
+                    right_columns_div_4 = right_columns / 4,
+                ),
+                threads as _,
+                1,
+                1,
+            )
+        }
         "MatMul" => {
             let left_columns = &inner_infos.get(&inputs[0]).unwrap().dims[1];
             let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
@@ -359,11 +486,7 @@ pub fn format_node(
             let len_0 = dims[0];
             let len_1 = dims[1] / 4;
 
-            let perm = node
-                .get_attribute()
-                .iter()
-                .find(|attr| attr.get_name() == "perm")
-                .expect(format!("Required attribute '{}' not found", "perm").as_str())
+            let perm = get_attribute("perm", None, &node)
                 .get_ints();
 
             (
