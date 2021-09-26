@@ -214,33 +214,51 @@ pub fn format_node(
             1,
             1,
         ),
-        "Matmul" => (
-            format!(
-                r#"
-            var i: u32 = global_id.x * {len}u + global_id.y;
+        "Matmul" => {
+            let len_left = &inner_infos.get(&inputs[0]).unwrap().dims[1];
+            let len_right = &inner_infos.get(&inputs[1]).unwrap().dims[1];
+
+            (
+                format!(
+                    r#"
+            let y = global_id.x % {len_right}u;
+            let x = global_id.x / {len_right}u;
+
 		    var tmpsum = {output}.data[i];
 		    var product = {output}.data[i];
-		    for(var k: u32 = 0u; k < {len}u; k = k + 1u) {{
-			product = {input_0}.data[global_id.x * {len}u + k] * {input_1}.data[global_id.y * {len}u + k];
+		    for(var k: u32 = 0u; k < {len_left}u; k = k + 1u) {{
+                
+                let mat_left = mat4x4<f32>({input_left}.data[x * {len_left_x_4}u + k], 
+                                    {input_left}.data[x * {len_left_x_4}u + {len_left}u + k],
+                                    {input_left}.data[x * {len_left_x_4}u + 2u * {len_left}u + k],
+                                    {input_left}.data[x * {len_left_x_4}u + 3u * {len_left}u + k],
+                                );
+                
+                let mat_right = mat4x4<f32>({input_right}.data[k * {len_right_x_4}u + y], 
+                                    {input_right}.data[k * {len_right_x_4}u + {len_right}u + y],
+                                    {input_right}.data[k * {len_right_x_4}u + 2u * {len_right}u + y],
+                                    {input_right}.data[k * {len_right_x_4}u + 3u * {len_right}u + y],
+                                );
+
+			product = mat_left * mat_right;
 			for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
 			    tmpsum[index_mat] = tmpsum[index_mat] + product[index_mat];
 			}}
 		    }}
 		    {output}.data[i] = tmpsum;"#,
-                input_0 = inputs[0],
-                input_1 = inputs[1],
-                output = outputs[0],
-                len = node
-                    .get_attribute()
-                    .iter()
-                    .find(|x| x.get_name() == "len")
-                    .expect("length attribute not found for matrix multiplication")
-                    .get_i()
-            ),
-            1,
-            1,
-            1,
-        ),
+                    input_left = inputs[0],
+                    input_right = inputs[1],
+                    output = outputs[0],
+                    len_left = len_left,
+                    len_left_x_4 = len_left * 4,
+                    len_right = len_right,
+                    len_right_x_4 = len_right * 4,
+                ),
+                1,
+                1,
+                1,
+            )
+        }
         "Relu" => (
             "let gidx = global_id.x;".to_string()
                 + format!(
