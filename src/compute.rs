@@ -81,7 +81,7 @@ pub fn wrapper(
 
         let mut main_body = "".to_string();
         let mut threads = vec![];
-        let (shader_node, x, y, z) = crate::format_node(node, inner_infos);
+        let (shader_node, x, y, z) = crate::compiler::format_node(node, inner_infos);
         main_body.push_str(&shader_node);
         threads.push([x, y, z]);
 
