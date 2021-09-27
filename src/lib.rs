@@ -9,7 +9,7 @@ use protobuf::{self, Message};
 use std::collections::HashMap;
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
-
+use std::str::from_utf8;
 /// Creates a new session connected to the GPU.
 ///
 /// Generate a session that will translate the onnx format into WGSL instructions.
@@ -104,7 +104,7 @@ pub fn generate_buffer(
     device: &wgpu::Device,
 ) -> HashMap<String, InnerInfo> {
     let mut inner_infos = HashMap::new();
-
+    let initializers = graph.get_initializer();
     for input in graph.get_input().iter() {
         let name = input.get_name();
         let (data, dim) = input_data
@@ -149,7 +149,84 @@ pub fn generate_buffer(
                         dims: input_dims,
                     },
                 );
-            }
+            },
+            "Conv" => {
+                // TODO: Conv only support NxCxHxW for the moment.
+                debug_assert!(input_dims.len() == 4usize);
+
+                let mut auto_pad_default = onnx::AttributeProto::new();
+                auto_pad_default.set_s("NOTSET".to_string().into_bytes());
+
+                let auto_pad = from_utf8(get_attribute("auto_pad", Some(&auto_pad_default), node).get_s()).unwrap();
+                
+                let mut dilations_default = onnx::AttributeProto::new();
+                dilations_default.set_ints(vec![1, 1]);
+
+                let dilations = get_attribute("dilations", Some(&dilations_default), node).get_ints();
+
+                let kernel_shape = get_attribute("kernel_shape", None, node).get_ints();
+
+                let mut strides_default = onnx::AttributeProto::new();
+                strides_default.set_ints(vec![1, 1]);
+
+                let strides = get_attribute("strides", Some(&strides_default), node).get_ints();
+
+                let mut pads_default = onnx::AttributeProto::new();
+                pads_default.set_ints(vec![0, 0, 0, 0]);
+
+                let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
+
+                let mut output_dims = input_dims.clone();
+
+                let w = initializers.iter().find(|x| x.get_name() == input[1].as_str()).expect(format!("Did not find initializer for input Conv {}", input[1]).as_str());
+                let w_data = w.get_float_data();
+                let w_dims = w.get_dims();
+
+                match auto_pad {
+                    "NOTSET" => {
+                        output_dims[0] = input_dims[0];
+                        output_dims[1] = w_dims[0];
+                        output_dims[2] = (input_dims[2] - kernel_shape[0] + pads[0] + pads[2]) / strides[0] + 1;
+                        output_dims[3] = (input_dims[3] - kernel_shape[1] + pads[1] + pads[3]) / strides[1] + 1;
+                    },
+                    "SAME_UPPER" => {
+                        output_dims[0] = input_dims[0];
+                        output_dims[1] = w_dims[0];
+                        output_dims[2] = input_dims[2]/strides[0];
+                        output_dims[3] = input_dims[3]/strides[1];
+                    },
+                    "SAME_LOWER" => {
+                        output_dims[0] = input_dims[0];
+                        output_dims[1] = w_dims[0];
+                        output_dims[2] = input_dims[2]/strides[0];
+                        output_dims[3] = input_dims[3]/strides[1];
+                    },
+                    _ => unimplemented!(),
+                }
+                inner_infos.insert(
+                    output[0].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer(
+                            device,
+                            resource::size(&input_dims) as _,
+                            output[0].as_str(),
+                        ),
+                        dims: output_dims,
+                    },
+                );
+                inner_infos.insert(
+                    input[1].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer_init(
+                            device,
+                            w_data,
+                            input[1].as_str(),
+                        ),
+                        dims: w_dims.to_vec(),
+                    },
+                );
+            },
+
             "Transpose" => {
                 let perm = attributes
                     .iter()
@@ -178,7 +255,7 @@ pub fn generate_buffer(
                 let mut output_dims = input_dims.clone();
                 let input_right_dims = inner_infos
                     .get(&input[1])
-                    .expect(format!("Input: {} has not been provided", input[0]).as_str())
+                    .expect(format!("Input: {} has not been provided", input[1]).as_str())
                     .dims
                     .clone();
                 output_dims[1] = input_right_dims[1];
@@ -193,7 +270,17 @@ pub fn generate_buffer(
                         dims: output_dims,
                     },
                 );
-            }
+            },
+            "Flatten" => {
+            
+                let mut axis_default = onnx::AttributeProto::new();
+            
+                axis_default.set_f(1.0);
+
+                let axis = get_attribute("axis", Some(&axis_default), node).get_i();
+                
+                unimplemented!()
+            },
             _ => unimplemented!(),
         }
     }
@@ -275,36 +362,26 @@ pub fn format_node(
             1,
             1,
         ),
-        "Celu" => {
+        "Celu" | "Elu" => {
             
             let mut alpha_default = onnx::AttributeProto::new();
             alpha_default.set_f(1.0);
 
             let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+            
             (
             "let gidx = global_id.x;".to_string()
-                + format!(
+                + match node.get_op_type() {
+                    "Celu" => 
+                 format!(
                     "{output}.data[gidx] = max(vec4<f32>(0.0, 0.0, 0.0, 0.0), {input_0}.data[gidx]) + min(
                         vec4<f32>(0.0, 0.0, 0.0, 0.0), 
                         {alpha} * (exp({input_0}.data[gidx] / {alpha} ) - vec4<f32>(1.0, 1.0, 1.0, 1.0) ));",
                     input_0 = inputs[0],
                     alpha = alpha,
                     output = outputs[0],
-                )
-                .as_str(),
-            length as _,
-            1,
-            1,
-        )},
-        "Elu" => {
-            
-            let mut alpha_default = onnx::AttributeProto::new();
-            alpha_default.set_f(1.0);
-
-            let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
-            (
-            "let gidx = global_id.x;".to_string()
-                + format!(
+                ),
+                    "Elu" =>  format!(
                     r#"
         let tmp_vec = vec4<f32>(0.0, 0.0, 0.0, 0.0);
         let input_vec = {input_0}.data[gidx]; 
@@ -320,8 +397,9 @@ pub fn format_node(
                     input_0 = inputs[0],
                     alpha = alpha,
                     output = outputs[0],
-                )
-                .as_str(),
+                ),
+                _ => unimplemented!()
+            }.as_str(),
             length as _,
             1,
             1,
