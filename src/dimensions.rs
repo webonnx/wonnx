@@ -23,6 +23,7 @@ pub fn generate_buffer(
             InnerInfo {
                 buffer: resource::create_buffer_init(device, data, name),
                 dims: dim.to_vec(),
+                inner_type: crate::compute::InnerType::ArrayVector,
             },
         );
     }
@@ -56,6 +57,7 @@ pub fn generate_buffer(
                             output[0].as_str(),
                         ),
                         dims: input_dims,
+                        inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             }
@@ -104,6 +106,7 @@ pub fn generate_buffer(
                     InnerInfo {
                         buffer: resource::create_buffer_init(device, w_data, input[1].as_str()),
                         dims: w_dims.to_vec(),
+                        inner_type: crate::compute::InnerType::Array,
                     },
                 );
 
@@ -147,6 +150,7 @@ pub fn generate_buffer(
                             output[0].as_str(),
                         ),
                         dims: output_dims,
+                        inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             }
@@ -216,6 +220,7 @@ pub fn generate_buffer(
                             output[0].as_str(),
                         ),
                         dims: output_dims,
+                        inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             }
@@ -240,6 +245,7 @@ pub fn generate_buffer(
                             output[0].as_str(),
                         ),
                         dims: output_dims,
+                        inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             }
@@ -260,6 +266,7 @@ pub fn generate_buffer(
                             output[0].as_str(),
                         ),
                         dims: output_dims,
+                        inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             }

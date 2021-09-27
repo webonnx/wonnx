@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::onnx;
 use crate::get_attribute;
 
+use std::str::from_utf8;
 pub fn format_node(
     node: &crate::onnx::NodeProto,
     inner_infos: &HashMap<String, crate::InnerInfo>,
@@ -11,9 +12,10 @@ pub fn format_node(
     let inputs = node.get_input();
     let outputs = node.get_output();
 
-    let dims = &inner_infos.get(&inputs[0]).unwrap().dims;
+    let input_dims = &inner_infos.get(&inputs[0]).unwrap().dims;
+    let output_dims = &inner_infos.get(&outputs[0]).unwrap().dims;
 
-    let length = crate::utils::len(dims);
+    let length = crate::utils::len(input_dims);
 
     match node.get_op_type() {
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
@@ -128,73 +130,78 @@ pub fn format_node(
                 let mut pads_default = onnx::AttributeProto::new();
                 pads_default.set_ints(vec![0, 0, 0, 0]);
 
+                // TODO: Implement auto pad!
                 let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
 
-                let mut output_dims = input_dims.clone();
+                // GLSL shader for convolution computation
+                let mut shader = format!(r#"
+	            let m = global_id.x / {C_x_H_x_W};
+                let index = global_id.x % {C_x_H_x_W};
+                let c = index / {H_x_W};
+                let rest = rest % {H_x_W};
+                let y = rest / {width};
+                let x = rest % {width};
 
-                let w = initializers
-                    .iter()
-                    .find(|x| x.get_name() == input[1].as_str())
-                    .expect(
-                        format!("Did not find initializer for input Conv {}", input[1]).as_str(),
-                    );
-                let w_data = w.get_float_data();
-                let w_dims = w.get_dims();
+                let mut output_vec = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+                
+                y = y - {pad_0}u;
+                x = x - {pad_1}u;
+                index = index - {pad_0}u * {width}u - {pad_1}u;
 
-                inner_infos.insert(
-                    input[1].clone(),
-                    InnerInfo {
-                        buffer: resource::create_buffer_init(device, w_data, input[1].as_str()),
-                        dims: w_dims.to_vec(),
-                    },
+                let mut tmp_result = 0.0;
+                
+                for(var i: u32 = 0u; i < {kernel_shape_0}u; i = i + {stride_0}u) {{
+                    for(var j: u32 = 0u; j < {kernel_shape_1}u; j = j + {stride_1}u) {{
+
+                        let index = (index + i * {dilation_0}u * {width}u + j * {dilation_1}u);
+                        
+                        if ((index_h < {height}u) && (index_w < {width}u) && (y >= 0) && (x >= 0)) {{
+                            let index_div_4 = index / 4u;
+                            let index_rest_4 = index % 4u;
+
+                            output_vec[i] = output_vec[i] + {input}.data[index_div_4][index_rest_4] * {weight}.data[m * {kernel_len} + i * {kernel_shape_1}u + j];
+                        }}
+                    }}
+                }}
+
+                {output}.data[global_id.x] = output_vec[0];
+                "#, 
+                 C_x_H_x_W = input_dims[1] * input_dims[2] * input_dims[3], 
+                 H_x_W = input_dims[2] * input_dims[3],
+                 output = outputs[0],
+                 input = inputs[0],
+                 weight = inputs[1],
+                 width = input_dims[3],
+                 height = input_dims[2],
+                 stride_0 = strides[0],
+                 stride_1 = strides[1],
+                 dilation_0 = dilations[0],
+                 dilation_1 = dilations[1],
+                 kernel_shape_0 = kernel_shape[0],
+                 kernel_shape_1 = kernel_shape[1],
+                 kernel_len = kernel_shape[0] * kernel_shape[1],
+                 pad_0 = pads[0],
+                 pad_1 = pads[1],
                 );
 
                 match auto_pad {
                     "NOTSET" => {
-                        output_dims[0] = input_dims[0];
-                        output_dims[1] = w_dims[0];
-                        output_dims[2] = (input_dims[2]
-                            - ((kernel_shape[0] - 1) * dilations[0] + 1)
-                            + pads[0]
-                            + pads[2])
-                            / strides[0]
-                            + 1;
-                        output_dims[3] = (input_dims[3]
-                            - ((kernel_shape[1] - 1) * dilations[1] + 1)
-                            + pads[1]
-                            + pads[3])
-                            / strides[1]
-                            + 1;
+
                     }
                     "SAME_UPPER" => {
-                        output_dims[0] = input_dims[0];
-                        output_dims[1] = w_dims[0];
-                        output_dims[2] = input_dims[2] / strides[0];
-                        output_dims[3] = input_dims[3] / strides[1];
                     }
                     "SAME_LOWER" => {
-                        output_dims[0] = input_dims[0];
-                        output_dims[1] = w_dims[0];
-                        output_dims[2] = input_dims[2] / strides[0];
-                        output_dims[3] = input_dims[3] / strides[1];
                     }
                     _ => unimplemented!(),
                 }
-                inner_infos.insert(
-                    output[0].clone(),
-                    InnerInfo {
-                        buffer: resource::create_buffer(
-                            device,
-                            resource::size(&input_dims) as _,
-                            output[0].as_str(),
-                        ),
-                        dims: output_dims,
-                    },
-                );
-		unimplemented!();
-		
-            },
 
+		(
+		shader, 
+		(output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+		1,
+		1
+	)
+            },
         "Gemm" => {
             let mut alpha_default = onnx::AttributeProto::new();
             alpha_default.set_f(1.0);
@@ -363,8 +370,8 @@ pub fn format_node(
             unimplemented!()
         }
         "Transpose" => {
-            let len_0 = dims[0];
-            let len_1 = dims[1] / 4;
+            let len_0 = input_dims[0];
+            let len_1 = input_dims[1] / 4;
 
             let perm = get_attribute("perm", None, &node)
                 .get_ints();

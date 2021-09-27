@@ -97,6 +97,7 @@ impl Session {
 pub struct InnerInfo {
     buffer: wgpu::Buffer,
     dims: Vec<i64>,
+    inner_type: compute::InnerType,
 }
 
 pub fn get_attribute<'a>(

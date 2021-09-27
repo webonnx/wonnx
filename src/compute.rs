@@ -36,14 +36,8 @@ pub fn wrapper(
         let mut binding_key: HashMap<&str, u32> = HashMap::new();
         let mut entries = vec![];
         for tensor in inputs.iter() {
-            shader.push_str(
-                crate::format_tensor(
-                    binding_counter,
-                    tensor,
-                    &crate::compute::InnerType::ArrayVector,
-                )
-                .as_str(),
-            );
+            let inner_type = &inner_infos.get(tensor).unwrap().inner_type;
+            shader.push_str(crate::format_tensor(binding_counter, tensor, inner_type).as_str());
             binding_key.insert(tensor, binding_counter);
             entries.push(wgpu::BindGroupEntry {
                 binding: binding_counter,
