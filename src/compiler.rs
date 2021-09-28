@@ -18,6 +18,7 @@ pub fn format_node(
     let length = crate::utils::len(input_dims);
 
     match node.get_op_type() {
+        // APLY FUNCTION AS IS
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
         | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => (
             "let gidx = global_id.x;".to_string()
@@ -26,6 +27,19 @@ pub fn format_node(
                     input = inputs[0],
                     output = outputs[0],
                     op_type = node.get_op_type().to_lowercase()
+                )
+                .as_str(),
+            length as _,
+            1,
+            1,
+        ),
+        // COPY DATA
+         "Reshape"  => (
+            "let gidx = global_id.x;".to_string()
+                + format!(
+                    "{output}.data[gidx] = {input}.data[gidx];",
+                    input = inputs[0],
+                    output = outputs[0],
                 )
                 .as_str(),
             length as _,

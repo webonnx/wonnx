@@ -15,9 +15,12 @@ pub fn generate_buffer(
     let initializers = graph.get_initializer();
     for input in graph.get_input().iter() {
         let name = input.get_name();
-        let (data, dim) = input_data
-            .get(name)
-            .unwrap_or_else(|| panic!("Input: {name} was not found in user HashMap.", name = name));
+        let (data, dim) = input_data.get(name).unwrap_or_else(|| {
+            panic!(
+                "Input: {name} was not found in user HashMap. Please add it to your HashMap",
+                name = name
+            )
+        });
         inner_infos.insert(
             name.to_string(),
             InnerInfo {
@@ -258,6 +261,27 @@ pub fn generate_buffer(
                     .dims
                     .clone();
                 output_dims[1] = input_right_dims[1];
+                inner_infos.insert(
+                    output[0].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer(
+                            device,
+                            resource::size(&output_dims) as _,
+                            output[0].as_str(),
+                        ),
+                        dims: output_dims,
+                        inner_type: crate::compute::InnerType::ArrayVector,
+                    },
+                );
+            }
+            "Reshape" => {
+                let reshape = initializers
+                    .iter()
+                    .find(|x| x.get_name() == input[1].as_str())
+                    .expect(
+                        format!("Did not find initializer for input Reshape {}", input[1]).as_str(),
+                    );
+                let output_dims = reshape.get_int64_data().to_vec();
                 inner_infos.insert(
                     output[0].clone(),
                     InnerInfo {

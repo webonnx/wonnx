@@ -37,7 +37,7 @@ impl Session {
         )
         .expect("Could not deserialize the Model");
 
-        debug!("model: {:#?}", model);
+        debug!("model.graph: {:#?}", model.get_graph());
 
         Ok(Session {
             device,
@@ -49,7 +49,7 @@ impl Session {
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
         let (device, queue) = resource::request_device_queue().await;
 
-        debug!("model: {:#?}", model);
+        debug!("model.graph: {:#?}", model.get_graph());
 
         Ok(Session {
             device,
