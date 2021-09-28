@@ -141,12 +141,13 @@ pub fn generate_buffer(
                     }
                     _ => unimplemented!(),
                 }
+
                 inner_infos.insert(
                     output[0].clone(),
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
-                            resource::size(&input_dims) as _,
+                            resource::size(&output_dims) as _,
                             output[0].as_str(),
                         ),
                         dims: output_dims,
@@ -216,7 +217,7 @@ pub fn generate_buffer(
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
-                            resource::size(&input_dims) as _,
+                            resource::size(&output_dims) as _,
                             output[0].as_str(),
                         ),
                         dims: output_dims,

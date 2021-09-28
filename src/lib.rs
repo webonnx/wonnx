@@ -115,7 +115,14 @@ pub fn get_attribute<'a>(
             .get_attribute()
             .iter()
             .find(|attr| attr.get_name() == attribute)
-            .expect("Did not find required attribute"),
+            .expect(
+                format!(
+                    "Did not find required attribute: {}, for node: {}",
+                    attribute,
+                    node.get_name()
+                )
+                .as_str(),
+            ),
     }
 }
 

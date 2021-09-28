@@ -31,15 +31,35 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
 }
 
 pub fn create_buffer_init(device: &wgpu::Device, array: &[f32], name: &str) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(name),
-        contents: bytemuck::cast_slice(array),
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
-    })
+    let size = array.len();
+
+    if size % 4 != 0 {
+        let mut array = array.to_vec();
+        for _ in 0..(4 - size % 4) {
+            array.push(0.0);
+        }
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(name),
+            contents: bytemuck::cast_slice(&array),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
+        })
+    } else {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(name),
+            contents: bytemuck::cast_slice(array),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
+        })
+    }
 }
 
 pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
-    let slice_size = size as usize * std::mem::size_of::<f32>();
+    let slacked_size = if size % 4 != 0 {
+        size + (4 - size % 4)
+    } else {
+        size
+    };
+
+    let slice_size = slacked_size as usize * std::mem::size_of::<f32>();
     let size = slice_size as wgpu::BufferAddress;
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(name),

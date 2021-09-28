@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use crate::onnx;
 use crate::get_attribute;
-
+use log::debug;
 use std::str::from_utf8;
 pub fn format_node(
     node: &crate::onnx::NodeProto,
@@ -130,88 +130,344 @@ pub fn format_node(
                 let mut pads_default = onnx::AttributeProto::new();
                 pads_default.set_ints(vec![0, 0, 0, 0]);
 
-                // TODO: Implement auto pad!
                 let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
 
+                let pads = match auto_pad {
+                    "NOTSET" => {
+                        pads.to_vec()
+                    }
+                    "SAME_UPPER" => {
+
+                        let slack_0 = - strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
+                        let slack_0_div_2 = slack_0 / 2;
+                        let slack_rest_0 = slack_0 % 2;
+                        let slack_1 = - strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
+                        let slack_1_div_2 = slack_1 / 2;
+                        let slack_rest_1 = slack_1 % 2;
+                        vec![slack_0_div_2, slack_1_div_2, slack_0_div_2 + slack_rest_0, slack_1_div_2 + slack_rest_1]
+                    }
+                    "SAME_LOWER" => {
+                        let slack_0 = - strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
+                        let slack_0_div_2 = slack_0 / 2;
+                        let slack_rest_0 = slack_0 % 2;
+                        let slack_1 = - strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
+                        let slack_1_div_2 = slack_1 / 2;
+                        let slack_rest_1 = slack_1 % 2;
+                        vec![slack_0_div_2 + slack_rest_0, slack_1_div_2 + slack_rest_1, slack_0_div_2, slack_1_div_2, ]
+                    }
+                    _ => unimplemented!(),
+                };
+
                 // GLSL shader for convolution computation
-                let mut shader = format!(r#"
-	            let m = global_id.x / {C_x_H_x_W};
-                let index = global_id.x % {C_x_H_x_W};
-                let c = index / {H_x_W};
-                let rest = rest % {H_x_W};
-                let y = rest / {width};
-                let x = rest % {width};
-
-                let mut output_vec = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+                let shader = if dilations != dilations_default.get_ints() {
+                    format!(r#"
+	            let batch_number = global_id.x / {M_x_H_x_W}u; 
+	            let rest = global_id.x / {M_x_H_x_W}u; 
                 
-                y = y - {pad_0}u;
-                x = x - {pad_1}u;
-                index = index - {pad_0}u * {width}u - {pad_1}u;
+                let m = rest / {H_x_W}u;
 
-                let mut tmp_result = 0.0;
+                let rest = global_id.x % {H_x_W}u;
+
+                let y = rest / {width}u - {pad_0}u;
+                let x = rest % {width}u - {pad_1}u;
                 
-                for(var i: u32 = 0u; i < {kernel_shape_0}u; i = i + {stride_0}u) {{
-                    for(var j: u32 = 0u; j < {kernel_shape_1}u; j = j + {stride_1}u) {{
+                var result: f32 = 0.0;
+                
+                for(var c: u32 = 0u; c < {channel}u; c = c + 1u) {{
+                    for(var i: u32 = 0u; i < {kernel_shape_0}u; i = i + {stride_0}u) {{
+                        for(var j: u32 = 0u; j < {kernel_shape_1}u; j = j + {stride_1}u) {{
 
-                        let index = (index + i * {dilation_0}u * {width}u + j * {dilation_1}u);
-                        
-                        if ((index_h < {height}u) && (index_w < {width}u) && (y >= 0) && (x >= 0)) {{
-                            let index_div_4 = index / 4u;
-                            let index_rest_4 = index % 4u;
+                            let tmp_y = y + i * {dilation_0}; 
+                            let tmp_x = x + j * {dilation_1};
 
-                            output_vec[i] = output_vec[i] + {input}.data[index_div_4][index_rest_4] * {weight}.data[m * {kernel_len} + i * {kernel_shape_1}u + j];
+                            if ((tmp_y < {original_height}u) && (tmp_x < {original_width}u) && (tmp_y >= 0u) && (tmp_x >= 0u)) {{
+
+                                let tmp_index = batch_number * {original_C_x_H_x_W}u + c * {original_H_x_W}u + tmp_y * {original_width}u + tmp_x;
+                                let index_div_4 = tmp_index / 4u;
+                                let index_rest_4 = tmp_index % 4u;
+
+                                let index_kernel = m * {kernel_channel_len}u + c * {kernel_len}u + i * {kernel_shape_1}u + j;
+
+                                result = result + {input}.data[index_div_4][index_rest_4] * {weight}.data[index_kernel];
+                            }}
                         }}
                     }}
                 }}
 
-                {output}.data[global_id.x] = output_vec[0];
+                let gidx = global_id.x / 4u;
+                let gidx_rest_4 = global_id.x % 4u;
+
+                {output}.data[gidx][gidx_rest_4] = result;
                 "#, 
-                 C_x_H_x_W = input_dims[1] * input_dims[2] * input_dims[3], 
-                 H_x_W = input_dims[2] * input_dims[3],
+                 M_x_H_x_W = output_dims[1] * output_dims[2] * output_dims[3],
+                 H_x_W = output_dims[2] * output_dims[3],
+                 original_C_x_H_x_W = input_dims[1] * input_dims[2] * input_dims[3],
+                 original_H_x_W = input_dims[2] * input_dims[3],
                  output = outputs[0],
                  input = inputs[0],
                  weight = inputs[1],
-                 width = input_dims[3],
-                 height = input_dims[2],
+                 original_width = input_dims[3],
+                 width = output_dims[3],
+                 original_height = input_dims[2],
+                 channel = input_dims[1],
                  stride_0 = strides[0],
                  stride_1 = strides[1],
-                 dilation_0 = dilations[0],
-                 dilation_1 = dilations[1],
                  kernel_shape_0 = kernel_shape[0],
                  kernel_shape_1 = kernel_shape[1],
                  kernel_len = kernel_shape[0] * kernel_shape[1],
+                 kernel_channel_len = kernel_shape[0] * kernel_shape[1] * input_dims[1],
                  pad_0 = pads[0],
                  pad_1 = pads[1],
-                );
+                 dilation_0 = dilations[0],
+                 dilation_1 = dilations[1],
+                    )
+                } else {
+                    format!(r#"
+	            let batch_number = global_id.x / {M_x_H_x_W}u; 
+	            let rest = global_id.x / {M_x_H_x_W}u; 
+                
+                let m = rest / {H_x_W}u;
+                let rest = global_id.x % {H_x_W}u;
+                
+                let y = rest / {width}u - {pad_0}u;
+                let x = rest % {width}u - {pad_1}u;
+                
+                var result: f32 = 0.0;
+                
+                for(var c: u32 = 0u; c < {channel}u; c = c + 1u) {{
+                    for(var i: u32 = 0u; i < {kernel_shape_0}u; i = i + {stride_0}u) {{
+                        for(var j: u32 = 0u; j < {kernel_shape_1}u; j = j + {stride_1}u) {{
 
-                match auto_pad {
-                    "NOTSET" => {
+                            let tmp_y = y + i; 
+                            let tmp_x = x + j;
 
-                    }
-                    "SAME_UPPER" => {
-                    }
-                    "SAME_LOWER" => {
-                    }
-                    _ => unimplemented!(),
-                }
+                            if ((tmp_y < {original_height}u) && (tmp_x < {original_width}u) && (tmp_y >= 0u) && (tmp_x >= 0u)) {{
 
+                                let tmp_index = batch_number * {original_C_x_H_x_W}u + c * {original_H_x_W}u + tmp_y * {original_width}u + tmp_x;
+                                let index_div_4 = tmp_index / 4u;
+                                let index_rest_4 = tmp_index % 4u;
+
+                                let index_kernel = m * {kernel_channel_len}u + c * {kernel_len}u + i * {kernel_shape_1}u + j;
+
+                                result = result + {input}.data[index_div_4][index_rest_4] * {weight}.data[index_kernel];
+                            }}
+                        }}
+                    }}
+                }}
+
+                let gidx = global_id.x / 4u;
+                let gidx_rest_4 = global_id.x % 4u;
+
+                {output}.data[gidx][gidx_rest_4] = result;
+                "#, 
+                 M_x_H_x_W = output_dims[1] * output_dims[2] * output_dims[3],
+                 H_x_W = output_dims[2] * output_dims[3],
+                 original_C_x_H_x_W = input_dims[1] * input_dims[2] * input_dims[3],
+                 original_H_x_W = input_dims[2] * input_dims[3],
+                 output = outputs[0],
+                 input = inputs[0],
+                 weight = inputs[1],
+                 original_width = input_dims[3],
+                 width = output_dims[3],
+                 original_height = input_dims[2],
+                 channel = input_dims[1],
+                 stride_0 = strides[0],
+                 stride_1 = strides[1],
+                 kernel_shape_0 = kernel_shape[0],
+                 kernel_shape_1 = kernel_shape[1],
+                 kernel_len = kernel_shape[0] * kernel_shape[1],
+                 kernel_channel_len = kernel_shape[0] * kernel_shape[1] * input_dims[1],
+                 pad_0 = pads[0],
+                 pad_1 = pads[1],
+                    )
+                };
 		(
 		shader, 
-		(output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+		(output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
 		1,
 		1
 	)
             },
+            "MaxPool" => {
+                // TODO: Conv only support NxCxHxW for the moment.
+                debug_assert!(input_dims.len() == 4usize);
+
+                let mut auto_pad_default = onnx::AttributeProto::new();
+                auto_pad_default.set_s("NOTSET".to_string().into_bytes());
+
+                let auto_pad =
+                    from_utf8(get_attribute("auto_pad", Some(&auto_pad_default), node).get_s())
+                        .unwrap();
+
+                let mut dilations_default = onnx::AttributeProto::new();
+                dilations_default.set_ints(vec![1, 1]);
+
+                let dilations =
+                    get_attribute("dilations", Some(&dilations_default), node).get_ints();
+
+                let kernel_shape = get_attribute("kernel_shape", None, node).get_ints();
+
+                let mut strides_default = onnx::AttributeProto::new();
+                strides_default.set_ints(vec![1, 1]);
+
+                let strides = get_attribute("strides", Some(&strides_default), node).get_ints();
+
+                let mut pads_default = onnx::AttributeProto::new();
+                pads_default.set_ints(vec![0, 0, 0, 0]);
+
+                // TODO: Implement auto pad!
+                let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
+
+
+                let pads = match auto_pad {
+                    "NOTSET" => {
+                        pads.to_vec()
+                    }
+                    "SAME_UPPER" => {
+                        let slack_0 = (input_dims[0] - output_dims[0])/2;
+                        let slack_rest_0 = (input_dims[0] - output_dims[0]) % 2;
+                        let slack_1 = (input_dims[1] - output_dims[1])/2;
+                        let slack_rest_1 = (input_dims[0] - output_dims[0]) % 2;
+                        vec![slack_0, slack_1, slack_0 + slack_rest_0, slack_1 + slack_rest_1]
+                    }
+                    "SAME_LOWER" => {
+                        let slack_0 = (input_dims[0] - output_dims[0])/2;
+                        let slack_rest_0 = (input_dims[0] - output_dims[0]) % 2;
+                        let slack_1 = (input_dims[1] - output_dims[1])/2;
+                        let slack_rest_1 = (input_dims[0] - output_dims[0]) % 2;
+                        vec![slack_0 + slack_rest_0, slack_1 + slack_rest_1, slack_0, slack_1]
+                    }
+                    _ => unimplemented!(),
+                };
+                debug!("pads: {:#?}", pads);
+
+                // GLSL shader for convolution computation
+                let shader = if dilations != dilations_default.get_ints() {
+                    format!(r#"
+	            let batch_number = global_id.x / {M_x_H_x_W}u; 
+	            let rest = global_id.x / {M_x_H_x_W}u; 
+                
+                let m = rest / {H_x_W}u;
+                let rest = global_id.x % {H_x_W}u;
+
+                let y = rest / {width}u - {pad_0}u;
+                let x = rest % {width}u - {pad_1}u;
+                
+                var result: f32 = 0.0;
+                
+                for(var c: u32 = 0u; c < {channel}u; c = c + 1u) {{
+                    for(var i: u32 = 0u; i < {kernel_shape_0}u; i = i + {stride_0}u) {{
+                        for(var j: u32 = 0u; j < {kernel_shape_1}u; j = j + {stride_1}u) {{
+
+                            let tmp_y = y + i * {dilation_0}u; 
+                            let tmp_x = x + j * {dilation_1}u;
+
+                            if ((tmp_y < {original_height}u) && (tmp_x < {original_width}u) && (tmp_y >= 0u) && (tmp_x >= 0u)) {{
+
+                                let tmp_index = batch_number * {original_C_x_H_x_W}u + c * {original_H_x_W}u + tmp_y * {original_width}u + tmp_x;
+                                let index_div_4 = tmp_index / 4u;
+                                let index_rest_4 = tmp_index % 4u;
+
+                                result = max(result, {input}.data[index_div_4][index_rest_4]);
+                            }}
+                        }}
+                    }}
+                }}
+
+                let gidx = global_id.x / 4u;
+                let gidx_rest_4 = global_id.x % 4u;
+
+                {output}.data[gidx][gidx_rest_4] = result;
+                "#, 
+                 M_x_H_x_W = output_dims[1] * output_dims[2] * output_dims[3],
+                 H_x_W = output_dims[2] * output_dims[3],
+                 original_C_x_H_x_W = input_dims[1] * input_dims[2] * input_dims[3],
+                 original_H_x_W = input_dims[2] * input_dims[3],
+                 output = outputs[0],
+                 input = inputs[0],
+                 original_width = input_dims[3],
+                 width = output_dims[3],
+                 original_height = input_dims[2],
+                 channel = input_dims[1],
+                 stride_0 = strides[0],
+                 stride_1 = strides[1],
+                 kernel_shape_0 = kernel_shape[0],
+                 kernel_shape_1 = kernel_shape[1],
+                 pad_0 = pads[0],
+                 pad_1 = pads[1],
+                 dilation_0 = dilations[0],
+                 dilation_1 = dilations[1]
+                )} else {
+                    format!(r#"
+	            let batch_number = global_id.x / {M_x_H_x_W}u; 
+	            let rest = global_id.x / {M_x_H_x_W}u; 
+                
+                let m = rest / {H_x_W}u;
+                let rest = global_id.x % {H_x_W}u;
+
+                let y = rest / {width}u - {pad_0}u;
+                let x = rest % {width}u - {pad_1}u;
+                
+                var result: f32 = 0.0;
+                
+                for(var c: u32 = 0u; c < {channel}u; c = c + 1u) {{
+                    for(var i: u32 = 0u; i < {kernel_shape_0}u; i = i + {stride_0}u) {{
+                        for(var j: u32 = 0u; j < {kernel_shape_1}u; j = j + {stride_1}u) {{
+
+                            let tmp_y = y + i; 
+                            let tmp_x = x + j;
+
+                            if ((tmp_y < {original_height}u) && (tmp_x < {original_width}u) && (tmp_y >= 0u) && (tmp_x >= 0u)) {{
+
+                                let tmp_index = batch_number * {original_C_x_H_x_W}u + c * {original_H_x_W}u + tmp_y * {original_width}u + tmp_x;
+                                let index_div_4 = tmp_index / 4u;
+                                let index_rest_4 = tmp_index % 4u;
+
+                                result = max(result, {input}.data[index_div_4][index_rest_4]);
+                            }}
+                        }}
+                    }}
+                }}
+
+                let gidx = global_id.x / 4u;
+                let gidx_rest_4 = global_id.x % 4u;
+
+                {output}.data[gidx][gidx_rest_4] = result;
+                "#, 
+                 M_x_H_x_W = output_dims[1] * output_dims[2] * output_dims[3],
+                 H_x_W = output_dims[2] * output_dims[3],
+                 original_C_x_H_x_W = input_dims[1] * input_dims[2] * input_dims[3],
+                 original_H_x_W = input_dims[2] * input_dims[3],
+                 output = outputs[0],
+                 input = inputs[0],
+                 original_width = input_dims[3],
+                 width = output_dims[3],
+                 original_height = input_dims[2],
+                 channel = input_dims[1],
+                 stride_0 = strides[0],
+                 stride_1 = strides[1],
+                 kernel_shape_0 = kernel_shape[0],
+                 kernel_shape_1 = kernel_shape[1],
+                 pad_0 = pads[0],
+                 pad_1 = pads[1],
+                    )
+                };
+		(
+		shader, 
+		(output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+		1,
+		1
+	)},
         "Gemm" => {
             let mut alpha_default = onnx::AttributeProto::new();
             alpha_default.set_f(1.0);
 
-            let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+            let _alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
 
             let mut beta_default = onnx::AttributeProto::new();
             beta_default.set_f(1.0);
 
-            let beta = get_attribute("beta", Some(&beta_default), node).get_f();
+            let _beta = get_attribute("beta", Some(&beta_default), node).get_f();
 
             let left_columns = &inner_infos.get(&inputs[0]).unwrap().dims[1];
             let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
