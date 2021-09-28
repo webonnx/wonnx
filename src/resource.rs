@@ -78,7 +78,7 @@ pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
 }
 
 pub fn size(dims: &Vec<i64>) -> i64 {
-    i64::max(dims.iter().product::<i64>(), 16)
+    dims.iter().product::<i64>()
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, info};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
@@ -22,13 +22,21 @@ pub fn wrapper(
     inner_infos: &HashMap<String, crate::InnerInfo>,
 ) -> Result<(), wgpu::Error> {
     let nodes = graph.get_node();
-
+    for (inner, shape) in inner_infos.iter() {
+        info!("inner_info input: {}, has shape: {:?}", inner, shape.dims);
+    }
     let mut binding_counter: u32 = 0;
     // Generating the shader
 
     for node in nodes.iter() {
         let inputs = node.get_input();
         let outputs = node.get_output();
+
+        let inputs = if node.get_op_type() == "Reshape" {
+            inputs.get(0..1).unwrap()
+        } else {
+            inputs
+        };
 
         // Generating the shader
         let mut shader = crate::boilerplate::INIT.to_string();

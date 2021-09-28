@@ -13,38 +13,49 @@ pub fn generate_buffer(
 ) -> HashMap<String, InnerInfo> {
     let mut inner_infos = HashMap::new();
     let initializers = graph.get_initializer();
-    for input in graph.get_input().iter() {
-        let name = input.get_name();
-        let (data, dim) = input_data.get(name).unwrap_or_else(|| {
-            panic!(
-                "Input: {name} was not found in user HashMap. Please add it to your HashMap",
-                name = name
-            )
-        });
-        inner_infos.insert(
-            name.to_string(),
-            InnerInfo {
-                buffer: resource::create_buffer_init(device, data, name),
-                dims: dim.to_vec(),
-                inner_type: crate::compute::InnerType::ArrayVector,
-            },
-        );
+    for input in graph.get_input() {
+        let input = input.get_name();
+        if let Some((data, dims)) = input_data.get(input) {
+            inner_infos.insert(
+                input.to_string(),
+                InnerInfo {
+                    buffer: resource::create_buffer_init(device, data, input),
+                    dims: dims.to_vec(),
+                    inner_type: crate::compute::InnerType::ArrayVector,
+                },
+            );
+        } else {
+            let initiated_data = initializers
+                .iter()
+                .find(|x| x.get_name() == input)
+                .expect(format!("Did not find initializer for input: {}", input).as_str());
+
+            let initiated_data_dims = initiated_data.get_dims().to_vec();
+            inner_infos.insert(
+                input.to_string(),
+                InnerInfo {
+                    buffer: resource::create_buffer_init(
+                        device,
+                        initiated_data.get_float_data(),
+                        input,
+                    ),
+                    dims: initiated_data_dims.clone(),
+                    inner_type: crate::compute::InnerType::ArrayVector,
+                },
+            );
+        }
     }
 
     for node in graph.get_node().iter() {
         let input = node.get_input();
         let output = node.get_output();
         let attributes = node.get_attribute();
-
         let input_dims = inner_infos
             .get(&input[0])
-            .expect(format!("Input: {} has not been provided", input[0]).as_str())
+            .expect(format!("Did not find initializer for input: {}", &input[0]).as_str())
             .dims
             .clone();
-        debug!(
-            "resource::size(input_dims): {:#?}",
-            resource::size(&input_dims)
-        );
+
         match node.get_op_type() {
             "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor"
             | "Log" | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Add"
