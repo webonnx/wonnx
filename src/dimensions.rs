@@ -6,44 +6,22 @@ use std::collections::HashMap;
 use std::str::from_utf8;
 
 use log::debug;
-pub fn generate_buffer(
+pub fn generate_buffer<'a>(
     input_data: HashMap<String, (&[f32], &[i64])>,
     graph: &onnx::GraphProto,
     device: &wgpu::Device,
-) -> HashMap<String, InnerInfo> {
-    let mut inner_infos = HashMap::new();
+    inner_infos: &'a mut HashMap<std::string::String, InnerInfo>,
+) -> &'a HashMap<String, InnerInfo> {
     let initializers = graph.get_initializer();
-    for input in graph.get_input() {
-        let input = input.get_name();
-        if let Some((data, dims)) = input_data.get(input) {
-            inner_infos.insert(
-                input.to_string(),
-                InnerInfo {
-                    buffer: resource::create_buffer_init(device, data, input),
-                    dims: dims.to_vec(),
-                    inner_type: crate::compute::InnerType::ArrayVector,
-                },
-            );
-        } else {
-            let initiated_data = initializers
-                .iter()
-                .find(|x| x.get_name() == input)
-                .expect(format!("Did not find initializer for input: {}", input).as_str());
-
-            let initiated_data_dims = initiated_data.get_dims().to_vec();
-            inner_infos.insert(
-                input.to_string(),
-                InnerInfo {
-                    buffer: resource::create_buffer_init(
-                        device,
-                        initiated_data.get_float_data(),
-                        input,
-                    ),
-                    dims: initiated_data_dims.clone(),
-                    inner_type: crate::compute::InnerType::ArrayVector,
-                },
-            );
-        }
+    for (input, (data, dims)) in input_data.iter() {
+        inner_infos.insert(
+            input.to_string(),
+            InnerInfo {
+                buffer: resource::create_buffer_init(device, data, input),
+                dims: dims.to_vec(),
+                inner_type: crate::compute::InnerType::ArrayVector,
+            },
+        );
     }
 
     for node in graph.get_node().iter() {
@@ -61,7 +39,7 @@ pub fn generate_buffer(
             | "Log" | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Add"
             | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
             | "Mod" | "Mul" | "Or" | "Sub" | "Celu" | "Elu" | "Relu" | "Sigmoid" | "Softsign"
-            | "Softplus" => {
+            | "Softplus" | "Dropout" => {
                 inner_infos.insert(
                     output[0].clone(),
                     InnerInfo {
@@ -106,23 +84,12 @@ pub fn generate_buffer(
 
                 let mut output_dims = input_dims.clone();
 
-                let w = initializers
-                    .iter()
-                    .find(|x| x.get_name() == input[1].as_str())
-                    .expect(
-                        format!("Did not find initializer for input Conv {}", input[1]).as_str(),
-                    );
-                let w_data = w.get_float_data();
-                let w_dims = w.get_dims();
-
-                inner_infos.insert(
-                    input[1].clone(),
-                    InnerInfo {
-                        buffer: resource::create_buffer_init(device, w_data, input[1].as_str()),
-                        dims: w_dims.to_vec(),
-                        inner_type: crate::compute::InnerType::Array,
-                    },
+                let mut inner_info = inner_infos.get_mut(&input[1]).expect(
+                    format!("Did not find initializer for input Conv {}", input[1]).as_str(),
                 );
+
+                inner_info.inner_type = crate::compute::InnerType::Array;
+                let w_dims = &inner_info.dims;
 
                 match auto_pad {
                     "NOTSET" => {
@@ -264,6 +231,59 @@ pub fn generate_buffer(
                     },
                 );
             }
+            "Gemm" => {
+                let mut alpha_default = onnx::AttributeProto::new();
+                alpha_default.set_f(1.0);
+
+                let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+
+                let mut beta_default = onnx::AttributeProto::new();
+                beta_default.set_f(1.0);
+
+                let beta = get_attribute("beta", Some(&beta_default), node).get_f();
+
+                let mut transA_default = onnx::AttributeProto::new();
+                transA_default.set_i(0);
+
+                let transA = get_attribute("transA", Some(&transA_default), node).get_i();
+
+                let mut transB_default = onnx::AttributeProto::new();
+                transB_default.set_i(0);
+
+                let transB = get_attribute("transB", Some(&transB_default), node).get_i();
+
+                let mut output_dims = input_dims.clone();
+
+                let input_right_dims = inner_infos
+                    .get(&input[1])
+                    .expect(format!("Input: {} has not been provided", input[1]).as_str())
+                    .dims
+                    .clone();
+
+                output_dims[0] = if transA == 0 {
+                    input_dims[0]
+                } else {
+                    input_dims[1]
+                };
+                output_dims[1] = if transB == 0 {
+                    input_right_dims[1]
+                } else {
+                    input_right_dims[0]
+                };
+
+                inner_infos.insert(
+                    output[0].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer(
+                            device,
+                            resource::size(&output_dims) as _,
+                            output[0].as_str(),
+                        ),
+                        dims: output_dims,
+                        inner_type: crate::compute::InnerType::ArrayVector,
+                    },
+                );
+            }
             "MatMul" => {
                 let mut output_dims = input_dims.clone();
                 let input_right_dims = inner_infos
@@ -313,9 +333,28 @@ pub fn generate_buffer(
 
                 let axis = get_attribute("axis", Some(&axis_default), node).get_i();
 
-                unimplemented!()
+                if axis == axis_default.get_i() {
+                    let mut output_dims = [0; 2];
+
+                    output_dims[0] = input_dims[0];
+                    output_dims[1] = input_dims[1..].iter().product();
+                    inner_infos.insert(
+                        output[0].clone(),
+                        InnerInfo {
+                            buffer: resource::create_buffer(
+                                device,
+                                resource::size(&output_dims.to_vec()) as _,
+                                output[0].as_str(),
+                            ),
+                            dims: output_dims.to_vec(),
+                            inner_type: crate::compute::InnerType::ArrayVector,
+                        },
+                    );
+                } else {
+                    unimplemented!()
+                }
             }
-            _ => unimplemented!(),
+            _ => unimplemented!("The Op: {} is not yet implemented!", node.get_op_type()),
         }
     }
 

@@ -20,12 +20,13 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 /// Basic usage:
 ///
 /// ```ignore
-/// let session = Session::from_path("path/to/model.onnx").await.unwrap();
+/// let mut session = Session::from_path("path/to/model.onnx").await.unwrap();
 /// ```
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub model: onnx::ModelProto,
+    pub inner_infos: HashMap<String, InnerInfo>,
 }
 
 impl Session {
@@ -37,29 +38,68 @@ impl Session {
         )
         .expect("Could not deserialize the Model");
 
+        let inner_infos = Session::load_initializers(&device, &model).unwrap();
+
         Ok(Session {
             device,
             queue,
             model,
+            inner_infos,
         })
     }
 
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
         let (device, queue) = resource::request_device_queue().await;
 
+        let inner_infos = Session::load_initializers(&device, &model).unwrap();
+
         Ok(Session {
             device,
             queue,
             model,
+            inner_infos,
         })
     }
 
-    pub async fn run(&self, input_data: HashMap<String, (&[f32], &[i64])>) -> Option<Vec<f32>> {
+    pub fn load_initializers(
+        device: &wgpu::Device,
+        model: &onnx::ModelProto,
+    ) -> Result<HashMap<std::string::String, InnerInfo>> {
+        let mut inner_infos = HashMap::new();
+        let initializers = model.get_graph().get_initializer();
+        for initializer in initializers.iter() {
+            let input = initializer.get_name();
+
+            let initiated_data = initializers
+                .iter()
+                .find(|x| x.get_name() == input)
+                .expect(format!("Did not find initializer for input: {}", input).as_str());
+
+            let initiated_data_dims = initiated_data.get_dims().to_vec();
+            inner_infos.insert(
+                input.to_string(),
+                InnerInfo {
+                    buffer: resource::create_buffer_init(
+                        &device,
+                        initiated_data.get_float_data(),
+                        input,
+                    ),
+                    dims: initiated_data_dims.clone(),
+                    inner_type: crate::compute::InnerType::ArrayVector,
+                },
+            );
+        }
+
+        Ok(inner_infos)
+    }
+
+    pub async fn run(&mut self, input_data: HashMap<String, (&[f32], &[i64])>) -> Option<Vec<f32>> {
         let graph = self.model.get_graph();
         let device = &self.device;
         let queue = &self.queue;
 
-        let inner_infos = dimensions::generate_buffer(input_data, graph, device);
+        let inner_infos =
+            dimensions::generate_buffer(input_data, graph, device, &mut self.inner_infos);
 
         compute::wrapper(device, queue, graph, &inner_infos).unwrap();
 

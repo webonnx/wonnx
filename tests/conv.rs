@@ -112,7 +112,7 @@ async fn conv_pad() -> Option<Vec<f32>> {
 
     // LOGIC
 
-    let session = wonnx::Session::from_model(model)
+    let mut session = wonnx::Session::from_model(model)
         .await
         .expect("Session did not create");
 

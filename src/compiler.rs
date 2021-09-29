@@ -34,7 +34,7 @@ pub fn format_node(
             1,
         ),
         // COPY DATA
-         "Reshape"  => (
+         "Reshape" | "Dropout" | "Flatten"  => (
             "let gidx = global_id.x;".to_string()
                 + format!(
                     "{output}.data[gidx] = {input}.data[gidx];",
@@ -371,9 +371,11 @@ pub fn format_node(
                 
                 for(var c: u32 = 0u; c < {channel}u; c = c + 1u) {{
                     for(var i: u32 = 0u; i < {kernel_shape_0}u; i = i + {stride_0}u) {{
+                        
+                        let tmp_y = y + i * {dilation_0}u; 
+                        
                         for(var j: u32 = 0u; j < {kernel_shape_1}u; j = j + {stride_1}u) {{
 
-                            let tmp_y = y + i * {dilation_0}u; 
                             let tmp_x = x + j * {dilation_1}u;
 
                             if ((tmp_y < {original_height}u) && (tmp_x < {original_width}u) && (tmp_y >= 0u) && (tmp_x >= 0u)) {{

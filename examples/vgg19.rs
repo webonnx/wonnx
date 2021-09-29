@@ -2,12 +2,12 @@ use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
 // use wasm_bindgen_test::*;
 
+use std::time::Instant;
 // Args Management
 async fn run() {
     let steps = execute_gpu().await.unwrap();
-
-    assert_eq!(steps[0..5], [0.0, 0.0, 0.0, 0.0, 0.0]);
-    // println!("steps[0..5]: {:#?}", &steps[0..5]);
+    println!("steps: {:#?}", steps);
+    // println!("steps[1..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
     // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
     assert_eq!(steps[0..5], [0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -15,21 +15,26 @@ async fn run() {
 
 // Hardware management
 async fn execute_gpu() -> Option<Vec<f32>> {
-    let n: usize = 512 * 512 * 128;
+    let n: usize = 224;
     let mut input_data = HashMap::new();
-    let data = vec![-1.0f32; n];
-    let dims = vec![n as i64];
-    input_data.insert("x".to_string(), (data.as_slice(), dims.as_slice()));
 
-    let mut session = wonnx::Session::from_path("tests/single_relu.onnx")
+    let data: Vec<f32> = (0..n * n).map(|x| x as f32).collect();
+    let dims = vec![1, 3 as i64, n as i64, n as i64];
+    input_data.insert("data".to_string(), (data.as_slice(), dims.as_slice()));
+
+    let mut session = wonnx::Session::from_path("tests/vgg19-7.onnx")
         .await
         .unwrap();
-
-    session.run(input_data).await
+    let time_pre_compute = Instant::now();
+    let a = session.run(input_data).await;
+    let time_post_compute = Instant::now();
+    println!(
+        "time: post_compute: {:#?}",
+        time_post_compute - time_pre_compute
+    );
+    a
 }
 
-#[test]
-// #[wasm_bindgen_test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {

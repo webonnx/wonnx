@@ -2,6 +2,7 @@ use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
 // use wasm_bindgen_test::*;
 
+use std::time::Instant;
 // Args Management
 async fn run() {
     let steps = execute_gpu().await.unwrap();
@@ -21,11 +22,17 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let dims = vec![1, 1 as i64, n as i64, n as i64];
     input_data.insert("Input3".to_string(), (data.as_slice(), dims.as_slice()));
 
-    let session = wonnx::Session::from_path("tests/mnist-8.onnx")
+    let mut session = wonnx::Session::from_path("tests/mnist-8.onnx")
         .await
         .unwrap();
-
-    session.run(input_data).await
+    let time_pre_compute = Instant::now();
+    let a = session.run(input_data).await;
+    let time_post_compute = Instant::now();
+    println!(
+        "time: post_compute: {:#?}",
+        time_post_compute - time_pre_compute
+    );
+    a
 }
 
 fn main() {

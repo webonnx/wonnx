@@ -34,7 +34,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     // let initializers = graph.mut_initializer();
     // initializers.insert(initializers.len(), initializer);
     let time_start = Instant::now();
-    let session = wonnx::Session::from_path("tests/two_transposes.onnx")
+    let mut session = wonnx::Session::from_path("tests/two_transposes.onnx")
         .await
         .unwrap();
     debug!("session.model: {:#?}", session.model.get_graph());
