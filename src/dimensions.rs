@@ -25,12 +25,12 @@ pub fn generate_buffer<'a>(
     }
 
     for node in graph.get_node().iter() {
-        let input = node.get_input();
-        let output = node.get_output();
+        let inputs = node.get_input();
+        let outputs = node.get_output();
         let attributes = node.get_attribute();
         let input_dims = inner_infos
-            .get(&input[0])
-            .expect(format!("Did not find initializer for input: {}", &input[0]).as_str())
+            .get(&inputs[0])
+            .expect(format!("Did not find initializer for input: {}", &inputs[0]).as_str())
             .dims
             .clone();
 
@@ -41,12 +41,12 @@ pub fn generate_buffer<'a>(
             | "Mod" | "Mul" | "Or" | "Sub" | "Celu" | "Elu" | "Relu" | "Sigmoid" | "Softsign"
             | "Softplus" | "Dropout" => {
                 inner_infos.insert(
-                    output[0].clone(),
+                    outputs[0].clone(),
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
                             resource::size(&input_dims) as _,
-                            output[0].as_str(),
+                            outputs[0].as_str(),
                         ),
                         dims: input_dims,
                         inner_type: crate::compute::InnerType::ArrayVector,
@@ -84,12 +84,23 @@ pub fn generate_buffer<'a>(
 
                 let mut output_dims = input_dims.clone();
 
-                let mut inner_info = inner_infos.get_mut(&input[1]).expect(
-                    format!("Did not find initializer for input Conv {}", input[1]).as_str(),
-                );
+                {
+                    let mut inner_info = inner_infos.get_mut(&inputs[1]).expect(
+                        format!("Did not find initializer for input Conv {}", inputs[1]).as_str(),
+                    );
 
-                inner_info.inner_type = crate::compute::InnerType::Array;
-                let w_dims = &inner_info.dims;
+                    inner_info.inner_type = crate::compute::InnerType::Array;
+                }
+
+                if inputs.len() == 3 {
+                    let mut inner_info = inner_infos.get_mut(&inputs[2]).expect(
+                        format!("Did not find initializer for input Conv {}", inputs[1]).as_str(),
+                    );
+
+                    inner_info.inner_type = crate::compute::InnerType::Array;
+                }
+
+                let w_dims = &inner_infos.get(&inputs[1]).unwrap().dims;
 
                 match auto_pad {
                     "NOTSET" => {
@@ -124,12 +135,12 @@ pub fn generate_buffer<'a>(
                 }
 
                 inner_infos.insert(
-                    output[0].clone(),
+                    outputs[0].clone(),
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
                             resource::size(&output_dims) as _,
-                            output[0].as_str(),
+                            outputs[0].as_str(),
                         ),
                         dims: output_dims,
                         inner_type: crate::compute::InnerType::ArrayVector,
@@ -194,12 +205,12 @@ pub fn generate_buffer<'a>(
                     _ => unimplemented!(),
                 }
                 inner_infos.insert(
-                    output[0].clone(),
+                    outputs[0].clone(),
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
                             resource::size(&output_dims) as _,
-                            output[0].as_str(),
+                            outputs[0].as_str(),
                         ),
                         dims: output_dims,
                         inner_type: crate::compute::InnerType::ArrayVector,
@@ -219,12 +230,12 @@ pub fn generate_buffer<'a>(
                 }
 
                 inner_infos.insert(
-                    output[0].clone(),
+                    outputs[0].clone(),
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
                             resource::size(&output_dims) as _,
-                            output[0].as_str(),
+                            outputs[0].as_str(),
                         ),
                         dims: output_dims,
                         inner_type: crate::compute::InnerType::ArrayVector,
@@ -255,8 +266,8 @@ pub fn generate_buffer<'a>(
                 let mut output_dims = input_dims.clone();
 
                 let input_right_dims = inner_infos
-                    .get(&input[1])
-                    .expect(format!("Input: {} has not been provided", input[1]).as_str())
+                    .get(&inputs[1])
+                    .expect(format!("Input: {} has not been provided", inputs[1]).as_str())
                     .dims
                     .clone();
 
@@ -272,12 +283,12 @@ pub fn generate_buffer<'a>(
                 };
 
                 inner_infos.insert(
-                    output[0].clone(),
+                    outputs[0].clone(),
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
                             resource::size(&output_dims) as _,
-                            output[0].as_str(),
+                            outputs[0].as_str(),
                         ),
                         dims: output_dims,
                         inner_type: crate::compute::InnerType::ArrayVector,
@@ -287,41 +298,86 @@ pub fn generate_buffer<'a>(
             "MatMul" => {
                 let mut output_dims = input_dims.clone();
                 let input_right_dims = inner_infos
-                    .get(&input[1])
-                    .expect(format!("Input: {} has not been provided", input[1]).as_str())
+                    .get(&inputs[1])
+                    .expect(format!("Input: {} has not been provided", inputs[1]).as_str())
                     .dims
                     .clone();
                 output_dims[1] = input_right_dims[1];
                 inner_infos.insert(
-                    output[0].clone(),
+                    outputs[0].clone(),
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
                             resource::size(&output_dims) as _,
-                            output[0].as_str(),
+                            outputs[0].as_str(),
                         ),
                         dims: output_dims,
                         inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             }
+            "Clip" => {
+                {
+                    let mut inner_info = inner_infos.get_mut(&inputs[1]).expect(
+                        format!("Did not find initializer for input Conv {}", inputs[1]).as_str(),
+                    );
+
+                    inner_info.inner_type = crate::compute::InnerType::Array;
+                }
+                {
+                    let mut inner_info = inner_infos.get_mut(&inputs[2]).expect(
+                        format!("Did not find initializer for input Conv {}", inputs[1]).as_str(),
+                    );
+
+                    inner_info.inner_type = crate::compute::InnerType::Array;
+                }
+            }
             "Reshape" => {
                 let reshape = initializers
                     .iter()
-                    .find(|x| x.get_name() == input[1].as_str())
+                    .find(|x| x.get_name() == inputs[1].as_str())
                     .expect(
-                        format!("Did not find initializer for input Reshape {}", input[1]).as_str(),
+                        format!("Did not find initializer for input Reshape {}", inputs[1])
+                            .as_str(),
                     );
                 let output_dims = reshape.get_int64_data().to_vec();
                 inner_infos.insert(
-                    output[0].clone(),
+                    outputs[0].clone(),
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
                             resource::size(&output_dims) as _,
-                            output[0].as_str(),
+                            outputs[0].as_str(),
                         ),
                         dims: output_dims,
+                        inner_type: crate::compute::InnerType::ArrayVector,
+                    },
+                );
+            }
+            "Squeeze" => {
+                let axis = initializers
+                    .iter()
+                    .find(|x| x.get_name() == inputs[1].as_str())
+                    .expect(
+                        format!("Did not find initializer for input Reshape {}", inputs[1])
+                            .as_str(),
+                    )
+                    .get_int64_data()
+                    .to_vec();
+
+                let mut output_dims = input_dims.clone();
+                for i in axis {
+                    output_dims.remove(i as usize);
+                }
+                inner_infos.insert(
+                    outputs[0].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer(
+                            device,
+                            resource::size(&output_dims.to_vec()) as _,
+                            outputs[0].as_str(),
+                        ),
+                        dims: output_dims.to_vec(),
                         inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
@@ -339,12 +395,12 @@ pub fn generate_buffer<'a>(
                     output_dims[0] = input_dims[0];
                     output_dims[1] = input_dims[1..].iter().product();
                     inner_infos.insert(
-                        output[0].clone(),
+                        outputs[0].clone(),
                         InnerInfo {
                             buffer: resource::create_buffer(
                                 device,
                                 resource::size(&output_dims.to_vec()) as _,
-                                output[0].as_str(),
+                                outputs[0].as_str(),
                             ),
                             dims: output_dims.to_vec(),
                             inner_type: crate::compute::InnerType::ArrayVector,

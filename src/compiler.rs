@@ -34,7 +34,7 @@ pub fn format_node(
             1,
         ),
         // COPY DATA
-         "Reshape" | "Dropout" | "Flatten"  => (
+         "Reshape" | "Dropout" | "Flatten" | "Squeeze" => (
             "let gidx = global_id.x;".to_string()
                 + format!(
                     "{output}.data[gidx] = {input}.data[gidx];",
@@ -171,6 +171,12 @@ pub fn format_node(
                     }
                     _ => unimplemented!(),
                 };
+                debug!("inputs: {:#?}", inputs);
+                let beta = if inputs.len() == 3 {
+                    format!("+ {}.data[m]", inputs[2])
+                } else {
+                    "".to_string()
+                };
 
                 // GLSL shader for convolution computation
                 let shader = if dilations != dilations_default.get_ints() {
@@ -211,7 +217,7 @@ pub fn format_node(
                 let gidx = global_id.x / 4u;
                 let gidx_rest_4 = global_id.x % 4u;
 
-                {output}.data[gidx][gidx_rest_4] = result;
+                {output}.data[gidx][gidx_rest_4] = result{beta};
                 "#, 
                  M_x_H_x_W = output_dims[1] * output_dims[2] * output_dims[3],
                  H_x_W = output_dims[2] * output_dims[3],
@@ -234,6 +240,7 @@ pub fn format_node(
                  pad_1 = pads[1],
                  dilation_0 = dilations[0],
                  dilation_1 = dilations[1],
+                 beta = beta
                     )
                 } else {
                     format!(r#"
@@ -272,7 +279,7 @@ pub fn format_node(
                 let gidx = global_id.x / 4u;
                 let gidx_rest_4 = global_id.x % 4u;
 
-                {output}.data[gidx][gidx_rest_4] = result;
+                {output}.data[gidx][gidx_rest_4] = result{beta};
                 "#, 
                  M_x_H_x_W = output_dims[1] * output_dims[2] * output_dims[3],
                  H_x_W = output_dims[2] * output_dims[3],
@@ -293,6 +300,7 @@ pub fn format_node(
                  kernel_channel_len = kernel_shape[0] * kernel_shape[1] * input_dims[1],
                  pad_0 = pads[0],
                  pad_1 = pads[1],
+                 beta = beta
                     )
                 };
 		(
@@ -489,6 +497,18 @@ pub fn format_node(
             let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
             let threads = (&inner_infos.get(&inputs[0]).unwrap().dims[0] / 4) * right_columns / 4;
 
+            let bias = if inputs.len() == 3 {
+                format!(r#"
+        let bias_row = {input}.data[x]; 
+        var bias = transpose(mat4x4<f32>(bias_row, bias_row, bias_row, bias_row));
+        for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
+            tmpsum[index_mat] = tmpsum[index_mat] + bias[index_mat];
+        }}       
+                "#, input=inputs[2])
+            } else {
+                "".to_string()
+            };
+
             (
                 format!(
                     r#"
@@ -524,10 +544,12 @@ pub fn format_node(
 	    }}
     }}
 
-    {output}.data[index] = tmpsum[0];
-    {output}.data[index + {right_columns_div_4}u] = tmpsum[1];
-    {output}.data[index + 2u * {right_columns_div_4}u] = tmpsum[2];
-    {output}.data[index + 3u * {right_columns_div_4}u] = tmpsum[3];
+    {bias}
+
+    {output}.data[index] = tmpsum[0u];
+    {output}.data[index + {right_columns_div_4}u] = tmpsum[1u];
+    {output}.data[index + 2u * {right_columns_div_4}u] = tmpsum[2u];
+    {output}.data[index + 3u * {right_columns_div_4}u] = tmpsum[3u];
       
             "#,
                     input_left = inputs[0],
@@ -538,6 +560,7 @@ pub fn format_node(
                     // The right columns is composed of 4 vector of size 4
                     right_columns = right_columns,
                     right_columns_div_4 = right_columns / 4,
+                    bias = bias
                 ),
                 threads as _,
                 1,
@@ -584,10 +607,10 @@ pub fn format_node(
 	    }}
     }}
 
-    {output}.data[index] = tmpsum[0];
-    {output}.data[index + {right_columns_div_4}u] = tmpsum[1];
-    {output}.data[index + 2u * {right_columns_div_4}u] = tmpsum[2];
-    {output}.data[index + 3u * {right_columns_div_4}u] = tmpsum[3];
+    {output}.data[index] = tmpsum[0u];
+    {output}.data[index + {right_columns_div_4}u] = tmpsum[1u];
+    {output}.data[index + 2u * {right_columns_div_4}u] = tmpsum[2u];
+    {output}.data[index + 3u * {right_columns_div_4}u] = tmpsum[3u];
       
             "#,
                     input_left = inputs[0],
@@ -638,6 +661,27 @@ pub fn format_node(
             1,
             1,
         ),
+        "Clip" => {
+            (
+                "let gidx = global_id.x;".to_string()
+                + format!(
+                    "let min_clip = {input_1}.data[0u];
+                    let max_clip = {input_2}.data[0u];
+                    {output}.data[gidx] = clamp(
+                        {input_0}.data[gidx], 
+                        vec4<f32>(min_clip, min_clip, min_clip, min_clip),
+                        vec4<f32>(max_clip, max_clip, max_clip, max_clip),
+                 );",
+                    input_0 = inputs[0],
+                    input_1 = inputs[1],
+                    input_2 = inputs[2],
+                    output = outputs[0],
+                    ).as_str(),
+            length as _,
+            1,
+            1,
+        )
+        }
         "Sum" => {
             unimplemented!()
         }

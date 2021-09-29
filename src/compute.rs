@@ -32,7 +32,7 @@ pub fn wrapper(
         let inputs = node.get_input();
         let outputs = node.get_output();
 
-        let inputs = if node.get_op_type() == "Reshape" {
+        let inputs = if ["Reshape", "Clip", "Squeeze"].contains(&node.get_op_type()) {
             inputs.get(0..1).unwrap()
         } else {
             inputs
