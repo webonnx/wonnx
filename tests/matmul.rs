@@ -96,6 +96,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     a
 }
 
+#[test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {
