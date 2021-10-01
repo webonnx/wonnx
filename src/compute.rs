@@ -1,9 +1,25 @@
+use lazy_static::lazy_static;
 use log::{debug, info};
+use serde_derive::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
+use tera::{Context, Tera};
 
-#[derive(Debug)]
+lazy_static! {
+    pub static ref TEMPLATES: Tera = {
+        let mut tera = match Tera::new("templates/**/*") {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Parsing error(s): {}", e);
+                ::std::process::exit(1);
+            }
+        };
+        tera
+    };
+}
+
+#[derive(Debug, Serialize)]
 pub enum InnerType {
     Array,
     ArrayVector,
@@ -15,6 +31,13 @@ impl fmt::Display for InnerType {
     }
 }
 
+#[derive(Serialize)]
+struct Bindings {
+    counter: u32,
+    tensor: String,
+    inner_type: String,
+}
+
 pub fn wrapper(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -22,13 +45,11 @@ pub fn wrapper(
     inner_infos: &HashMap<String, crate::InnerInfo>,
 ) -> Result<(), wgpu::Error> {
     let nodes = graph.get_node();
-    for (inner, shape) in inner_infos.iter() {
-        info!("inner_info input: {}, has shape: {:?}", inner, shape.dims);
-    }
     let mut binding_counter: u32 = 0;
     // Generating the shader
 
     for node in nodes.iter() {
+        let mut context = Context::new();
         let inputs = node.get_input();
         let outputs = node.get_output();
 
@@ -39,14 +60,12 @@ pub fn wrapper(
         };
 
         // Generating the shader
-        let mut shader = crate::boilerplate::INIT.to_string();
-
-        let mut binding_key: HashMap<&str, u32> = HashMap::new();
         let mut entries = vec![];
+        let mut bindings = vec![];
+
+        println!("1: {:#?}", 1);
         for tensor in inputs.iter() {
             let inner_type = &inner_infos.get(tensor).unwrap().inner_type;
-            shader.push_str(crate::format_tensor(binding_counter, tensor, inner_type).as_str());
-            binding_key.insert(tensor, binding_counter);
             entries.push(wgpu::BindGroupEntry {
                 binding: binding_counter,
                 resource: inner_infos
@@ -54,20 +73,16 @@ pub fn wrapper(
                     .unwrap()
                     .buffer
                     .as_entire_binding(),
+            });
+            bindings.push(Bindings {
+                counter: binding_counter,
+                tensor: tensor.to_string(),
+                inner_type: inner_type.to_string(),
             });
             binding_counter += 1;
         }
 
         for tensor in outputs.iter() {
-            shader.push_str(
-                crate::format_tensor(
-                    binding_counter,
-                    tensor,
-                    &crate::compute::InnerType::ArrayVector,
-                )
-                .as_str(),
-            );
-            binding_key.insert(tensor, binding_counter);
             entries.push(wgpu::BindGroupEntry {
                 binding: binding_counter,
                 resource: inner_infos
@@ -76,32 +91,30 @@ pub fn wrapper(
                     .buffer
                     .as_entire_binding(),
             });
+            bindings.push(Bindings {
+                counter: binding_counter,
+                tensor: tensor.to_string(),
+                inner_type: "ArrayVector".to_string(),
+            });
             binding_counter += 1;
         }
+        context.insert("bindings", &bindings);
 
         // TODO: Add attribute value binding
-
-        let mut main_body = "".to_string();
+        println!("1: {:#?}", 1);
         let mut threads = vec![];
-        let (shader_node, x, y, z) = crate::compiler::format_node(node, inner_infos);
-        main_body.push_str(&shader_node);
+        let (shader_template, x, y, z) =
+            crate::compiler::format_node(node, inner_infos, &mut context);
         threads.push([x, y, z]);
 
-        shader.push_str(&format!(
-            r#"
-[[stage(compute), workgroup_size(1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {{
-    
-    {main_body}
-}}
-"#,
-            main_body = main_body
-        ));
+        let shader = TEMPLATES
+            .render(&shader_template, &context)
+            .expect("failed to render shader");
 
         let [x, y, z] = threads.get(0).unwrap();
 
         debug!("shader: {}", shader);
-        debug!("x: {:#?}", x);
+        debug!("x: {}", x);
         // TODO: Make defining threads more clean.
 
         // Generating the compute pipeline and binding group.

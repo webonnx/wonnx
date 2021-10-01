@@ -119,7 +119,6 @@ async fn conv_pad() -> Option<Vec<f32>> {
     session.run(input_data).await
 }
 
-#[test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {

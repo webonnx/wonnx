@@ -21,7 +21,10 @@ rayon = "1.5.1"
 bytemuck_derive = "1.0.1"
 protobuf = { version = "2", features = ["with-bytes"] }
 # onnxruntime = { path = "/home/peter/Documents/CONTRIB/onnxruntime-rs/onnxruntime", features = ["cuda"]}
-
+lazy_static = "1.4.0"
+tera = "1.12.1"
+serde_derive = "1.0.68"
+serde = "1.0.68"
 
 [dev-dependencies]
 approx = "0.5.0"

@@ -161,20 +161,3 @@ pub fn get_attribute<'a>(
             ),
     }
 }
-
-pub fn format_tensor(
-    binding_group: u32,
-    tensor: &str,
-    inner_type: &crate::compute::InnerType,
-) -> String {
-    format!(
-        r#"
-[[group(0), binding({i})]]
-var<storage, read_write> {tensor}: {inner_type};
-
-"#,
-        i = binding_group,
-        tensor = tensor,
-        inner_type = inner_type,
-    )
-}
