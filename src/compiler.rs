@@ -165,153 +165,28 @@ pub fn format_node(
                 1,
             )
         }
-        "Gemm" => {
+        "Gemm" | "MatMul" => {
             let mut alpha_default = onnx::AttributeProto::new();
             alpha_default.set_f(1.0);
 
-            let _alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+            let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
 
             let mut beta_default = onnx::AttributeProto::new();
             beta_default.set_f(1.0);
 
-            let _beta = get_attribute("beta", Some(&beta_default), node).get_f();
+            let beta = get_attribute("beta", Some(&beta_default), node).get_f();
 
             let left_columns = &inner_infos.get(&inputs[0]).unwrap().dims[1];
             let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
             let threads = (&inner_infos.get(&inputs[0]).unwrap().dims[0] / 4) * right_columns / 4;
 
-            let bias = if inputs.len() == 3 {
-                format!(
-                    r#"
-        let bias_row = {input}.data[x]; 
-        var bias = transpose(mat4x4<f32>(bias_row, bias_row, bias_row, bias_row));
-        for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
-            tmpsum[index_mat] = tmpsum[index_mat] + bias[index_mat];
-        }}       
-                "#,
-                    input = inputs[2]
-                )
-            } else {
-                "".to_string()
-            };
+            context.insert("left_columns", &left_columns);
 
-            (
-                format!(
-                    r#"
-    let y = global_id.x % {right_columns_div_4}u;
-    let x = global_id.x / {right_columns_div_4}u;
-    let index = x * {right_columns}u + y;
+            context.insert("right_columns", &right_columns);
+            context.insert("alpha", &alpha);
+            context.insert("beta", &beta);
 
-    var tmpsum = mat4x4<f32>(vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0));
-    var product = mat4x4<f32>(vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0));
-
-    for(var k: u32 = 0u; k < {left_columns_div_4}u; k = k + 1u) {{
-        let index_left = x * {left_columns}u + k; 
-        let index_right = k * {left_columns}u + y; 
-
-        let mat_left = mat4x4<f32>(
-                              {input_left}.data[index_left], 
-                              {input_left}.data[index_left + {left_columns_div_4}u],
-                              {input_left}.data[index_left + 2u * {left_columns_div_4}u],
-                              {input_left}.data[index_left + 3u * {left_columns_div_4}u],
-                          );
-          
-        let mat_right = mat4x4<f32>(
-                              {input_right}.data[index_right], 
-                              {input_right}.data[index_right + {right_columns_div_4}u],
-                              {input_right}.data[index_right + 2u * {right_columns_div_4}u],
-                              {input_right}.data[index_right + 3u * {right_columns_div_4}u],
-                          );
-	
-        product = mat_right * mat_left;
-	
-        for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
-	        tmpsum[index_mat] = tmpsum[index_mat] + product[index_mat];
-	    }}
-    }}
-
-    {bias}
-
-    {output}.data[index] = tmpsum[0u];
-    {output}.data[index + {right_columns_div_4}u] = tmpsum[1u];
-    {output}.data[index + 2u * {right_columns_div_4}u] = tmpsum[2u];
-    {output}.data[index + 3u * {right_columns_div_4}u] = tmpsum[3u];
-      
-            "#,
-                    input_left = inputs[0],
-                    input_right = inputs[1],
-                    output = outputs[0],
-                    left_columns = left_columns,
-                    left_columns_div_4 = left_columns / 4,
-                    // The right columns is composed of 4 vector of size 4
-                    right_columns = right_columns,
-                    right_columns_div_4 = right_columns / 4,
-                    bias = bias
-                ),
-                threads as _,
-                1,
-                1,
-            )
-        }
-        "MatMul" => {
-            let left_columns = &inner_infos.get(&inputs[0]).unwrap().dims[1];
-            let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
-            let threads = (&inner_infos.get(&inputs[0]).unwrap().dims[0] / 4) * right_columns / 4;
-
-            (
-                format!(
-                    r#"
-    let y = global_id.x % {right_columns_div_4}u;
-    let x = global_id.x / {right_columns_div_4}u;
-    let index = x * {right_columns}u + y;
-
-    var tmpsum = mat4x4<f32>(vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0));
-    var product = mat4x4<f32>(vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 0.0, 0.0, 0.0));
-
-    for(var k: u32 = 0u; k < {left_columns_div_4}u; k = k + 1u) {{
-        let index_left = x * {left_columns}u + k; 
-        let index_right = k * {left_columns}u + y; 
-
-        let mat_left = mat4x4<f32>(
-                              {input_left}.data[index_left], 
-                              {input_left}.data[index_left + {left_columns_div_4}u],
-                              {input_left}.data[index_left + 2u * {left_columns_div_4}u],
-                              {input_left}.data[index_left + 3u * {left_columns_div_4}u],
-                          );
-          
-        let mat_right = mat4x4<f32>(
-                              {input_right}.data[index_right], 
-                              {input_right}.data[index_right + {right_columns_div_4}u],
-                              {input_right}.data[index_right + 2u * {right_columns_div_4}u],
-                              {input_right}.data[index_right + 3u * {right_columns_div_4}u],
-                          );
-	
-        product = mat_right * mat_left;
-	
-        for(var index_mat: u32 = 0u; index_mat < 4u; index_mat = index_mat + 1u) {{
-	        tmpsum[index_mat] = tmpsum[index_mat] + product[index_mat];
-	    }}
-    }}
-
-    {output}.data[index] = tmpsum[0u];
-    {output}.data[index + {right_columns_div_4}u] = tmpsum[1u];
-    {output}.data[index + 2u * {right_columns_div_4}u] = tmpsum[2u];
-    {output}.data[index + 3u * {right_columns_div_4}u] = tmpsum[3u];
-      
-            "#,
-                    input_left = inputs[0],
-                    input_right = inputs[1],
-                    output = outputs[0],
-                    left_columns = left_columns,
-                    left_columns_div_4 = left_columns / 4,
-                    // The right columns is composed of 4 vector of size 4
-                    right_columns = right_columns,
-                    right_columns_div_4 = right_columns / 4,
-                ),
-                threads as _,
-                1,
-                1,
-            )
+            ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
         }
         "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" => {
             ("endomorphism/activation.wgsl".to_string(), 1, 1, 1)
