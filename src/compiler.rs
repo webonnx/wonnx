@@ -1,6 +1,5 @@
 use crate::get_attribute;
 use crate::onnx;
-use log::debug;
 use std::collections::HashMap;
 use std::str::from_utf8;
 use tera::Context;
@@ -29,7 +28,7 @@ pub fn format_node(
             ("endomorphism/map.wgsl".to_string(), length as _, 1, 1)
         }
         // Copy data
-        "Reshape" | "Dropout" | "Flatten" | "Squeeze" => {
+        "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Softmax" => {
             ("endomorphism/copy.wgsl".to_string(), length as _, 1, 1)
         }
         // Arithmetic operation
@@ -198,7 +197,7 @@ pub fn format_node(
             let len_0 = input_dims[0];
             let len_1 = input_dims[1] / 4;
 
-            let perm = get_attribute("perm", None, &node).get_ints();
+            let perm = get_attribute("perm", None, node).get_ints();
             context.insert("len_1", &len_1);
             context.insert("len_0", &len_0);
             ("matrix/transpose.wgsl".to_string(), (length / 4) as _, 1, 1)

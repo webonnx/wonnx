@@ -1,23 +1,11 @@
-use lazy_static::lazy_static;
-use log::{debug, info};
+use log::debug;
 use serde_derive::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use tera::{Context, Tera};
 
-lazy_static! {
-    pub static ref TEMPLATES: Tera = {
-        let mut tera = match Tera::new("templates/**/*") {
-            Ok(t) => t,
-            Err(e) => {
-                println!("Parsing error(s): {}", e);
-                ::std::process::exit(1);
-            }
-        };
-        tera
-    };
-}
+use std::time::Instant;
 
 #[derive(Debug, Serialize)]
 pub enum InnerType {
@@ -43,11 +31,15 @@ pub fn wrapper(
     queue: &wgpu::Queue,
     graph: &crate::onnx::GraphProto,
     inner_infos: &HashMap<String, crate::InnerInfo>,
+    tera: &Tera,
 ) -> Result<(), wgpu::Error> {
     let nodes = graph.get_node();
     let mut binding_counter: u32 = 0;
     // Generating the shader
 
+    let mut time = std::time::Duration::new(0, 0);
+    let time_now = Instant::now();
+    time = Instant::now() - time_now + time;
     for node in nodes.iter() {
         let mut context = Context::new();
         let inputs = node.get_input();
@@ -63,7 +55,6 @@ pub fn wrapper(
         let mut entries = vec![];
         let mut bindings = vec![];
 
-        println!("1: {:#?}", 1);
         for tensor in inputs.iter() {
             let inner_type = &inner_infos.get(tensor).unwrap().inner_type;
             entries.push(wgpu::BindGroupEntry {
@@ -101,16 +92,17 @@ pub fn wrapper(
         context.insert("bindings", &bindings);
 
         // TODO: Add attribute value binding
-        println!("1: {:#?}", 1);
         let mut threads = vec![];
         let (shader_template, x, y, z) =
             crate::compiler::format_node(node, inner_infos, &mut context);
         threads.push([x, y, z]);
 
-        let shader = TEMPLATES
+        let time_before_render = Instant::now();
+        let shader = tera
             .render(&shader_template, &context)
             .expect("failed to render shader");
 
+        time = Instant::now() - time_before_render + time;
         let [x, y, z] = threads.get(0).unwrap();
 
         debug!("shader: {}", shader);
@@ -153,5 +145,6 @@ pub fn wrapper(
         }
         queue.submit(Some(encoder.finish()));
     }
+    println!("time render: {:#?}", time);
     Ok(())
 }

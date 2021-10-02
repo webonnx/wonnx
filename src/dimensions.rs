@@ -5,7 +5,6 @@ use crate::InnerInfo;
 use std::collections::HashMap;
 use std::str::from_utf8;
 
-use log::debug;
 pub fn generate_buffer<'a>(
     input_data: HashMap<String, (&[f32], &[i64])>,
     graph: &onnx::GraphProto,
@@ -30,7 +29,7 @@ pub fn generate_buffer<'a>(
         let attributes = node.get_attribute();
         let input_dims = inner_infos
             .get(&inputs[0])
-            .expect(format!("Did not find initializer for input: {}", &inputs[0]).as_str())
+            .unwrap_or_else(|| panic!("Did not find initializer for input: {}", &inputs[0]))
             .dims
             .clone();
 
@@ -39,7 +38,7 @@ pub fn generate_buffer<'a>(
             | "Log" | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Add"
             | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
             | "Mod" | "Mul" | "Or" | "Sub" | "Celu" | "Elu" | "Relu" | "Sigmoid" | "Softsign"
-            | "Softplus" | "Dropout" => {
+            | "Softplus" | "Dropout" | "Softmax" => {
                 inner_infos.insert(
                     outputs[0].clone(),
                     InnerInfo {
@@ -85,17 +84,17 @@ pub fn generate_buffer<'a>(
                 let mut output_dims = input_dims.clone();
 
                 {
-                    let mut inner_info = inner_infos.get_mut(&inputs[1]).expect(
-                        format!("Did not find initializer for input Conv {}", inputs[1]).as_str(),
-                    );
+                    let mut inner_info = inner_infos.get_mut(&inputs[1]).unwrap_or_else(|| {
+                        panic!("Did not find initializer for input Conv {}", inputs[1])
+                    });
 
                     inner_info.inner_type = crate::compute::InnerType::Array;
                 }
 
                 if inputs.len() == 3 {
-                    let mut inner_info = inner_infos.get_mut(&inputs[2]).expect(
-                        format!("Did not find initializer for input Conv {}", inputs[1]).as_str(),
-                    );
+                    let mut inner_info = inner_infos.get_mut(&inputs[2]).unwrap_or_else(|| {
+                        panic!("Did not find initializer for input Conv {}", inputs[1])
+                    });
 
                     inner_info.inner_type = crate::compute::InnerType::Array;
                 }
@@ -148,7 +147,7 @@ pub fn generate_buffer<'a>(
                 );
             }
 
-            "MaxPool" => {
+            "MaxPool" | "AveragePool" => {
                 // TODO: Conv only support NxCxHxW for the moment.
                 debug_assert!(input_dims.len() == 4usize);
 
@@ -221,7 +220,7 @@ pub fn generate_buffer<'a>(
                 let perm = attributes
                     .iter()
                     .find(|attr| attr.get_name() == "perm")
-                    .expect(format!("Required attribute '{}' not found", "perm").as_str())
+                    .unwrap_or_else(|| panic!("Required attribute '{}' not found", "perm"))
                     .get_ints();
 
                 let mut output_dims = input_dims.clone();
@@ -243,40 +242,30 @@ pub fn generate_buffer<'a>(
                 );
             }
             "Gemm" => {
-                let mut alpha_default = onnx::AttributeProto::new();
-                alpha_default.set_f(1.0);
+                let mut trans_a_default = onnx::AttributeProto::new();
+                trans_a_default.set_i(0);
 
-                let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+                let trans_a = get_attribute("transA", Some(&trans_a_default), node).get_i();
 
-                let mut beta_default = onnx::AttributeProto::new();
-                beta_default.set_f(1.0);
+                let mut trans_b_default = onnx::AttributeProto::new();
+                trans_b_default.set_i(0);
 
-                let beta = get_attribute("beta", Some(&beta_default), node).get_f();
-
-                let mut transA_default = onnx::AttributeProto::new();
-                transA_default.set_i(0);
-
-                let transA = get_attribute("transA", Some(&transA_default), node).get_i();
-
-                let mut transB_default = onnx::AttributeProto::new();
-                transB_default.set_i(0);
-
-                let transB = get_attribute("transB", Some(&transB_default), node).get_i();
+                let trans_b = get_attribute("transB", Some(&trans_b_default), node).get_i();
 
                 let mut output_dims = input_dims.clone();
 
                 let input_right_dims = inner_infos
                     .get(&inputs[1])
-                    .expect(format!("Input: {} has not been provided", inputs[1]).as_str())
+                    .unwrap_or_else(|| panic!("Input: {} has not been provided", inputs[1]))
                     .dims
                     .clone();
 
-                output_dims[0] = if transA == 0 {
+                output_dims[0] = if trans_a == 0 {
                     input_dims[0]
                 } else {
                     input_dims[1]
                 };
-                output_dims[1] = if transB == 0 {
+                output_dims[1] = if trans_b == 0 {
                     input_right_dims[1]
                 } else {
                     input_right_dims[0]
@@ -299,7 +288,7 @@ pub fn generate_buffer<'a>(
                 let mut output_dims = input_dims.clone();
                 let input_right_dims = inner_infos
                     .get(&inputs[1])
-                    .expect(format!("Input: {} has not been provided", inputs[1]).as_str())
+                    .unwrap_or_else(|| panic!("Input: {} has not been provided", inputs[1]))
                     .dims
                     .clone();
                 output_dims[1] = input_right_dims[1];
@@ -318,16 +307,16 @@ pub fn generate_buffer<'a>(
             }
             "Clip" => {
                 {
-                    let mut inner_info = inner_infos.get_mut(&inputs[1]).expect(
-                        format!("Did not find initializer for input Conv {}", inputs[1]).as_str(),
-                    );
+                    let mut inner_info = inner_infos.get_mut(&inputs[1]).unwrap_or_else(|| {
+                        panic!("Did not find initializer for input Clip {}", inputs[1])
+                    });
 
                     inner_info.inner_type = crate::compute::InnerType::Array;
                 }
                 {
-                    let mut inner_info = inner_infos.get_mut(&inputs[2]).expect(
-                        format!("Did not find initializer for input Conv {}", inputs[1]).as_str(),
-                    );
+                    let mut inner_info = inner_infos.get_mut(&inputs[2]).unwrap_or_else(|| {
+                        panic!("Did not find initializer for input Clip {}", inputs[1])
+                    });
 
                     inner_info.inner_type = crate::compute::InnerType::Array;
                 }
@@ -336,10 +325,9 @@ pub fn generate_buffer<'a>(
                 let reshape = initializers
                     .iter()
                     .find(|x| x.get_name() == inputs[1].as_str())
-                    .expect(
-                        format!("Did not find initializer for input Reshape {}", inputs[1])
-                            .as_str(),
-                    );
+                    .unwrap_or_else(|| {
+                        panic!("Did not find initializer for input Reshape {}", inputs[1])
+                    });
                 let output_dims = reshape.get_int64_data().to_vec();
                 inner_infos.insert(
                     outputs[0].clone(),
@@ -358,10 +346,9 @@ pub fn generate_buffer<'a>(
                 let axis = initializers
                     .iter()
                     .find(|x| x.get_name() == inputs[1].as_str())
-                    .expect(
-                        format!("Did not find initializer for input Reshape {}", inputs[1])
-                            .as_str(),
-                    )
+                    .unwrap_or_else(|| {
+                        panic!("Did not find initializer for input Reshape {}", inputs[1])
+                    })
                     .get_int64_data()
                     .to_vec();
 

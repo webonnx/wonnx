@@ -35,9 +35,8 @@ pub fn create_buffer_init(device: &wgpu::Device, array: &[f32], name: &str) -> w
 
     if size % 4 != 0 {
         let mut array = array.to_vec();
-        for _ in 0..(4 - size % 4) {
-            array.push(0.0);
-        }
+        array.resize(4 - size % 4, 0.0);
+
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
             contents: bytemuck::cast_slice(&array),
@@ -77,7 +76,7 @@ pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
     })
 }
 
-pub fn size(dims: &Vec<i64>) -> i64 {
+pub fn size(dims: &[i64]) -> i64 {
     dims.iter().product::<i64>()
 }
 

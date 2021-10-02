@@ -6,9 +6,9 @@ pub mod dimensions;
 pub mod onnx;
 pub mod resource;
 pub mod utils;
-use log::debug;
 use protobuf::{self, Message};
 use std::collections::HashMap;
+use tera::Tera;
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 /// Creates a new session connected to the GPU.
@@ -27,11 +27,21 @@ pub struct Session {
     pub queue: wgpu::Queue,
     pub model: onnx::ModelProto,
     pub inner_infos: HashMap<String, InnerInfo>,
+    pub tera: Tera,
 }
 
 impl Session {
     pub async fn from_path(path: &str) -> Result<Session> {
-        let (device, queue) = resource::request_device_queue().await;
+        let promise = resource::request_device_queue();
+
+        let tera = match Tera::new("templates/**/*.wgsl") {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Parsing error(s): {}", e);
+                ::std::process::exit(1);
+            }
+        };
+        let (device, queue) = promise.await;
 
         let model = onnx::ModelProto::parse_from_bytes(
             &std::fs::read(path).expect("ONNX Model path not found."),
@@ -45,11 +55,21 @@ impl Session {
             queue,
             model,
             inner_infos,
+            tera,
         })
     }
 
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
-        let (device, queue) = resource::request_device_queue().await;
+        let promise = resource::request_device_queue();
+
+        let tera = match Tera::new("templates/**/*.wgsl") {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Parsing error(s): {}", e);
+                ::std::process::exit(1);
+            }
+        };
+        let (device, queue) = promise.await;
 
         let inner_infos = Session::load_initializers(&device, &model).unwrap();
 
@@ -58,6 +78,7 @@ impl Session {
             queue,
             model,
             inner_infos,
+            tera,
         })
     }
 
@@ -73,14 +94,14 @@ impl Session {
             let initiated_data = initializers
                 .iter()
                 .find(|x| x.get_name() == input)
-                .expect(format!("Did not find initializer for input: {}", input).as_str());
+                .unwrap_or_else(|| panic!("Did not find initializer for input: {}", input));
 
             let initiated_data_dims = initiated_data.get_dims().to_vec();
             inner_infos.insert(
                 input.to_string(),
                 InnerInfo {
                     buffer: resource::create_buffer_init(
-                        &device,
+                        device,
                         initiated_data.get_float_data(),
                         input,
                     ),
@@ -97,11 +118,12 @@ impl Session {
         let graph = self.model.get_graph();
         let device = &self.device;
         let queue = &self.queue;
+        let tera = &self.tera;
 
         let inner_infos =
             dimensions::generate_buffer(input_data, graph, device, &mut self.inner_infos);
 
-        compute::wrapper(device, queue, graph, &inner_infos).unwrap();
+        compute::wrapper(device, queue, graph, inner_infos, tera).unwrap();
 
         let outputs = graph.get_output();
         // TODO: Define behavior for multi output.
@@ -146,18 +168,17 @@ pub fn get_attribute<'a>(
             .get_attribute()
             .iter()
             .find(|attr| attr.get_name() == attribute)
-            .unwrap_or(&default),
+            .unwrap_or(default),
         None => node
             .get_attribute()
             .iter()
             .find(|attr| attr.get_name() == attribute)
-            .expect(
-                format!(
+            .unwrap_or_else(|| {
+                panic!(
                     "Did not find required attribute: {}, for node: {}",
                     attribute,
                     node.get_name()
                 )
-                .as_str(),
-            ),
+            }),
     }
 }
