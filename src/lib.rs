@@ -114,6 +114,7 @@ impl Session {
         }
 
         let inputs = graph.get_input();
+
         for node in graph.get_node().iter() {
             dimensions::generate_buffer(node, inputs, device, &mut inner_infos, initializers);
         }
@@ -145,8 +146,42 @@ pub async fn run(
     let queue = &session.queue;
     let tera = &session.tera;
 
+    let mut previous_node = &graph.get_node()[0];
     for node in graph.get_node().iter() {
-        compute::wrapper(device, queue, graph, node, inner_infos, tera).unwrap();
+        let previous_node_op_type = previous_node.get_op_type();
+        let node_op_type = node.get_op_type();
+
+        if previous_node_op_type == "Conv" && node_op_type == "Relu" {
+            let mut tmp_node = crate::onnx::NodeProto::new();
+            tmp_node.set_op_type("ConvRelu".to_string());
+            tmp_node.set_name("ConvRelu".to_string());
+            tmp_node.set_input(protobuf::RepeatedField::from(
+                previous_node.get_input().to_vec(),
+            ));
+            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+
+            compute::wrapper(device, queue, graph, &tmp_node, inner_infos, tera).unwrap();
+        } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
+            compute::wrapper(device, queue, graph, previous_node, inner_infos, tera).unwrap();
+            compute::wrapper(device, queue, graph, node, inner_infos, tera).unwrap();
+        } else if node_op_type == "Conv" {
+        } else if ["Dropout"].contains(&node_op_type) {
+            let mut tmp_node = crate::onnx::NodeProto::new();
+            tmp_node.set_op_type(previous_node_op_type.to_string());
+            tmp_node.set_name("Some node".to_string());
+            tmp_node.set_input(protobuf::RepeatedField::from(
+                previous_node.get_input().to_vec(),
+            ));
+            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+
+            compute::wrapper(device, queue, graph, &tmp_node, inner_infos, tera).unwrap();
+        } else {
+            compute::wrapper(device, queue, graph, previous_node, inner_infos, tera).unwrap();
+        }
+
+        previous_node = node;
     }
 
     let buffer_slice = inner_infos

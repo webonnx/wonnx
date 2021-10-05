@@ -72,6 +72,23 @@ pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Storage Buffer"),
         contents: bytemuck::cast_slice(array),
+        usage: wgpu::BufferUsages::STORAGE,
+    })
+}
+
+pub fn output_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
+    let slacked_size = if size % 4 != 0 {
+        size + (4 - size % 4)
+    } else {
+        size
+    };
+
+    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
+    let size = slice_size as wgpu::BufferAddress;
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(name),
+        size,
+        mapped_at_creation: false,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
     })
 }

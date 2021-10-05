@@ -90,7 +90,7 @@ pub fn format_node(
             )
         }
         "Concat" => {
-            context.insert("len_0", &input_dims[1]);
+            context.insert("len_0", &(input_dims[1] * input_dims[2] * input_dims[3]));
             (
                 "matrix/concat.wgsl".to_string(),
                 crate::utils::len(output_dims) as _,
@@ -98,7 +98,7 @@ pub fn format_node(
                 1,
             )
         }
-        "Conv" | "MaxPool" | "AveragePool" => {
+        "Conv" | "MaxPool" | "AveragePool" | "ConvRelu" => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims.len() == 4usize);
 
@@ -182,6 +182,10 @@ pub fn format_node(
             );
             context.insert("pad", &pads);
             context.insert("dilation", &dilations);
+
+            if node.get_op_type() == "ConvRelu" {
+                context.insert("conv_relu", &true);
+            }
             // GLSL shader for convolution computation
             (
                 "pool/conv.wgsl".to_string(),

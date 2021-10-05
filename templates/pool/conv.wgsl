@@ -33,7 +33,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                                 let index_div_4 = tmp_index / 4u;
                                 let index_rest_4 = tmp_index % 4u;
 
-{% if op_type is matching("conv") %}
+{% if op_type is matching("conv") or op_type is matching("convrelu") %}
                                 let index_kernel = m * {{ kernel_channel_len }}u + c * {{ kernel_len }}u + i * {{ kernel_shape[1] }}u + j;
 
                                 result = result + {{ input[0] }}.data[index_div_4][index_rest_4] * {{ input[1] }}.data[index_kernel];
@@ -56,6 +56,8 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 {% if op_type is matching("averagepool") %}
         {{ output[0] }}.data[gidx][gidx_rest_4] = result/n;
+{% elif op_type is matching("convrelu") %}
+        {{ output[0] }}.data[gidx][gidx_rest_4] = max(result{% if input | length == 3 %} + {{ input[2]}}.data[m]{% endif %}, 0.0);
 {% else %}
         {{ output[0] }}.data[gidx][gidx_rest_4] = result{% if input | length == 3 %} + {{ input[2]}}.data[m]{% endif %};
 {% endif %}

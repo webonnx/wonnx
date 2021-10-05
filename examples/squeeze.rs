@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
 // use wasm_bindgen_test::*;
-
+use chrono::Local;
+use std::io::Write;
 use std::time::Instant;
 // Args Management
 async fn run() {
@@ -19,7 +20,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let n: usize = 224;
     let mut input_data = HashMap::new();
 
-    let data: Vec<f32> = (0..n * n).map(|x| x as f32).collect();
+    let data: Vec<f32> = (0..n * n * 3).map(|x| x as f32).collect();
     let dims = vec![1, 3 as i64, n as i64, n as i64];
     input_data.insert("data".to_string(), (data.as_slice(), dims.as_slice()));
 
@@ -37,9 +38,21 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 }
 
 fn main() {
+    let now = Local::now();
     #[cfg(not(target_arch = "wasm32"))]
     {
-        env_logger::init();
+        env_logger::Builder::new()
+            .format(|buf, record| {
+                writeln!(
+                    buf,
+                    "{} [{}] - {}",
+                    Local::now() - now,
+                    record.level(),
+                    record.args()
+                )
+            })
+            .init();
+
         pollster::block_on(run());
     }
     #[cfg(target_arch = "wasm32")]
