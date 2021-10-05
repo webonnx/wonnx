@@ -87,7 +87,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         "time: finished_creation_session: {:#?}",
         time_finished_creation - time_session
     );
-    let a = session.run(input_data).await;
+    let a = wonnx::run(&mut session, input_data).await;
     let time_finished_computation = Instant::now();
     println!(
         "time: finished_computation: {:#?}",

@@ -17,15 +17,15 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         let mat_left = mat4x4<f32>(
                               {{ input[0] }}.data[index_left], 
                               {{ input[0] }}.data[index_left + {{ left_columns / 4| int }}u],
-                              {{ input[0] }}.data[index_left + 2u * {{ left_columns / 4 | int }}u],
-                              {{ input[0] }}.data[index_left + 3u * {{ left_columns / 4 | int }}u],
+                              {{ input[0] }}.data[index_left + {{ 2 * left_columns / 4 | int }}u],
+                              {{ input[0] }}.data[index_left + {{ 3 * left_columns / 4 | int }}u],
                           );
           
         let mat_right = mat4x4<f32>(
                               {{ input[1] }}.data[index_right], 
                               {{ input[1] }}.data[index_right + {{ right_columns / 4 | int }}u],
-                              {{ input[1] }}.data[index_right + 2u * {{ right_columns / 4 | int }}u],
-                              {{ input[1] }}.data[index_right + 3u * {{ right_columns / 4 | int }}u],
+                              {{ input[1] }}.data[index_right + {{ 2 * right_columns / 4 | int }}u],
+                              {{ input[1] }}.data[index_right + {{ 3 * right_columns / 4 | int }}u],
                           );
 	
         product = mat_right * mat_left;

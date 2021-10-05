@@ -39,7 +39,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         .await
         .unwrap();
 
-    session.run(input_data).await
+    wonnx::run(&mut session, input_data).await
 }
 ```
 

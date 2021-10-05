@@ -35,7 +35,7 @@ pub fn create_buffer_init(device: &wgpu::Device, array: &[f32], name: &str) -> w
 
     if size % 4 != 0 {
         let mut array = array.to_vec();
-        array.resize(4 - size % 4, 0.0);
+        array.resize(size + 4 - size % 4, 0.0);
 
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
@@ -58,7 +58,7 @@ pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buff
         size
     };
 
-    let slice_size = slacked_size as usize * std::mem::size_of::<f32>();
+    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
     let size = slice_size as wgpu::BufferAddress;
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(name),

@@ -33,18 +33,16 @@ pub fn wrapper(
     inner_infos: &HashMap<String, crate::InnerInfo>,
     tera: &Tera,
 ) -> Result<(), wgpu::Error> {
-    let nodes = graph.get_node();
-    let mut binding_counter: u32 = 0;
-    // Generating the shader
+    for node in graph.get_node().iter() {
+        let mut binding_counter: u32 = 0;
+        // Generating the shader
 
-    let mut time = std::time::Duration::new(0, 0);
-    let time_now = Instant::now();
-    time = Instant::now() - time_now + time;
-    for node in nodes.iter() {
+        let mut time = std::time::Duration::new(0, 0);
         let mut context = Context::new();
         let inputs = node.get_input();
         let outputs = node.get_output();
 
+        let time_before_render = Instant::now();
         let inputs = if ["Reshape", "Clip", "Squeeze"].contains(&node.get_op_type()) {
             inputs.get(0..1).unwrap()
         } else {
@@ -97,12 +95,10 @@ pub fn wrapper(
             crate::compiler::format_node(node, inner_infos, &mut context);
         threads.push([x, y, z]);
 
-        let time_before_render = Instant::now();
         let shader = tera
             .render(&shader_template, &context)
             .expect("failed to render shader");
 
-        time = Instant::now() - time_before_render + time;
         let [x, y, z] = threads.get(0).unwrap();
 
         debug!("shader: {}", shader);
@@ -144,7 +140,7 @@ pub fn wrapper(
             cpass.dispatch(*x, *y, *z); // Number of cells to run, the (x,y,z) size of item being processed
         }
         queue.submit(Some(encoder.finish()));
+        time = Instant::now() - time_before_render + time;
     }
-    println!("time render: {:#?}", time);
     Ok(())
 }

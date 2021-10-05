@@ -26,7 +26,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
-    let a = session.run(input_data).await;
+    let a = (wonnx::run(&mut session, input_data)).await;
     let time_post_compute = Instant::now();
     println!(
         "time: post_compute: {:#?}",
@@ -39,7 +39,9 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {
         env_logger::init();
+        let time_pre_compute = Instant::now();
         pollster::block_on(run());
+        println!("time: post_compute: {:#?}", time_pre_compute.elapsed());
     }
     #[cfg(target_arch = "wasm32")]
     {

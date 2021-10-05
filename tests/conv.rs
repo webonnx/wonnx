@@ -50,11 +50,22 @@ async fn conv_pad() -> Option<Vec<f32>> {
 
     // ONNX INPUTS
 
-    let mut shape_tensor_proto_dim = onnx::TensorShapeProto_Dimension::new();
-    shape_tensor_proto_dim.set_dim_value(n as i64);
+    let mut dim_batch = onnx::TensorShapeProto_Dimension::new();
+    dim_batch.set_dim_value(2 as i64);
+
+    let mut dim_channel = onnx::TensorShapeProto_Dimension::new();
+    dim_channel.set_dim_value(c as i64);
+
+    let mut dim_n = onnx::TensorShapeProto_Dimension::new();
+    dim_n.set_dim_value(n as i64);
 
     let mut shape_tensor_proto = onnx::TensorShapeProto::new();
-    shape_tensor_proto.set_dim(protobuf::RepeatedField::from(vec![shape_tensor_proto_dim]));
+    shape_tensor_proto.set_dim(protobuf::RepeatedField::from(vec![
+        dim_batch,
+        dim_channel,
+        dim_n.clone(),
+        dim_n,
+    ]));
 
     let mut type_proto_tensor = crate::onnx::TypeProto_Tensor::new();
     type_proto_tensor.set_elem_type(1);
@@ -116,7 +127,7 @@ async fn conv_pad() -> Option<Vec<f32>> {
         .await
         .expect("Session did not create");
 
-    session.run(input_data).await
+    wonnx::run(&mut session, input_data).await
 }
 
 #[test]

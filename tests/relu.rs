@@ -6,7 +6,8 @@ use std::collections::HashMap;
 async fn run() {
     let steps = execute_gpu().await.unwrap();
 
-    assert_eq!(steps[0..5], [0.0, 0.0, 0.0, 0.0, 0.0]);
+    println!("steps[0..5]: {:#?}", &steps);
+    assert_eq!(steps, [0.0, 1.0, 0.0, 0.0]);
     // println!("steps[0..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
     // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
@@ -15,17 +16,17 @@ async fn run() {
 
 // Hardware management
 async fn execute_gpu() -> Option<Vec<f32>> {
-    let n: usize = 512 * 512 * 128;
+    let n: usize = 2;
     let mut input_data = HashMap::new();
-    let data = vec![-1.0f32; n];
-    let dims = vec![n as i64];
+    let data = vec![-1.0f32, 1.0];
+    let dims = vec![1, n as i64];
     input_data.insert("x".to_string(), (data.as_slice(), dims.as_slice()));
 
     let mut session = wonnx::Session::from_path("tests/single_relu.onnx")
         .await
         .unwrap();
 
-    session.run(input_data).await
+    wonnx::run(&mut session, input_data).await
 }
 
 #[test]

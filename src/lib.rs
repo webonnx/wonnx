@@ -8,6 +8,7 @@ pub mod resource;
 pub mod utils;
 use protobuf::{self, Message};
 use std::collections::HashMap;
+use std::time::Instant;
 use tera::Tera;
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
@@ -88,6 +89,7 @@ impl Session {
     ) -> Result<HashMap<std::string::String, InnerInfo>> {
         let mut inner_infos = HashMap::new();
         let initializers = model.get_graph().get_initializer();
+        let graph = model.get_graph();
         for initializer in initializers.iter() {
             let input = initializer.get_name();
 
@@ -111,47 +113,60 @@ impl Session {
             );
         }
 
-        Ok(inner_infos)
-    }
-
-    pub async fn run(&mut self, input_data: HashMap<String, (&[f32], &[i64])>) -> Option<Vec<f32>> {
-        let graph = self.model.get_graph();
-        let device = &self.device;
-        let queue = &self.queue;
-        let tera = &self.tera;
-
-        let inner_infos =
-            dimensions::generate_buffer(input_data, graph, device, &mut self.inner_infos);
-
-        compute::wrapper(device, queue, graph, inner_infos, tera).unwrap();
-
-        let outputs = graph.get_output();
-        // TODO: Define behavior for multi output.
-        let buffer_slice = inner_infos
-            .get(outputs[0].get_name())
-            .unwrap()
-            .buffer
-            .slice(..);
-        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-        device.poll(wgpu::Maintain::Wait);
-
-        // OUTPUT
-
-        if let Ok(()) = buffer_future.await {
-            // Gets contents of buffer
-            let data = buffer_slice.get_mapped_range();
-            // Since contents are got in bytes, this converts these bytes back to f32
-            let result = bytemuck::cast_slice(&data).to_vec();
-
-            //            drop(data);
-
-            Some(result)
-        } else {
-            panic!("failed to run compute on gpu!")
+        let inputs = graph.get_input();
+        for node in graph.get_node().iter() {
+            dimensions::generate_buffer(node, inputs, device, &mut inner_infos, initializers);
         }
+        Ok(inner_infos)
     }
 }
 
+pub async fn run(
+    session: &mut Session,
+    input_data: HashMap<String, (&[f32], &[i64])>,
+) -> Option<Vec<f32>> {
+    let time_start = Instant::now();
+    let device = &session.device;
+    let inner_infos = &mut session.inner_infos;
+    for (input, (data, dims)) in input_data.iter() {
+        inner_infos.insert(
+            input.to_string(),
+            InnerInfo {
+                buffer: resource::create_buffer_init(device, data, input),
+                dims: dims.to_vec(),
+                inner_type: crate::compute::InnerType::ArrayVector,
+            },
+        );
+    }
+
+    let graph = session.model.get_graph();
+    let outputs = graph.get_output();
+    let queue = &session.queue;
+    let tera = &session.tera;
+
+    compute::wrapper(device, queue, graph, inner_infos, tera).unwrap();
+
+    let buffer_slice = inner_infos
+        .get(outputs[0].get_name())
+        .unwrap()
+        .buffer
+        .slice(..);
+    // TODO: Define behavior for multi output.
+    let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+
+    device.poll(wgpu::Maintain::Wait);
+    // // OUTPUT
+
+    buffer_future.await.expect("failed to run compute on gpu!");
+    // Gets contents of buffer
+    let data = buffer_slice.get_mapped_range();
+    // Since contents are got in bytes, this converts these bytes back to f32
+    let result = bytemuck::cast_slice(&data).to_vec();
+
+    println!("time: post_wait: {:#?}", time_start.elapsed());
+
+    Some(result)
+}
 pub struct InnerInfo {
     buffer: wgpu::Buffer,
     dims: Vec<i64>,

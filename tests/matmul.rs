@@ -6,9 +6,8 @@ use wonnx::*;
 use std::time::Instant;
 
 async fn run() {
-    let steps = execute_gpu().await.unwrap();
+    let _ = execute_gpu().await.unwrap();
 
-    let n: usize = 1024 * 16;
     for i in 0..10 {
         // println!("steps: {:?}", &steps[n * i..n * (i + 1)]);
     }
@@ -37,7 +36,10 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     shape_tensor_proto_dim.set_dim_value(n as i64);
 
     let mut shape_tensor_proto = onnx::TensorShapeProto::new();
-    shape_tensor_proto.set_dim(protobuf::RepeatedField::from(vec![shape_tensor_proto_dim]));
+    shape_tensor_proto.set_dim(protobuf::RepeatedField::from(vec![
+        shape_tensor_proto_dim.clone(),
+        shape_tensor_proto_dim,
+    ]));
 
     let mut type_proto_tensor = crate::onnx::TypeProto_Tensor::new();
     type_proto_tensor.set_elem_type(1);
@@ -87,7 +89,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         "time: finished_creation_session: {:#?}",
         time_finished_creation - time_session
     );
-    let a = session.run(input_data).await;
+    let a = wonnx::run(&mut session, input_data).await;
     let time_finished_computation = Instant::now();
     println!(
         "time: finished_computation: {:#?}",
