@@ -59,6 +59,23 @@ pub fn format_node(
                 1,
             )
         }
+        // Not taking into account attributes
+        "BatchNormalization" => {
+            let mut epsilon_default = onnx::AttributeProto::new();
+            epsilon_default.set_f(1.0);
+
+            let epsilon = get_attribute("epsilon", Some(&epsilon_default), node).get_f();
+            context.insert("epsilon", &epsilon);
+
+            todo!();
+
+            (
+                "endomorphism/batchnormalization.wgsl".to_string(),
+                length as _,
+                1,
+                1,
+            )
+        }
         "Celu" | "Elu" => {
             let mut alpha_default = onnx::AttributeProto::new();
             alpha_default.set_f(1.0);
@@ -68,6 +85,15 @@ pub fn format_node(
             (
                 "endomorphism/activation.wgsl".to_string(),
                 length as _,
+                1,
+                1,
+            )
+        }
+        "Concat" => {
+            context.insert("len_0", &input_dims[1]);
+            (
+                "matrix/concat.wgsl".to_string(),
+                crate::utils::len(output_dims) as _,
                 1,
                 1,
             )

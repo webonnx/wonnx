@@ -40,7 +40,7 @@ pub fn generate_buffer<'a>(
         | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Add" | "And" | "Div"
         | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual" | "Mod" | "Mul"
         | "Or" | "Sub" | "Celu" | "Elu" | "Relu" | "Sigmoid" | "Softsign" | "Softplus"
-        | "Dropout" | "Softmax" => {
+        | "Dropout" | "Softmax" | "BatchNormalization" => {
             inner_infos.insert(
                 outputs[0].clone(),
                 InnerInfo {
@@ -145,7 +145,28 @@ pub fn generate_buffer<'a>(
                 },
             );
         }
-
+        // Experimental
+        "Concat" => {
+            let mut output_dims = input_dims.clone();
+            let input_right_dims = if let Some(inner_info) = inner_infos.get(&inputs[1]) {
+                inner_info.dims.clone()
+            } else {
+                get_dimension(inputs_onnx, &inputs[1])
+            };
+            output_dims[1] += input_right_dims[1];
+            inner_infos.insert(
+                outputs[0].clone(),
+                InnerInfo {
+                    buffer: resource::create_buffer(
+                        device,
+                        resource::size(&output_dims) as _,
+                        outputs[0].as_str(),
+                    ),
+                    dims: output_dims,
+                    inner_type: crate::compute::InnerType::ArrayVector,
+                },
+            );
+        }
         "MaxPool" | "AveragePool" => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims.len() == 4usize);
@@ -282,10 +303,10 @@ pub fn generate_buffer<'a>(
         }
         "MatMul" => {
             let mut output_dims = input_dims.clone();
-            let input_right_dims = if let Some(inner_info) = inner_infos.get(&inputs[0]) {
+            let input_right_dims = if let Some(inner_info) = inner_infos.get(&inputs[1]) {
                 inner_info.dims.clone()
             } else {
-                get_dimension(inputs_onnx, &inputs[0])
+                get_dimension(inputs_onnx, &inputs[1])
             };
             output_dims[1] = input_right_dims[1];
             inner_infos.insert(
@@ -324,7 +345,13 @@ pub fn generate_buffer<'a>(
                 .unwrap_or_else(|| {
                     panic!("Did not find initializer for input Reshape {}", inputs[1])
                 });
-            let output_dims = reshape.get_int64_data().to_vec();
+
+            let output_dims = if reshape.get_int64_data().to_vec().contains(&-1) {
+                vec![input_dims[0], input_dims[1..].iter().product()]
+            } else {
+                reshape.get_int64_data().to_vec()
+            };
+
             inner_infos.insert(
                 outputs[0].clone(),
                 InnerInfo {

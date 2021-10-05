@@ -6,7 +6,8 @@ use std::time::Instant;
 // Args Management
 async fn run() {
     let steps = execute_gpu().await.unwrap();
-    println!("steps: {:#?}", steps);
+    println!("steps: {:#?}", &steps[0..5]);
+    println!("len: {:#?}", steps.len());
     // println!("steps[1..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
     // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
@@ -20,9 +21,9 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 
     let data: Vec<f32> = (0..n * n).map(|x| x as f32).collect();
     let dims = vec![1, 3 as i64, n as i64, n as i64];
-    input_data.insert("images:0".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("data".to_string(), (data.as_slice(), dims.as_slice()));
 
-    let mut session = wonnx::Session::from_path("tests/efficientnet-lite4-11.onnx")
+    let mut session = wonnx::Session::from_path("tests/opt-squeeze.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();

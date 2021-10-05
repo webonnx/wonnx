@@ -117,6 +117,7 @@ impl Session {
         for node in graph.get_node().iter() {
             dimensions::generate_buffer(node, inputs, device, &mut inner_infos, initializers);
         }
+
         Ok(inner_infos)
     }
 }
@@ -144,7 +145,9 @@ pub async fn run(
     let queue = &session.queue;
     let tera = &session.tera;
 
-    compute::wrapper(device, queue, graph, inner_infos, tera).unwrap();
+    for node in graph.get_node().iter() {
+        compute::wrapper(device, queue, graph, node, inner_infos, tera).unwrap();
+    }
 
     let buffer_slice = inner_infos
         .get(outputs[0].get_name())
