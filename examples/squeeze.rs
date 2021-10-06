@@ -2,6 +2,8 @@ use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
 // use wasm_bindgen_test::*;
 use chrono::Local;
+use env_logger::Builder;
+use log::{info, LevelFilter};
 use std::io::Write;
 use std::time::Instant;
 // Args Management
@@ -28,6 +30,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
+    info!("Start Compute");
     let a = wonnx::run(&mut session, input_data).await;
     let time_post_compute = Instant::now();
     println!(
@@ -38,7 +41,6 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 }
 
 fn main() {
-    let now = Local::now();
     #[cfg(not(target_arch = "wasm32"))]
     {
         env_logger::Builder::new()
@@ -46,11 +48,12 @@ fn main() {
                 writeln!(
                     buf,
                     "{} [{}] - {}",
-                    Local::now() - now,
+                    Local::now().format("%dT%H:%M:%S.%f"),
                     record.level(),
                     record.args()
                 )
             })
+            .filter(None, LevelFilter::Debug)
             .init();
 
         pollster::block_on(run());

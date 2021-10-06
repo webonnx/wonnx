@@ -1,11 +1,13 @@
 pub mod boilerplate;
 pub mod compute;
 use std::error;
+use std::fmt::Debug;
 pub mod compiler;
 pub mod dimensions;
 pub mod onnx;
 pub mod resource;
 pub mod utils;
+use log::debug;
 use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -99,18 +101,33 @@ impl Session {
                 .unwrap_or_else(|| panic!("Did not find initializer for input: {}", input));
 
             let initiated_data_dims = initiated_data.get_dims().to_vec();
-            inner_infos.insert(
-                input.to_string(),
-                InnerInfo {
-                    buffer: resource::create_buffer_init(
-                        device,
-                        initiated_data.get_float_data(),
-                        input,
-                    ),
-                    dims: initiated_data_dims.clone(),
-                    inner_type: crate::compute::InnerType::ArrayVector,
-                },
-            );
+            let data = initiated_data.get_float_data();
+            let raw_data = initiated_data.get_raw_data();
+
+            if data.len() != 0 {
+                inner_infos.insert(
+                    input.to_string(),
+                    InnerInfo {
+                        buffer: resource::create_buffer_init(device, data, input),
+                        dims: initiated_data_dims.clone(),
+                        inner_type: crate::compute::InnerType::ArrayVector,
+                    },
+                );
+            } else if raw_data.len() != 0 {
+                inner_infos.insert(
+                    input.to_string(),
+                    InnerInfo {
+                        buffer: resource::create_buffer_init(device, raw_data, input),
+                        dims: initiated_data_dims.clone(),
+                        inner_type: crate::compute::InnerType::ArrayVector,
+                    },
+                );
+            } else {
+                debug!(
+                    "Not inserting input: {} with shape: {:?}",
+                    input, initiated_data
+                );
+            };
         }
 
         let inputs = graph.get_input();
@@ -127,7 +144,6 @@ pub async fn run(
     session: &mut Session,
     input_data: HashMap<String, (&[f32], &[i64])>,
 ) -> Option<Vec<f32>> {
-    let time_start = Instant::now();
     let device = &session.device;
     let inner_infos = &mut session.inner_infos;
     for (input, (data, dims)) in input_data.iter() {
@@ -184,6 +200,7 @@ pub async fn run(
         previous_node = node;
     }
 
+    let time_start = Instant::now();
     let buffer_slice = inner_infos
         .get(outputs[0].get_name())
         .unwrap()

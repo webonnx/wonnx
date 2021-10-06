@@ -1,3 +1,4 @@
+use log::debug;
 use wgpu::util::DeviceExt;
 
 // Get a device and a queue
@@ -30,12 +31,15 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
         .expect("Could not create adapter for GPU device")
 }
 
-pub fn create_buffer_init(device: &wgpu::Device, array: &[f32], name: &str) -> wgpu::Buffer {
+pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
+    device: &wgpu::Device,
+    array: &[T],
+    name: &str,
+) -> wgpu::Buffer {
     let size = array.len();
-
-    if size % 4 != 0 {
+    if size % 4 != 0 && size != 0 {
         let mut array = array.to_vec();
-        array.resize(size + 4 - size % 4, 0.0);
+        array.resize(size + 4 - size % 4, array[0].clone());
 
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
@@ -45,7 +49,7 @@ pub fn create_buffer_init(device: &wgpu::Device, array: &[f32], name: &str) -> w
     } else {
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
-            contents: bytemuck::cast_slice(array),
+            contents: bytemuck::cast_slice(&array),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
         })
     }

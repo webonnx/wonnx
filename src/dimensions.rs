@@ -94,7 +94,7 @@ pub fn generate_buffer<'a>(
 
             if inputs.len() == 3 {
                 let mut inner_info = inner_infos.get_mut(&inputs[2]).unwrap_or_else(|| {
-                    panic!("Did not find initializer for input Conv {}", inputs[1])
+                    panic!("Did not find initializer for input Conv {}", inputs[2])
                 });
 
                 inner_info.inner_type = crate::compute::InnerType::Array;

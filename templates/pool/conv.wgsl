@@ -36,13 +36,13 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 {% if op_type is matching("conv") or op_type is matching("convrelu") %}
                                 let index_kernel = m * {{ kernel_channel_len }}u + c * {{ kernel_len }}u + i * {{ kernel_shape[1] }}u + j;
 
-                                result = result + {{ input[0] }}.data[index_div_4][index_rest_4] * {{ input[1] }}.data[index_kernel];
+                                result = result + _{{ input[0] }}.data[index_div_4][index_rest_4] * _{{ input[1] }}.data[index_kernel];
 				
 {% elif op_type is matching("maxpool") %}
-				result = max(result, {{ input[0] }}.data[index_div_4][index_rest_4]);
+				result = max(result, _{{ input[0] }}.data[index_div_4][index_rest_4]);
 
 {% elif op_type is matching("averagepool") %}
-				result = result + {{ input[0] }}.data[index_div_4][index_rest_4];
+				result = result + _{{ input[0] }}.data[index_div_4][index_rest_4];
 				n = n + 1.0;
 {% endif %}
   	              }
@@ -55,11 +55,11 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         let gidx_rest_4 = global_id.x % 4u;
 
 {% if op_type is matching("averagepool") %}
-        {{ output[0] }}.data[gidx][gidx_rest_4] = result/n;
+        _{{ output[0] }}.data[gidx][gidx_rest_4] = result/n;
 {% elif op_type is matching("convrelu") %}
-        {{ output[0] }}.data[gidx][gidx_rest_4] = max(result{% if input | length == 3 %} + {{ input[2]}}.data[m]{% endif %}, 0.0);
+        _{{ output[0] }}.data[gidx][gidx_rest_4] = max(result{% if input | length == 3 %} + _{{ input[2] }}.data[m]{% endif %}, 0.0);
 {% else %}
-        {{ output[0] }}.data[gidx][gidx_rest_4] = result{% if input | length == 3 %} + {{ input[2]}}.data[m]{% endif %};
+        _{{ output[0] }}.data[gidx][gidx_rest_4] = result{% if input | length == 3 %} + _{{ input[2] }}.data[m]{% endif %};
 {% endif %}
 }
 {% endblock main %}

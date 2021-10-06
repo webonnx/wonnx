@@ -109,7 +109,7 @@ pub fn wrapper(
     let [x, y, z] = threads.get(0).unwrap();
 
     debug!("shader: {}", shader);
-    debug!("x: {}", x);
+    // debug!("x: {}", x);
     // TODO: Make defining threads more clean.
 
     // Generating the compute pipeline and binding group.
@@ -141,7 +141,6 @@ pub fn wrapper(
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
         cpass.set_pipeline(&compute_pipeline);
         cpass.set_bind_group(0, &bind_group, &[]);
-        debug!("Ready for dispatch!");
         cpass.insert_debug_marker("compute");
         cpass.dispatch(*x, *y, *z); // Number of cells to run, the (x,y,z) size of item being processed
     }
