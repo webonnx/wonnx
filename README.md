@@ -57,4 +57,12 @@ wasm-pack test --node
 
 ## Examples are available in the `tests` folder
 
+## Language interface
+
+Aiming to be widly usable through:
+
+- a Python binding using PyO3
+- a JS binding using WASM
+
+
 
