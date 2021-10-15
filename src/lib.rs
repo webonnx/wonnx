@@ -162,8 +162,10 @@ pub async fn run(
     let queue = &session.queue;
     let tera = &session.tera;
 
-    let mut previous_node = &graph.get_node()[0];
-    for node in graph.get_node().iter() {
+    let time_start = Instant::now();
+    let mut iter = graph.get_node().iter();
+    let mut previous_node = iter.next().unwrap();
+    for node in iter {
         let previous_node_op_type = previous_node.get_op_type();
         let node_op_type = node.get_op_type();
 
@@ -180,8 +182,7 @@ pub async fn run(
             compute::wrapper(device, queue, graph, &tmp_node, inner_infos, tera).unwrap();
         } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
             compute::wrapper(device, queue, graph, previous_node, inner_infos, tera).unwrap();
-            compute::wrapper(device, queue, graph, node, inner_infos, tera).unwrap();
-        } else if node_op_type == "Conv" {
+        } else if previous_node_op_type == "Relu" {
         } else if ["Dropout"].contains(&node_op_type) {
             let mut tmp_node = crate::onnx::NodeProto::new();
             tmp_node.set_op_type(previous_node_op_type.to_string());
@@ -199,10 +200,12 @@ pub async fn run(
 
         previous_node = node;
     }
+    compute::wrapper(device, queue, graph, previous_node, inner_infos, tera).unwrap();
 
-    let time_start = Instant::now();
+    println!("time: post_wait: {:#?}", time_start.elapsed());
     let buffer_slice = inner_infos
         .get(outputs[0].get_name())
+        //.get(&"Plus214_Output_0".to_string())
         .unwrap()
         .buffer
         .slice(..);
@@ -217,8 +220,6 @@ pub async fn run(
     let data = buffer_slice.get_mapped_range();
     // Since contents are got in bytes, this converts these bytes back to f32
     let result = bytemuck::cast_slice(&data).to_vec();
-
-    println!("time: post_wait: {:#?}", time_start.elapsed());
 
     Some(result)
 }

@@ -205,9 +205,8 @@ pub fn format_node(
 
             let beta = get_attribute("beta", Some(&beta_default), node).get_f();
 
-            let left_columns = &inner_infos.get(&inputs[0]).unwrap().dims[1];
+            let left_columns = &input_dims[1];
             let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
-            let threads = (&inner_infos.get(&inputs[0]).unwrap().dims[0] / 4) * right_columns / 4;
 
             context.insert("left_columns", &left_columns);
 
@@ -215,7 +214,13 @@ pub fn format_node(
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
-            ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
+            if input_dims[0] == 1 {
+                let threads = output_dims[1];
+                ("matrix/gemm_1.wgsl".to_string(), threads as _, 1, 1)
+            } else {
+                let threads = (&input_dims[0] / 4) * right_columns / 4;
+                ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
+            }
         }
         "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" => {
             ("endomorphism/activation.wgsl".to_string(), 1, 1, 1)

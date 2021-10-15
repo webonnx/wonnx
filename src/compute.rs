@@ -48,7 +48,11 @@ pub fn wrapper(
     } else {
         inputs
     };
-
+    info!(
+        "Computing node: {}, with op_type: {}",
+        node.get_name(),
+        node.get_op_type()
+    );
     // Generating the shader
     let mut entries = vec![];
     let mut bindings = vec![];
@@ -90,9 +94,10 @@ pub fn wrapper(
         });
         binding_counter += 1;
         info!(
-            "output {} has size: {:?}",
+            "output {} has size: {:?} at counter {}",
             tensor,
-            inner_infos.get(tensor.as_str()).unwrap().dims
+            inner_infos.get(tensor.as_str()).unwrap().dims,
+            binding_counter
         );
     }
     context.insert("bindings", &bindings);
@@ -112,6 +117,7 @@ pub fn wrapper(
     // debug!("x: {}", x);
     // TODO: Make defining threads more clean.
 
+    time = Instant::now() - time_before_render + time;
     // Generating the compute pipeline and binding group.
     let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
@@ -145,7 +151,5 @@ pub fn wrapper(
         cpass.dispatch(*x, *y, *z); // Number of cells to run, the (x,y,z) size of item being processed
     }
     queue.submit(Some(encoder.finish()));
-    time = Instant::now() - time_before_render + time;
-
     Ok(())
 }
