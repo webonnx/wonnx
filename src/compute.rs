@@ -102,15 +102,11 @@ pub fn wrapper(
     context.insert("bindings", &bindings);
 
     // TODO: Add attribute value binding
-    let mut threads = vec![];
     let (shader_template, x, y, z) = crate::compiler::format_node(node, inner_infos, &mut context);
-    threads.push([x, y, z]);
 
     let shader = tera
         .render(&shader_template, &context)
         .expect("failed to render shader");
-
-    let [x, y, z] = threads.get(0).unwrap();
 
     debug!("shader: {}", shader);
     // debug!("x: {}", x);
@@ -119,25 +115,23 @@ pub fn wrapper(
     time = Instant::now() - time_before_render + time;
     println!("time: {:#?}", time);
     // Generating the compute pipeline and binding group.
-    let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
-    });
 
     // Instantiates the pipeline.
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: None,
         layout: None,
-        module: &cs_module,
+        module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
+        }),
         entry_point: "main",
     });
 
     // Instantiates the bind group, once again specifying the binding of buffers.
-    let bind_group_layout = compute_pipeline.get_bind_group_layout(0u32);
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
-        layout: &bind_group_layout,
+        layout: &compute_pipeline.get_bind_group_layout(0u32),
         entries: &entries,
     });
 
@@ -147,8 +141,8 @@ pub fn wrapper(
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
         cpass.set_pipeline(&compute_pipeline);
         cpass.set_bind_group(0, &bind_group, &[]);
-        cpass.insert_debug_marker("compute");
-        cpass.dispatch(*x, *y, *z); // Number of cells to run, the (x,y,z) size of item being processed
+        // cpass.insert_debug_marker("compute");
+        cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
     }
     queue.submit(Some(encoder.finish()));
     Ok(())
