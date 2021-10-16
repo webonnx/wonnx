@@ -1,15 +1,11 @@
 use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
 // use wasm_bindgen_test::*;
-use chrono::Local;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
-use log::info;
 use ndarray::s;
-use std::io::Write;
 use std::path::Path;
-use std::time::Instant;
 
-// Args Management
+// Management
 async fn run() {
     let probabilities = execute_gpu().await.unwrap();
 
@@ -38,15 +34,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let mut session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx")
         .await
         .unwrap();
-    let time_pre_compute = Instant::now();
-    info!("Start Compute");
-    let a = wonnx::run(&mut session, input_data).await;
-    let time_post_compute = Instant::now();
-    println!(
-        "time: post_compute: {:#?}",
-        time_post_compute - time_pre_compute
-    );
-    a
+    wonnx::run(&mut session, input_data).await
 }
 
 #[test]
