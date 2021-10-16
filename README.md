@@ -35,11 +35,11 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let dims = vec![n as i64];
     input_data.insert("x", (data.as_slice(), dims.as_slice()));
 
-    let mut session = wonnx::Session::from_path("tests/single_relu.onnx")
+    let mut session = wonnx::Session::from_path("examples/data/models/single_relu.onnx")
         .await
         .unwrap();
 
-    session.run(input_data).await
+    wonnx::run(&mut session, input_data).await
 }
 ```
 

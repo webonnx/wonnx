@@ -8,7 +8,7 @@ use std::time::Instant;
 async fn run() {
     let steps = execute_gpu().await.unwrap();
 
-    assert_eq!(steps[0..5], [0.0, 1.0, 2.0, 3.0, 4.0]);
+    // assert_eq!(steps[0..5], [0.0, 1.0, 2.0, 3.0, 4.0]);
     println!("steps[0..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
     // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
@@ -21,8 +21,8 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 
     let n: i64 = 1024;
     let mut input_data = HashMap::new();
-    let data = (0..n).map(|x| x as f32).collect::<Vec<f32>>();
-    let dims = vec![n, n];
+    let data = (0..2 * 3 * 4).map(|x| x as f32).collect::<Vec<f32>>();
+    let dims = vec![2, 3, 4];
     input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
     // LOGIC
 
@@ -34,14 +34,14 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     // let initializers = graph.mut_initializer();
     // initializers.insert(initializers.len(), initializer);
     let time_start = Instant::now();
-    let mut session = wonnx::Session::from_path("tests/two_transposes.onnx")
+    let mut session = wonnx::Session::from_path("examples/data/models/two_transposes.onnx")
         .await
         .unwrap();
     debug!("session.model: {:#?}", session.model.get_graph());
     let time_init = Instant::now();
     debug!("time: init: {:#?}", time_init - time_start);
 
-    let res = session.run(input_data).await;
+    let res = wonnx::run(&mut session, input_data).await;
 
     let time_run = Instant::now();
     debug!("time: run: {:#?}", time_run - time_init);

@@ -30,14 +30,16 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
         .expect("Could not create adapter for GPU device")
 }
 
-pub fn create_buffer_init(device: &wgpu::Device, array: &[f32], name: &str) -> wgpu::Buffer {
+pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
+    device: &wgpu::Device,
+    array: &[T],
+    name: &str,
+) -> wgpu::Buffer {
     let size = array.len();
-
-    if size % 4 != 0 {
+    if size % 4 != 0 && size != 0 {
         let mut array = array.to_vec();
-        for _ in 0..(4 - size % 4) {
-            array.push(0.0);
-        }
+        array.resize(size + 4 - size % 4, array[0]);
+
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
             contents: bytemuck::cast_slice(&array),
@@ -59,7 +61,7 @@ pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buff
         size
     };
 
-    let slice_size = slacked_size as usize * std::mem::size_of::<f32>();
+    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
     let size = slice_size as wgpu::BufferAddress;
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(name),
@@ -73,11 +75,28 @@ pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Storage Buffer"),
         contents: bytemuck::cast_slice(array),
+        usage: wgpu::BufferUsages::STORAGE,
+    })
+}
+
+pub fn output_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
+    let slacked_size = if size % 4 != 0 {
+        size + (4 - size % 4)
+    } else {
+        size
+    };
+
+    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
+    let size = slice_size as wgpu::BufferAddress;
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(name),
+        size,
+        mapped_at_creation: false,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
     })
 }
 
-pub fn size(dims: &Vec<i64>) -> i64 {
+pub fn size(dims: &[i64]) -> i64 {
     dims.iter().product::<i64>()
 }
 

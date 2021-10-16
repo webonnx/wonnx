@@ -68,7 +68,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         .await
         .expect("Session did not create");
 
-    session.run(input_data).await
+    wonnx::run(&mut session, input_data).await
 }
 
 #[test]

@@ -9,6 +9,8 @@ pub mod utils;
 use log::debug;
 use protobuf::{self, Message};
 use std::collections::HashMap;
+use std::time::Instant;
+use tera::Tera;
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 /// Creates a new session connected to the GPU.
@@ -27,11 +29,21 @@ pub struct Session {
     pub queue: wgpu::Queue,
     pub model: onnx::ModelProto,
     pub inner_infos: HashMap<String, InnerInfo>,
+    pub tera: Tera,
 }
 
 impl Session {
     pub async fn from_path(path: &str) -> Result<Session> {
-        let (device, queue) = resource::request_device_queue().await;
+        let promise = resource::request_device_queue();
+
+        let tera = match Tera::new("templates/**/*.wgsl") {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Parsing error(s): {}", e);
+                ::std::process::exit(1);
+            }
+        };
+        let (device, queue) = promise.await;
 
         let model = onnx::ModelProto::parse_from_bytes(
             &std::fs::read(path).expect("ONNX Model path not found."),
@@ -45,11 +57,21 @@ impl Session {
             queue,
             model,
             inner_infos,
+            tera,
         })
     }
 
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
-        let (device, queue) = resource::request_device_queue().await;
+        let promise = resource::request_device_queue();
+
+        let tera = match Tera::new("templates/**/*.wgsl") {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Parsing error(s): {}", e);
+                ::std::process::exit(1);
+            }
+        };
+        let (device, queue) = promise.await;
 
         let inner_infos = Session::load_initializers(&device, &model).unwrap();
 
@@ -58,6 +80,7 @@ impl Session {
             queue,
             model,
             inner_infos,
+            tera,
         })
     }
 
@@ -67,69 +90,138 @@ impl Session {
     ) -> Result<HashMap<std::string::String, InnerInfo>> {
         let mut inner_infos = HashMap::new();
         let initializers = model.get_graph().get_initializer();
+        let graph = model.get_graph();
         for initializer in initializers.iter() {
             let input = initializer.get_name();
 
             let initiated_data = initializers
                 .iter()
                 .find(|x| x.get_name() == input)
-                .expect(format!("Did not find initializer for input: {}", input).as_str());
+                .unwrap_or_else(|| panic!("Did not find initializer for input: {}", input));
 
             let initiated_data_dims = initiated_data.get_dims().to_vec();
-            inner_infos.insert(
-                input.to_string(),
-                InnerInfo {
-                    buffer: resource::create_buffer_init(
-                        &device,
-                        initiated_data.get_float_data(),
-                        input,
-                    ),
-                    dims: initiated_data_dims.clone(),
-                    inner_type: crate::compute::InnerType::ArrayVector,
-                },
-            );
+            let data = initiated_data.get_float_data();
+            let raw_data = initiated_data.get_raw_data();
+
+            if !data.is_empty() {
+                inner_infos.insert(
+                    input.to_string(),
+                    InnerInfo {
+                        buffer: resource::create_buffer_init(device, data, input),
+                        dims: initiated_data_dims.clone(),
+                        inner_type: crate::compute::InnerType::ArrayVector,
+                    },
+                );
+            } else if !raw_data.is_empty() {
+                inner_infos.insert(
+                    input.to_string(),
+                    InnerInfo {
+                        buffer: resource::create_buffer_init(device, raw_data, input),
+                        dims: initiated_data_dims.clone(),
+                        inner_type: crate::compute::InnerType::ArrayVector,
+                    },
+                );
+            } else {
+                debug!(
+                    "Not inserting input: {} with shape: {:?}",
+                    input, initiated_data
+                );
+            };
+        }
+
+        let inputs = graph.get_input();
+
+        for node in graph.get_node().iter() {
+            dimensions::generate_buffer(node, inputs, device, &mut inner_infos, initializers);
         }
 
         Ok(inner_infos)
     }
-
-    pub async fn run(&mut self, input_data: HashMap<String, (&[f32], &[i64])>) -> Option<Vec<f32>> {
-        let graph = self.model.get_graph();
-        let device = &self.device;
-        let queue = &self.queue;
-
-        let inner_infos =
-            dimensions::generate_buffer(input_data, graph, device, &mut self.inner_infos);
-
-        compute::wrapper(device, queue, graph, &inner_infos).unwrap();
-
-        let outputs = graph.get_output();
-        // TODO: Define behavior for multi output.
-        let buffer_slice = inner_infos
-            .get(outputs[0].get_name())
-            .unwrap()
-            .buffer
-            .slice(..);
-        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-        device.poll(wgpu::Maintain::Wait);
-
-        // OUTPUT
-
-        if let Ok(()) = buffer_future.await {
-            // Gets contents of buffer
-            let data = buffer_slice.get_mapped_range();
-            // Since contents are got in bytes, this converts these bytes back to f32
-            let result = bytemuck::cast_slice(&data).to_vec();
-
-            //            drop(data);
-
-            Some(result)
-        } else {
-            panic!("failed to run compute on gpu!")
-        }
-    }
 }
 
+pub async fn run(
+    session: &mut Session,
+    input_data: HashMap<String, (&[f32], &[i64])>,
+) -> Option<Vec<f32>> {
+    let device = &session.device;
+    let inner_infos = &mut session.inner_infos;
+    for (input, (data, dims)) in input_data.iter() {
+        inner_infos.insert(
+            input.to_string(),
+            InnerInfo {
+                buffer: resource::create_buffer_init(device, data, input),
+                dims: dims.to_vec(),
+                inner_type: crate::compute::InnerType::ArrayVector,
+            },
+        );
+    }
+
+    let graph = session.model.get_graph();
+    let outputs = graph.get_output();
+    let queue = &session.queue;
+    let tera = &session.tera;
+
+    let time_start = Instant::now();
+    let mut iter = graph.get_node().iter();
+    let mut previous_node = iter.next().unwrap();
+    for node in iter {
+        let previous_node_op_type = previous_node.get_op_type();
+        let node_op_type = node.get_op_type();
+
+        if previous_node_op_type == "Conv" && node_op_type == "Relu" {
+            let mut tmp_node = crate::onnx::NodeProto::new();
+            tmp_node.set_op_type("ConvRelu".to_string());
+            tmp_node.set_name("ConvRelu".to_string());
+            tmp_node.set_input(protobuf::RepeatedField::from(
+                previous_node.get_input().to_vec(),
+            ));
+            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+
+            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
+        } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
+            compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
+        } else if previous_node_op_type == "Relu" {
+        } else if ["Dropout"].contains(&node_op_type) {
+            let mut tmp_node = crate::onnx::NodeProto::new();
+            tmp_node.set_op_type(previous_node_op_type.to_string());
+            tmp_node.set_name("Some node".to_string());
+            tmp_node.set_input(protobuf::RepeatedField::from(
+                previous_node.get_input().to_vec(),
+            ));
+            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+
+            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
+        } else {
+            compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
+        }
+
+        previous_node = node;
+    }
+    compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
+
+    println!("time: post_wait: {:#?}", time_start.elapsed());
+    let buffer_slice = inner_infos
+        .get(outputs[0].get_name())
+        //.get(&"Plus214_Output_0".to_string())
+        .unwrap()
+        .buffer
+        .slice(..);
+    // TODO: Define behavior for multi output.
+    let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+
+    device.poll(wgpu::Maintain::Wait);
+    // // OUTPUT
+
+    buffer_future.await.expect("failed to run compute on gpu!");
+    // Gets contents of buffer
+    let data = buffer_slice.get_mapped_range();
+    // Since contents are got in bytes, this converts these bytes back to f32
+    let result = bytemuck::cast_slice(&data).to_vec();
+
+    Some(result)
+}
 pub struct InnerInfo {
     buffer: wgpu::Buffer,
     dims: Vec<i64>,
@@ -146,18 +238,17 @@ pub fn get_attribute<'a>(
             .get_attribute()
             .iter()
             .find(|attr| attr.get_name() == attribute)
-            .unwrap_or(&default),
+            .unwrap_or(default),
         None => node
             .get_attribute()
             .iter()
             .find(|attr| attr.get_name() == attribute)
-            .expect(
-                format!(
+            .unwrap_or_else(|| {
+                panic!(
                     "Did not find required attribute: {}, for node: {}",
                     attribute,
                     node.get_name()
                 )
-                .as_str(),
-            ),
+            }),
     }
 }
