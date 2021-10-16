@@ -29,7 +29,6 @@ struct Bindings {
 pub fn wrapper(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    graph: &crate::onnx::GraphProto,
     node: &crate::onnx::NodeProto,
     inner_infos: &HashMap<String, crate::InnerInfo>,
     tera: &Tera,
@@ -118,6 +117,7 @@ pub fn wrapper(
     // TODO: Make defining threads more clean.
 
     time = Instant::now() - time_before_render + time;
+    println!("time: {:#?}", time);
     // Generating the compute pipeline and binding group.
     let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,

@@ -135,7 +135,7 @@ pub fn generate_buffer<'a>(
         }
         // Experimental
         "Concat" => {
-            let mut output_dims = input_dims.clone();
+            let mut output_dims = input_dims;
             let input_right_dims = if let Some(inner_info) = inner_infos.get(&inputs[1]) {
                 inner_info.dims.clone()
             } else {
@@ -224,7 +224,7 @@ pub fn generate_buffer<'a>(
             );
         }
         "MatMul" => {
-            let mut output_dims = input_dims.clone();
+            let mut output_dims = input_dims;
             let input_right_dims = if let Some(inner_info) = inner_infos.get(&inputs[1]) {
                 inner_info.dims.clone()
             } else {
@@ -297,7 +297,7 @@ pub fn generate_buffer<'a>(
                 .get_int64_data()
                 .to_vec();
 
-            let mut output_dims = input_dims.clone();
+            let mut output_dims = input_dims;
             for i in axis {
                 output_dims.remove(i as usize);
             }

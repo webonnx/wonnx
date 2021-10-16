@@ -22,7 +22,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let dims = vec![1, 3 as i64, n as i64, n as i64];
     input_data.insert("data".to_string(), (data.as_slice(), dims.as_slice()));
 
-    let mut session = wonnx::Session::from_path("tests/vgg19-7.onnx")
+    let mut session = wonnx::Session::from_path("examples/data/models/vgg19-7.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();

@@ -22,7 +22,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let dims = vec![1, n as i64];
     input_data.insert("x".to_string(), (data.as_slice(), dims.as_slice()));
 
-    let mut session = wonnx::Session::from_path("tests/single_relu.onnx")
+    let mut session = wonnx::Session::from_path("examples/data/models/single_relu.onnx")
         .await
         .unwrap();
 

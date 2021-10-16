@@ -1,4 +1,3 @@
-use log::debug;
 use wgpu::util::DeviceExt;
 
 // Get a device and a queue
@@ -39,7 +38,7 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
     let size = array.len();
     if size % 4 != 0 && size != 0 {
         let mut array = array.to_vec();
-        array.resize(size + 4 - size % 4, array[0].clone());
+        array.resize(size + 4 - size % 4, array[0]);
 
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
@@ -49,7 +48,7 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
     } else {
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
-            contents: bytemuck::cast_slice(&array),
+            contents: bytemuck::cast_slice(array),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
         })
     }

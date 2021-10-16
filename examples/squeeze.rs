@@ -2,8 +2,7 @@ use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
 // use wasm_bindgen_test::*;
 use chrono::Local;
-use env_logger::Builder;
-use image::{imageops::FilterType, ImageBuffer, Luma, Pixel, Rgb};
+use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use log::{info, LevelFilter};
 use ndarray::s;
 use std::io::Write;
@@ -24,7 +23,7 @@ async fn run() {
 
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-    //  let class_labels = get_imagenet_labels();
+    let _class_labels = get_imagenet_labels();
     //  println!("probabilities.len(): {:#?}", probabilities.len());
     //  println!(
     //      "Infered result: {} of class: {}",
@@ -47,7 +46,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         (image.as_slice().unwrap(), dims.as_slice()),
     );
 
-    let mut session = wonnx::Session::from_path("tests/opt-squeeze.onnx")
+    let mut session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
@@ -90,7 +89,7 @@ fn main() {
 pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
+            .join("examples/data/images")
             .join("bald_eagle.jpeg"),
     )
     .unwrap()

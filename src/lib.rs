@@ -1,7 +1,6 @@
 pub mod boilerplate;
 pub mod compute;
 use std::error;
-use std::fmt::Debug;
 pub mod compiler;
 pub mod dimensions;
 pub mod onnx;
@@ -104,7 +103,7 @@ impl Session {
             let data = initiated_data.get_float_data();
             let raw_data = initiated_data.get_raw_data();
 
-            if data.len() != 0 {
+            if !data.is_empty() {
                 inner_infos.insert(
                     input.to_string(),
                     InnerInfo {
@@ -113,7 +112,7 @@ impl Session {
                         inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
-            } else if raw_data.len() != 0 {
+            } else if !raw_data.is_empty() {
                 inner_infos.insert(
                     input.to_string(),
                     InnerInfo {
@@ -179,9 +178,9 @@ pub async fn run(
             tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
             tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
 
-            compute::wrapper(device, queue, graph, &tmp_node, inner_infos, tera).unwrap();
+            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
         } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
-            compute::wrapper(device, queue, graph, previous_node, inner_infos, tera).unwrap();
+            compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
         } else if previous_node_op_type == "Relu" {
         } else if ["Dropout"].contains(&node_op_type) {
             let mut tmp_node = crate::onnx::NodeProto::new();
@@ -193,14 +192,14 @@ pub async fn run(
             tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
             tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
 
-            compute::wrapper(device, queue, graph, &tmp_node, inner_infos, tera).unwrap();
+            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
         } else {
-            compute::wrapper(device, queue, graph, previous_node, inner_infos, tera).unwrap();
+            compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
         }
 
         previous_node = node;
     }
-    compute::wrapper(device, queue, graph, previous_node, inner_infos, tera).unwrap();
+    compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
 
     println!("time: post_wait: {:#?}", time_start.elapsed());
     let buffer_slice = inner_infos

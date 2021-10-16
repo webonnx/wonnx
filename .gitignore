@@ -1,2 +1,4 @@
 /target
 **/*.onnx
+/coverage
+*.profraw

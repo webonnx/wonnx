@@ -3,15 +3,9 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
+use std::path::Path;
 use std::time::Instant;
-use std::{
-    fs,
-    io::{self, BufRead, BufReader},
-    path::Path,
-    time::Duration,
-};
 
-use ndarray::s;
 // Args Management
 async fn run() {
     let probabilities = execute_gpu().await.unwrap();
@@ -40,7 +34,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         "Input3".to_string(),
         (image.as_slice().unwrap(), dims.as_slice()),
     );
-    let mut session = wonnx::Session::from_path("tests/opt-mnist.onnx")
+    let mut session = wonnx::Session::from_path("examples/data/models/opt-mnist.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
@@ -72,11 +66,11 @@ fn main() {
 pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("7.jpg"),
+            .join("examples/data/images")
+            .join("0.jpg"),
     )
     .unwrap()
-    .resize_to_fill(28 as u32, 28 as u32, FilterType::Nearest)
+    .resize_exact(28 as u32, 28 as u32, FilterType::Nearest)
     .to_rgb8();
 
     // Python:

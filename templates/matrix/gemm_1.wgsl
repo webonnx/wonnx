@@ -9,8 +9,10 @@ var<storage, read_write> _{{ bindings[1].tensor }}: Array;
 [[group(0), binding({{ bindings[2].counter }})]]
 var<storage, read_write> _{{ bindings[2].tensor }}: Array;
 
+{% if input | length == 3 %} // Bias
 [[group(0), binding({{ bindings[3].counter }})]]
 var<storage, read_write> _{{ bindings[3].tensor }}: Array;
+{% endif %}  
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
@@ -28,9 +30,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
         let vec_right = vec4<f32>(
                               _{{ input[1] }}.data[index_right], 
-                              _{{ input[1] }}.data[index_right + {{ right_columns | int }}u],
-                              _{{ input[1] }}.data[index_right + {{ 2 * right_columns | int }}u],
-                              _{{ input[1] }}.data[index_right + {{ 3 * right_columns | int }}u],
+                              _{{ input[1] }}.data[index_right + {{ right_columns }}u],
+                              _{{ input[1] }}.data[index_right + {{ 2 * right_columns }}u],
+                              _{{ input[1] }}.data[index_right + {{ 3 * right_columns }}u],
                           );
 	
         product = dot(vec_left, vec_right);

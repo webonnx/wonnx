@@ -15,8 +15,8 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         let m = rest / {{ H_x_W }}u;
         let rest = rest % {{ H_x_W }}u;
         
-        let y = rest / {{ width }}u - {{ pad[0] }}u;
-        let x = rest % {{ width }}u - {{ pad[1] }}u;
+        let y = rest / {{ width }}u;
+        let x = rest % {{ width }}u;
         
         var result: f32 = 0.0;
 {% if op_type is matching("averagepool") %}
@@ -26,13 +26,13 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         for(var c: u32 = 0u; c < {{ channel }}u; c = c + 1u) {
             for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
                 
-		let tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u; 
+		let tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
 
         	if ((tmp_y < {{ original_height }}u) && (tmp_y >= 0u)) {
         
 	        for(var j: u32 = 0u; j < {{ kernel_shape[1] }}u; j = j + 1u) { 
 
-                        let tmp_x = x * {{ stride[1] }}u + j * {{ dilation[1] }}u;
+                        let tmp_x = x * {{ stride[1] }}u + j * {{ dilation[1] }}u - {{ pad[1] }}u;
 
                         if ((tmp_x < {{ original_width }}u) && (tmp_x >= 0u)) {
 
