@@ -30,6 +30,7 @@ pub struct Session {
     pub model: onnx::ModelProto,
     pub inner_infos: HashMap<String, InnerInfo>,
     pub tera: Tera,
+    pub pipeline: Vec<(wgpu::ComputePipeline, wgpu::BindGroup, u32, u32, u32)>,
 }
 
 impl Session {
@@ -50,7 +51,7 @@ impl Session {
         )
         .expect("Could not deserialize the Model");
 
-        let inner_infos = Session::load_initializers(&device, &model).unwrap();
+        let (inner_infos, pipeline) = Session::load_initializers(&device, &model, &tera).unwrap();
 
         Ok(Session {
             device,
@@ -58,6 +59,7 @@ impl Session {
             model,
             inner_infos,
             tera,
+            pipeline,
         })
     }
 
@@ -73,7 +75,7 @@ impl Session {
         };
         let (device, queue) = promise.await;
 
-        let inner_infos = Session::load_initializers(&device, &model).unwrap();
+        let (inner_infos, pipeline) = Session::load_initializers(&device, &model, &tera).unwrap();
 
         Ok(Session {
             device,
@@ -81,13 +83,18 @@ impl Session {
             model,
             inner_infos,
             tera,
+            pipeline,
         })
     }
 
     pub fn load_initializers(
         device: &wgpu::Device,
         model: &onnx::ModelProto,
-    ) -> Result<HashMap<std::string::String, InnerInfo>> {
+        tera: &Tera,
+    ) -> Result<(
+        HashMap<std::string::String, InnerInfo>,
+        Vec<(wgpu::ComputePipeline, wgpu::BindGroup, u32, u32, u32)>,
+    )> {
         let mut inner_infos = HashMap::new();
         let initializers = model.get_graph().get_initializer();
         let graph = model.get_graph();
@@ -135,7 +142,55 @@ impl Session {
             dimensions::generate_buffer(node, inputs, device, &mut inner_infos, initializers);
         }
 
-        Ok(inner_infos)
+        let mut iter = graph.get_node().iter();
+        let first_node = iter.next();
+        let mut previous_node = iter.next().unwrap();
+
+        let mut pipeline = Vec::new();
+
+        for node in iter {
+            let previous_node_op_type = previous_node.get_op_type();
+            let node_op_type = node.get_op_type();
+
+            if previous_node_op_type == "Conv" && node_op_type == "Relu" {
+                let mut tmp_node = crate::onnx::NodeProto::new();
+                tmp_node.set_op_type("ConvRelu".to_string());
+                tmp_node.set_name("ConvRelu".to_string());
+                tmp_node.set_input(protobuf::RepeatedField::from(
+                    previous_node.get_input().to_vec(),
+                ));
+                tmp_node
+                    .set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+                tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+
+                pipeline
+                    .push(compute::preprocessing(device, &tmp_node, &inner_infos, tera).unwrap());
+            } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
+                pipeline.push(
+                    compute::preprocessing(device, previous_node, &inner_infos, tera).unwrap(),
+                );
+            } else if previous_node_op_type == "Relu" {
+                //        } else if ["Dropout"].contains(&node_op_type) {
+                //            let mut tmp_node = crate::onnx::NodeProto::new();
+                //            tmp_node.set_op_type(previous_node_op_type.to_string());
+                //            tmp_node.set_name("Some node".to_string());
+                //            tmp_node.set_input(protobuf::RepeatedField::from(
+                //                previous_node.get_input().to_vec(),
+                //            ));
+                //            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+                //            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+                //
+                //            compute::preprocessing(device, queue, &tmp_node, inner_infos, tera).unwrap();
+            } else {
+                pipeline.push(
+                    compute::preprocessing(device, previous_node, &inner_infos, tera).unwrap(),
+                );
+            }
+
+            previous_node = node;
+        }
+        pipeline.push(compute::preprocessing(device, previous_node, &inner_infos, tera).unwrap());
+        Ok((inner_infos, pipeline))
     }
 }
 
@@ -157,49 +212,31 @@ pub async fn run(
     }
 
     let graph = session.model.get_graph();
+    let first_node = graph.get_node().iter().next().unwrap();
     let outputs = graph.get_output();
     let queue = &session.queue;
-    let tera = &session.tera;
 
     let time_start = Instant::now();
-    let mut iter = graph.get_node().iter();
-    let mut previous_node = iter.next().unwrap();
-    for node in iter {
-        let previous_node_op_type = previous_node.get_op_type();
-        let node_op_type = node.get_op_type();
-
-        if previous_node_op_type == "Conv" && node_op_type == "Relu" {
-            let mut tmp_node = crate::onnx::NodeProto::new();
-            tmp_node.set_op_type("ConvRelu".to_string());
-            tmp_node.set_name("ConvRelu".to_string());
-            tmp_node.set_input(protobuf::RepeatedField::from(
-                previous_node.get_input().to_vec(),
-            ));
-            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
-            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
-
-            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
-        } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
-            compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
-        } else if previous_node_op_type == "Relu" {
-            //        } else if ["Dropout"].contains(&node_op_type) {
-            //            let mut tmp_node = crate::onnx::NodeProto::new();
-            //            tmp_node.set_op_type(previous_node_op_type.to_string());
-            //            tmp_node.set_name("Some node".to_string());
-            //            tmp_node.set_input(protobuf::RepeatedField::from(
-            //                previous_node.get_input().to_vec(),
-            //            ));
-            //            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
-            //            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
-            //
-            //            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
-        } else {
-            compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
-        }
-
-        previous_node = node;
-    }
-    compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
+    session.pipeline.insert(
+        0,
+        compute::preprocessing(device, first_node, &inner_infos, &session.tera).unwrap(),
+    );
+    session
+        .pipeline
+        .iter()
+        .for_each(|(compute_pipeline, bind_group, x, y, z)| {
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                let mut cpass =
+                    encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+                cpass.set_pipeline(&compute_pipeline);
+                cpass.set_bind_group(0, &bind_group, &[]);
+                // cpass.insert_debug_marker("compute");
+                cpass.dispatch(*x, *y, *z); // Number of cells to run, the (x,y,z) size of item being processed
+            }
+            queue.submit(Some(encoder.finish()));
+        });
 
     let buffer_slice = inner_infos
         .get(outputs[0].get_name())
