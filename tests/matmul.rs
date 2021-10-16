@@ -14,9 +14,7 @@ async fn run() {
     let _ = execute_gpu().await.unwrap();
 
     let _ = single_dimension_matrix_multiplication().await.unwrap();
-    for i in 0..10 {
-        // println!("steps: {:?}", &steps[n * i..n * (i + 1)]);
-    }
+    // println!("steps: {:?}", &steps[n * i..n * (i + 1)]);
     //assert_eq!(steps[0..5], [16.0, 16.0, 16.0, 16.0, 16.0]);
     #[cfg(target_arch = "wasm32")]
     log::info!("steps[0..5]: {:#?}", &steps[0..5]);
@@ -131,7 +129,7 @@ async fn single_dimension_matrix_multiplication() -> Option<Vec<f32>> {
     let n: usize = 128;
     let mut input_data = HashMap::new();
 
-    let mut data_a = ndarray::Array::random((1, n), Uniform::new(0., 10.));
+    let data_a = ndarray::Array::random((1, n), Uniform::new(0., 10.));
 
     let dims_a = vec![1 as i64, n as i64];
     let data_b = ndarray::Array::random((n, n), Uniform::new(0., 10.));

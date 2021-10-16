@@ -25,12 +25,15 @@ pub fn format_node(
         // Map simple function
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
         | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => {
-            ("endomorphism/map.wgsl".to_string(), length as _, 1, 1)
+            ("endomorphism/map.wgsl".to_string(), (length / 4) as _, 1, 1)
         }
         // Copy data
-        "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Softmax" => {
-            ("endomorphism/copy.wgsl".to_string(), length as _, 1, 1)
-        }
+        "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Softmax" => (
+            "endomorphism/copy.wgsl".to_string(),
+            (length / 4) as _,
+            1,
+            1,
+        ),
         // Arithmetic operation
         "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
         | "Mod" | "Mul" | "Or" | "Sub" => {
@@ -54,7 +57,7 @@ pub fn format_node(
             );
             (
                 "endomorphism/arithmetic.wgsl".to_string(),
-                length as _,
+                (length / 4) as _,
                 1,
                 1,
             )
@@ -71,7 +74,7 @@ pub fn format_node(
 
             (
                 "endomorphism/batchnormalization.wgsl".to_string(),
-                length as _,
+                (length / 4) as _,
                 1,
                 1,
             )
@@ -84,16 +87,19 @@ pub fn format_node(
             context.insert("alpha", &alpha);
             (
                 "endomorphism/activation.wgsl".to_string(),
-                length as _,
+                (length / 4) as _,
                 1,
                 1,
             )
         }
         "Concat" => {
-            context.insert("len_0", &(input_dims[1] * input_dims[2] * input_dims[3]));
+            context.insert(
+                "len_0",
+                &(input_dims[0] * input_dims[1] * input_dims[2] * input_dims[3]),
+            );
             (
                 "matrix/concat.wgsl".to_string(),
-                crate::utils::len(output_dims) as _,
+                output_dims.iter().product::<i64>() as u32,
                 1,
                 1,
             )

@@ -1,6 +1,5 @@
 {% include "structs.wgsl" %}
 
-
 {% for binding in bindings %}
 [[group(0), binding({{ binding.counter }})]]
 var<storage, read_write> _{{ binding.tensor }}: Array;
@@ -19,11 +18,10 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         let x = rest % {{ width }}u;
         
         var result: f32 = 0.0;
-{% if op_type is matching("averagepool") %}
-        var n: f32 = 0.0;      
-{% endif %}
 
+{% if op_type is matching("conv") or op_type is matching("convrelu") %}
         for(var c: u32 = 0u; c < {{ channel }}u; c = c + 1u) {
+{% endif %}
             for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
                 
 		let tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
@@ -36,31 +34,32 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
                         if ((tmp_x < {{ original_width }}u) && (tmp_x >= 0u)) {
 
-                                let tmp_index = batch_number * {{ original_C_x_H_x_W }}u + c * {{ original_H_x_W }}u + tmp_y * {{ original_width }}u + tmp_x;
-
 {% if op_type is matching("conv") or op_type is matching("convrelu") %}
+                                let tmp_index = batch_number * {{ original_C_x_H_x_W }}u + c * {{ original_H_x_W }}u + tmp_y * {{ original_width }}u + tmp_x;
                                 let index_kernel = m * {{ kernel_channel_len }}u + c * {{ kernel_len }}u + i * {{ kernel_shape[1] }}u + j;
 
-                                result = result + _{{ input[0] }}.data[tmp_index] * _{{ input[1] }}.data[index_kernel];
+                                result = fma(_{{ input[0] }}.data[tmp_index],_{{ input[1] }}.data[index_kernel], result);
 				
 {% elif op_type is matching("maxpool") %}
+                                let tmp_index = batch_number * {{ original_C_x_H_x_W }}u + m * {{ original_H_x_W }}u + tmp_y * {{ original_width }}u + tmp_x;
 				result = max(result, _{{ input[0] }}.data[tmp_index]);
 
 {% elif op_type is matching("averagepool") %}
+                                let tmp_index = batch_number * {{ original_C_x_H_x_W }}u + m * {{ original_H_x_W }}u + tmp_y * {{ original_width }}u + tmp_x;
 				result = result + _{{ input[0] }}.data[tmp_index];
-				n = n + 1.0;
 {% endif %}
-  	              }
+                        }
   	        }
 		}
             }
+{% if op_type is matching("conv") or op_type is matching("convrelu") %}
 	}
-
+{% endif %}
 
 {% if op_type is matching("averagepool") %}
-        _{{ output[0] }}.data[gidx] = result/n;
+        _{{ output[0] }}.data[gidx] = result/{{ kernel_len }}.;
 {% elif op_type is matching("convrelu") %}
-        _{{ output[0] }}.data[gidx] = max(result{% if input | length == 3 %} + _{{ input[2] }}.data[m]{% endif %}, 0.0);
+        _{{ output[0] }}.data[gidx] = max(result{% if input | length == 3 %} + _{{ input[2] }}.data[m]{% endif %}, 0.);
 {% else %}
         _{{ output[0] }}.data[gidx] = result{% if input | length == 3 %} + _{{ input[2] }}.data[m]{% endif %};
 {% endif %}

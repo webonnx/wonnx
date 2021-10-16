@@ -6,13 +6,10 @@ use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
 
 async fn run() {
-    let steps = conv_pad().await.unwrap();
-
-    let conv = 2;
-    let n = 5;
+    let conv_pad = conv_pad().await.unwrap();
 
     assert_eq!(
-        steps,
+        conv_pad,
         [
             12.0, 21.0, 27.0, 33.0, 24.0, 33.0, 54.0, 63.0, 72.0, 51.0, 63.0, 99.0, 108.0, 117.0,
             81.0, 93.0, 144.0, 153.0, 162.0, 111.0, 72.0, 111.0, 117.0, 123.0, 84.0, 12.0, 21.0,
@@ -26,9 +23,6 @@ async fn run() {
     );
 
     let conv_without_pad = conv_without_pad().await.unwrap();
-
-    let conv = 2;
-    let n = 5;
 
     assert_eq!(
         conv_without_pad,
@@ -116,7 +110,7 @@ async fn conv_simple() -> Option<Vec<f32>> {
 
     let kernel_n = 2;
     let m = 1;
-    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|x| 1 as f32).collect();
+    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();
     let mut initializer_w = crate::onnx::TensorProto::new();
     initializer_w.set_name("W".to_string());
     initializer_w.set_float_data(data_w);
@@ -351,7 +345,6 @@ async fn conv_without_pad() -> Option<Vec<f32>> {
 async fn conv_stride() -> Option<Vec<f32>> {
     // USER INPUT
 
-    let n: usize = 5;
     let c = 1;
     let mut input_data = HashMap::new();
 
@@ -453,7 +446,6 @@ async fn conv_stride() -> Option<Vec<f32>> {
 async fn conv_asymetric_stride() -> Option<Vec<f32>> {
     // USER INPUT
 
-    let n: usize = 5;
     let c = 1;
     let mut input_data = HashMap::new();
 

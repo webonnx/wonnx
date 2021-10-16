@@ -67,7 +67,7 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("examples/data/images")
-            .join("0.jpg"),
+            .join("7.jpg"),
     )
     .unwrap()
     .resize_exact(28 as u32, 28 as u32, FilterType::Nearest)

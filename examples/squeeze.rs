@@ -18,18 +18,31 @@ use std::{
 async fn run() {
     let probabilities = execute_gpu().await.unwrap();
 
-    println!("probabilities[0..5]: {:?}", &probabilities[0..100]);
+    // let conv = 10;
+    // let n = 13;
+    // for i in 0..conv {
+    //     println!("");
+    //     for j in 0..n {
+    //         info!(
+    //             "steps: {:?}",
+    //             &probabilities[i * n * n + n * j..i * n * n + n * (j + 1)]
+    //         );
+    //     }
+    //     println!("steps: ]");
+    // }
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
 
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-    let _class_labels = get_imagenet_labels();
-    //  println!("probabilities.len(): {:#?}", probabilities.len());
-    //  println!(
-    //      "Infered result: {} of class: {}",
-    //      class_labels[probabilities[0].0], probabilities[0].0
-    //  );
-    // println!("steps[1..5]: {:#?}", &steps[0..5]);
+    let class_labels = get_imagenet_labels();
+    println!("probabilities.len(): {:#?}", probabilities.len());
+
+    for i in 0..10 {
+        println!(
+            "Infered result: {} of class: {}",
+            class_labels[probabilities[i].0], probabilities[i].0
+        );
+    }
     #[cfg(target_arch = "wasm32")]
     // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
     assert_eq!(steps[0..5], [0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -73,7 +86,7 @@ fn main() {
                     record.args()
                 )
             })
-            .filter(None, LevelFilter::Info)
+            // .filter(None, LevelFilter::Debug)
             .init();
 
         pollster::block_on(run());
@@ -90,10 +103,10 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("examples/data/images")
-            .join("bald_eagle.jpeg"),
+            .join("italian_greyhound.jpeg"),
     )
     .unwrap()
-    .resize_to_fill(224 as u32, 224 as u32, FilterType::Nearest)
+    .resize_exact(224 as u32, 224 as u32, FilterType::Nearest)
     .to_rgb8();
 
     // Python:

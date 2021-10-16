@@ -182,17 +182,17 @@ pub async fn run(
         } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
             compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
         } else if previous_node_op_type == "Relu" {
-        } else if ["Dropout"].contains(&node_op_type) {
-            let mut tmp_node = crate::onnx::NodeProto::new();
-            tmp_node.set_op_type(previous_node_op_type.to_string());
-            tmp_node.set_name("Some node".to_string());
-            tmp_node.set_input(protobuf::RepeatedField::from(
-                previous_node.get_input().to_vec(),
-            ));
-            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
-            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
-
-            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
+            //        } else if ["Dropout"].contains(&node_op_type) {
+            //            let mut tmp_node = crate::onnx::NodeProto::new();
+            //            tmp_node.set_op_type(previous_node_op_type.to_string());
+            //            tmp_node.set_name("Some node".to_string());
+            //            tmp_node.set_input(protobuf::RepeatedField::from(
+            //                previous_node.get_input().to_vec(),
+            //            ));
+            //            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+            //            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+            //
+            //            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
         } else {
             compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
         }
@@ -201,10 +201,9 @@ pub async fn run(
     }
     compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
 
-    println!("time: post_wait: {:#?}", time_start.elapsed());
     let buffer_slice = inner_infos
         .get(outputs[0].get_name())
-        //.get(&"Plus214_Output_0".to_string())
+        //    .get(&"squeezenet0_relu25_fwd".to_string())
         .unwrap()
         .buffer
         .slice(..);
@@ -220,6 +219,7 @@ pub async fn run(
     // Since contents are got in bytes, this converts these bytes back to f32
     let result = bytemuck::cast_slice(&data).to_vec();
 
+    println!("time: post_wait: {:#?}", time_start.elapsed());
     Some(result)
 }
 pub struct InnerInfo {
