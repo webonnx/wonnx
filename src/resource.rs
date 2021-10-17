@@ -11,6 +11,7 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
         .request_adapter(&wgpu::RequestAdapterOptionsBase {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: None,
+            force_fallback_adapter: true,
         })
         .await
         .expect("No GPU Found for referenced preference");
