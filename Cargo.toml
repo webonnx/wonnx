@@ -1,6 +1,6 @@
 [package]
 name = "wonnx"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["haixuanTao <hai-xuan.tao@student.ecp.fr>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu= "0.10.2"
+wgpu= "0.11.0"
 bytemuck = "1.7.2"
 env_logger = "0.9.0"
 pollster = "0.2.4"
@@ -20,7 +20,6 @@ log = "0.4.14"
 rayon = "1.5.1"
 bytemuck_derive = "1.0.1"
 protobuf = { version = "2", features = ["with-bytes"] }
-onnxruntime = { path = "/home/peter/Documents/CONTRIB/onnxruntime-rs/onnxruntime", features = ["cuda"]}
 lazy_static = "1.4.0"
 tera = "1.12.1"
 serde_derive = "1.0.68"
@@ -33,6 +32,8 @@ image = "0.23.14"
 ndarray = "0.15.3"
 ureq = "2.2.0"
 ndarray-rand = "0.14.0"
+wgpu-profiler = "0.7.0"
+onnxruntime = { path = "/home/peter/Documents/CONTRIB/onnxruntime-rs/onnxruntime", features = ["cuda"]}
 
 [workspace]
 resolver = "2"
