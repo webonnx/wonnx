@@ -30,7 +30,7 @@ pub fn format_node(
         // Copy data
         "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Softmax" => (
             "endomorphism/copy.wgsl".to_string(),
-            (length / 4) as _,
+            (length / 16) as _,
             1,
             1,
         ),
@@ -72,12 +72,12 @@ pub fn format_node(
 
             todo!();
 
-            (
-                "endomorphism/batchnormalization.wgsl".to_string(),
-                (length / 4) as _,
-                1,
-                1,
-            )
+            //   (
+            //       "endomorphism/batchnormalization.wgsl".to_string(),
+            //       (length / 4) as _,
+            //       1,
+            //       1,
+            //   )
         }
         "Celu" | "Elu" => {
             let mut alpha_default = onnx::AttributeProto::new();
@@ -99,7 +99,7 @@ pub fn format_node(
             );
             (
                 "matrix/concat.wgsl".to_string(),
-                output_dims.iter().product::<i64>() as u32,
+                (output_dims.iter().product::<i64>() / 16) as u32,
                 1,
                 1,
             )
@@ -194,7 +194,7 @@ pub fn format_node(
             }
             // GLSL shader for convolution computation
             (
-                "pool/conv.wgsl".to_string(),
+                "pool/aggregate.wgsl".to_string(),
                 (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
                 1,
                 1,
@@ -264,10 +264,9 @@ pub fn format_node(
             context.insert("input_dims", &input_dims);
 
             context.insert(
-                "M_C_x_H_x_W",
+                "M_x_H_x_W",
                 &(output_dims[1] * output_dims[2] * output_dims[3]),
             );
-            context.insert("C_x_H_x_W", &(output_dims[2] * output_dims[3]));
             context.insert("H_x_W", &(output_dims[2] * output_dims[3]));
             context.insert(
                 "original_C_x_H_x_W",
@@ -292,13 +291,31 @@ pub fn format_node(
                 context.insert("conv_relu", &true);
             }
             // GLSL shader for convolution computation
-            (
-                "pool/conv_parallel.wgsl".to_string(),
-                (output_dims[0] * input_dims[1] * output_dims[1] * output_dims[2] * output_dims[3])
-                    as _,
-                1,
-                1,
-            )
+            if (strides == [1, 1])
+                && (kernel_shape == [1, 1])
+                && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
+            {
+                (
+                    "pool/conv_kernel_1.wgsl".to_string(),
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                    1,
+                    1,
+                )
+            } else if (strides == [1, 1]) && (kernel_shape == [3, 3]) && (dilations == [1, 1]) {
+                (
+                    "pool/conv_kernel_3.wgsl".to_string(),
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                    1,
+                    1,
+                )
+            } else {
+                (
+                    "pool/conv.wgsl".to_string(),
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                    1,
+                    1,
+                )
+            }
         }
         "Gemm" | "MatMul" => {
             let mut alpha_default = onnx::AttributeProto::new();
@@ -338,7 +355,7 @@ pub fn format_node(
             let len_0 = input_dims[0];
             let len_1 = input_dims[1] / 4;
 
-            let perm = get_attribute("perm", None, node).get_ints();
+            // TODO: add perm: let perm = get_attribute("perm", None, node).get_ints();
             context.insert("len_1", &len_1);
             context.insert("len_0", &len_0);
             ("matrix/transpose.wgsl".to_string(), (length / 4) as _, 1, 1)
