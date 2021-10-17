@@ -104,7 +104,7 @@ pub fn format_node(
                 1,
             )
         }
-        "Conv" | "MaxPool" | "AveragePool" | "ConvRelu" => {
+        "MaxPool" | "AveragePool" => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims.len() == 4usize);
 
@@ -196,6 +196,106 @@ pub fn format_node(
             (
                 "pool/conv.wgsl".to_string(),
                 (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                1,
+                1,
+            )
+        }
+        "Conv" | "ConvRelu" => {
+            // TODO: Conv only support NxCxHxW for the moment.
+            debug_assert!(input_dims.len() == 4usize);
+
+            let mut auto_pad_default = onnx::AttributeProto::new();
+            auto_pad_default.set_s("NOTSET".to_string().into_bytes());
+
+            let auto_pad =
+                from_utf8(get_attribute("auto_pad", Some(&auto_pad_default), node).get_s())
+                    .unwrap();
+
+            let mut dilations_default = onnx::AttributeProto::new();
+            dilations_default.set_ints(vec![1, 1]);
+
+            let dilations = get_attribute("dilations", Some(&dilations_default), node).get_ints();
+
+            let kernel_shape = get_attribute("kernel_shape", None, node).get_ints();
+
+            let mut strides_default = onnx::AttributeProto::new();
+            strides_default.set_ints(vec![1, 1]);
+
+            let strides = get_attribute("strides", Some(&strides_default), node).get_ints();
+
+            let mut pads_default = onnx::AttributeProto::new();
+            pads_default.set_ints(vec![0, 0, 0, 0]);
+
+            let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
+
+            let pads = match auto_pad {
+                "NOTSET" => pads.to_vec(),
+                "SAME_UPPER" => {
+                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
+                    let slack_0_div_2 = slack_0 / 2;
+                    let slack_rest_0 = slack_0 % 2;
+                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
+                    let slack_1_div_2 = slack_1 / 2;
+                    let slack_rest_1 = slack_1 % 2;
+                    vec![
+                        slack_0_div_2,
+                        slack_1_div_2,
+                        slack_0_div_2 + slack_rest_0,
+                        slack_1_div_2 + slack_rest_1,
+                    ]
+                }
+                "SAME_LOWER" => {
+                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
+                    let slack_0_div_2 = slack_0 / 2;
+                    let slack_rest_0 = slack_0 % 2;
+                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
+                    let slack_1_div_2 = slack_1 / 2;
+                    let slack_rest_1 = slack_1 % 2;
+                    vec![
+                        slack_0_div_2 + slack_rest_0,
+                        slack_1_div_2 + slack_rest_1,
+                        slack_0_div_2,
+                        slack_1_div_2,
+                    ]
+                }
+                _ => unimplemented!(),
+            };
+            context.insert("output_dims", &output_dims);
+            context.insert("input_dims", &input_dims);
+
+            context.insert(
+                "M_C_x_H_x_W",
+                &(output_dims[1] * output_dims[2] * output_dims[3]),
+            );
+            context.insert("C_x_H_x_W", &(output_dims[2] * output_dims[3]));
+            context.insert("H_x_W", &(output_dims[2] * output_dims[3]));
+            context.insert(
+                "original_C_x_H_x_W",
+                &(input_dims[1] * input_dims[2] * input_dims[3]),
+            );
+            context.insert("original_H_x_W", &(input_dims[2] * input_dims[3]));
+            context.insert("original_width", &input_dims[3]);
+            context.insert("width", &output_dims[3]);
+            context.insert("original_height", &input_dims[2]);
+            context.insert("channel", &input_dims[1]);
+            context.insert("stride", strides);
+            context.insert("kernel_shape", kernel_shape);
+            context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
+            context.insert(
+                "kernel_channel_len",
+                &(kernel_shape[0] * kernel_shape[1] * input_dims[1]),
+            );
+            context.insert("pad", &pads);
+            context.insert("dilation", &dilations);
+
+            if node.get_op_type() == "ConvRelu" {
+                context.insert("conv_relu", &true);
+            }
+            // GLSL shader for convolution computation
+            (
+                "pool/conv_parallel.wgsl".to_string(),
+                (output_dims[0] * input_dims[1] * output_dims[1] * output_dims[2] * output_dims[3])
+                    as _,
                 1,
                 1,
             )
