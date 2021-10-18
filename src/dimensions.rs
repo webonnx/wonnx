@@ -204,7 +204,7 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        (resource::size(&output_dims) * input_dims[1]) as _,
+                        resource::size(&output_dims) as _,
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
