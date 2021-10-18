@@ -294,10 +294,12 @@ pub fn format_node(
             if (strides == [1, 1])
                 && (kernel_shape == [1, 1])
                 && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
+                && (input_dims[1] % 16 == 0)
+                && (output_dims[1] % 4 == 0)
             {
                 (
                     "pool/conv_kernel_1.wgsl".to_string(),
-                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
                     1,
                     1,
                 )

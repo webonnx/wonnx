@@ -19,7 +19,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         
         var result: f32 = 0.0;
         let base_index = batch_number * {{ original_C_x_H_x_W }}u + m * {{ original_H_x_W }}u + y * {{ stride[0] }}u * {{ original_width }}u+ x * {{ stride[1] }}u;
-            for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
+        for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
                 
 		let tmp_y = i * {{ dilation[0] }}u; 
         
