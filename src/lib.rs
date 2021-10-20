@@ -94,21 +94,16 @@ impl Session {
         for initializer in initializers.iter() {
             let input = initializer.get_name();
 
-            let initiated_data = initializers
-                .iter()
-                .find(|x| x.get_name() == input)
-                .unwrap_or_else(|| panic!("Did not find initializer for input: {}", input));
-
-            let initiated_data_dims = initiated_data.get_dims().to_vec();
-            let data = initiated_data.get_float_data();
-            let raw_data = initiated_data.get_raw_data();
+            let initiated_data_dims = initializer.get_dims().to_vec();
+            let data = initializer.get_float_data();
+            let raw_data = initializer.get_raw_data();
 
             if !data.is_empty() {
                 inner_infos.insert(
                     input.to_string(),
                     InnerInfo {
                         buffer: resource::create_buffer_init(device, data, input),
-                        dims: initiated_data_dims.clone(),
+                        dims: initiated_data_dims,
                         inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
@@ -117,14 +112,14 @@ impl Session {
                     input.to_string(),
                     InnerInfo {
                         buffer: resource::create_buffer_init(device, raw_data, input),
-                        dims: initiated_data_dims.clone(),
+                        dims: initiated_data_dims,
                         inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             } else {
                 debug!(
                     "Not inserting input: {} with shape: {:?}",
-                    input, initiated_data
+                    input, initiated_data_dims
                 );
             };
         }
