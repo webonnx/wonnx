@@ -22,7 +22,21 @@ Wonnx aims for Blazing Fast AI on any device.
 ```bash
 cargo run --example custom_graph
 ```
+- Download [mnist](https://github.com/onnx/models/blob/master/vision/classification/mnist/model/mnist-8.onnx) or [squeezenet](https://github.com/onnx/models/blob/master/vision/classification/squeezenet/model/squeezenet1.0-9.onnx)
 
+- To run an onnx model, first simplify it with `onnx-simplifier`, with the command:
+
+```bash
+# pip install -U pip && pip install onnx-simplifier
+python -m onnxsim mnist-8.onnx  opt-mnist.onnx
+```
+
+- Then you can run it with:
+
+```bash
+cargo run --example mnist --release
+cargo run --example squeeze --release
+```
 ## To use
 
 ```rust
