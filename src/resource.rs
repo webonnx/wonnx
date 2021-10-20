@@ -44,13 +44,13 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
             contents: bytemuck::cast_slice(&array),
-            usage: wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
         })
     } else {
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
             contents: bytemuck::cast_slice(array),
-            usage: wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
         })
     }
 }

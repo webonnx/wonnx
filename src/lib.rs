@@ -91,23 +91,44 @@ impl Session {
         let mut inner_infos = HashMap::new();
         let initializers = model.get_graph().get_initializer();
         let graph = model.get_graph();
+
+        let mut kernel_3_inputs = vec![];
+
+        // Pad convolution layer that has shape [3, 3] with 4 bytes.
+        for node in model.get_graph().get_node() {
+            if node.get_op_type() == "Conv"
+                && get_attribute("kernel_shape", None, node).get_ints() == [3, 3]
+                && get_attribute("pads", None, node).get_ints() == [1, 1, 1, 1]
+            {
+                let string = node.get_input()[1].as_str();
+                kernel_3_inputs.push(string);
+            }
+        }
+
         for initializer in initializers.iter() {
             let input = initializer.get_name();
 
             let initiated_data_dims = initializer.get_dims().to_vec();
             let data = initializer.get_float_data();
-            let raw_data = initializer.get_raw_data();
+            let mut raw_data = if !data.is_empty() {
+                bytemuck::cast_slice(&data)
+            } else {
+                initializer.get_raw_data()
+            };
 
-            if !data.is_empty() {
-                inner_infos.insert(
-                    input.to_string(),
-                    InnerInfo {
-                        buffer: resource::create_buffer_init(device, data, input),
-                        dims: initiated_data_dims,
-                        inner_type: crate::compute::InnerType::ArrayVector,
-                    },
-                );
-            } else if !raw_data.is_empty() {
+            let n = raw_data.len() / 12;
+
+            let mut padded_data = vec![];
+
+            if kernel_3_inputs.contains(&input) {
+                for i in 0..n {
+                    padded_data.extend_from_slice(&raw_data[12 * i..12 * (i + 1)]);
+                    padded_data.extend_from_slice(&[0; 4]);
+                }
+                raw_data = padded_data.as_slice();
+            }
+
+            if !raw_data.is_empty() {
                 inner_infos.insert(
                     input.to_string(),
                     InnerInfo {
@@ -198,7 +219,7 @@ pub async fn run(
 
     let buffer_slice = inner_infos
         .get(outputs[0].get_name())
-        //.get(&"squeezenet0_relu1_fwd".to_string())
+        //.get(&"squeezenet0_conv3_weight".to_string())
         .unwrap()
         .buffer
         .slice(..);

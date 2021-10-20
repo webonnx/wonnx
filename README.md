@@ -24,7 +24,7 @@ cargo run --example custom_graph
 ```
 - Download [mnist](https://github.com/onnx/models/blob/master/vision/classification/mnist/model/mnist-8.onnx) or [squeezenet](https://github.com/onnx/models/blob/master/vision/classification/squeezenet/model/squeezenet1.0-9.onnx)
 
-- To run an onnx model, first simplify it with `onnx-simplifier`, with the command:
+- To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
 
 ```bash
 # pip install -U pip && pip install onnx-simplifier
@@ -57,6 +57,8 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 }
 ```
 
+> Examples are available in the `examples` folder
+
 ## Test 
 
 ```bash
@@ -69,11 +71,9 @@ export RUSTFLAGS=--cfg=web_sys_unstable_apis
 wasm-pack test --node
 ```
 
-## Examples are available in the `tests` folder
-
 ## Language interface
 
-Aiming to be widly usable through:
+Aiming to be widely usable through:
 
 - a Python binding using PyO3
 - a JS binding using WASM

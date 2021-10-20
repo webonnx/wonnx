@@ -38,7 +38,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
-    let a = (wonnx::run(&mut session, input_data)).await;
+    let a = wonnx::run(&mut session, input_data).await;
     let time_post_compute = Instant::now();
     println!(
         "time: post_compute: {:#?}",
