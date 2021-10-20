@@ -203,7 +203,7 @@ pub async fn run(
 
     let buffer_slice = inner_infos
         .get(outputs[0].get_name())
-        //    .get(&"squeezenet0_relu25_fwd".to_string())
+        //.get(&"squeezenet0_relu1_fwd".to_string())
         .unwrap()
         .buffer
         .slice(..);

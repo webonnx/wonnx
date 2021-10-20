@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
 // use wasm_bindgen_test::*;
-use chrono::Local;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use log::info;
 use ndarray::s;
-use std::io::Write;
 use std::time::Instant;
 use std::{
     fs,
@@ -64,18 +62,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        env_logger::Builder::new()
-            .format(|buf, record| {
-                writeln!(
-                    buf,
-                    "{} [{}] - {}",
-                    Local::now().format("%dT%H:%M:%S.%f"),
-                    record.level(),
-                    record.args()
-                )
-            })
-            // .filter(None, LevelFilter::Debug)
-            .init();
+        env_logger::init();
 
         pollster::block_on(run());
     }

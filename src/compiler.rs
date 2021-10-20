@@ -30,7 +30,7 @@ pub fn format_node(
         // Copy data
         "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Softmax" => (
             "endomorphism/copy.wgsl".to_string(),
-            (length / 4) as _,
+            (length / 16) as _,
             1,
             1,
         ),
@@ -72,12 +72,12 @@ pub fn format_node(
 
             todo!();
 
-            (
-                "endomorphism/batchnormalization.wgsl".to_string(),
-                (length / 4) as _,
-                1,
-                1,
-            )
+            //   (
+            //       "endomorphism/batchnormalization.wgsl".to_string(),
+            //       (length / 4) as _,
+            //       1,
+            //       1,
+            //   )
         }
         "Celu" | "Elu" => {
             let mut alpha_default = onnx::AttributeProto::new();
@@ -99,12 +99,12 @@ pub fn format_node(
             );
             (
                 "matrix/concat.wgsl".to_string(),
-                output_dims.iter().product::<i64>() as u32,
+                (output_dims.iter().product::<i64>() / 16) as u32,
                 1,
                 1,
             )
         }
-        "Conv" | "MaxPool" | "AveragePool" | "ConvRelu" => {
+        "MaxPool" | "AveragePool" => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims.len() == 4usize);
 
@@ -194,11 +194,134 @@ pub fn format_node(
             }
             // GLSL shader for convolution computation
             (
-                "pool/conv.wgsl".to_string(),
-                (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                "pool/aggregate.wgsl".to_string(),
+                (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
                 1,
                 1,
             )
+        }
+        "Conv" | "ConvRelu" => {
+            // TODO: Conv only support NxCxHxW for the moment.
+            debug_assert!(input_dims.len() == 4usize);
+
+            let mut auto_pad_default = onnx::AttributeProto::new();
+            auto_pad_default.set_s("NOTSET".to_string().into_bytes());
+
+            let auto_pad =
+                from_utf8(get_attribute("auto_pad", Some(&auto_pad_default), node).get_s())
+                    .unwrap();
+
+            let mut dilations_default = onnx::AttributeProto::new();
+            dilations_default.set_ints(vec![1, 1]);
+
+            let dilations = get_attribute("dilations", Some(&dilations_default), node).get_ints();
+
+            let kernel_shape = get_attribute("kernel_shape", None, node).get_ints();
+
+            let mut strides_default = onnx::AttributeProto::new();
+            strides_default.set_ints(vec![1, 1]);
+
+            let strides = get_attribute("strides", Some(&strides_default), node).get_ints();
+
+            let mut pads_default = onnx::AttributeProto::new();
+            pads_default.set_ints(vec![0, 0, 0, 0]);
+
+            let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
+
+            let pads = match auto_pad {
+                "NOTSET" => pads.to_vec(),
+                "SAME_UPPER" => {
+                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
+                    let slack_0_div_2 = slack_0 / 2;
+                    let slack_rest_0 = slack_0 % 2;
+                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
+                    let slack_1_div_2 = slack_1 / 2;
+                    let slack_rest_1 = slack_1 % 2;
+                    vec![
+                        slack_0_div_2,
+                        slack_1_div_2,
+                        slack_0_div_2 + slack_rest_0,
+                        slack_1_div_2 + slack_rest_1,
+                    ]
+                }
+                "SAME_LOWER" => {
+                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
+                    let slack_0_div_2 = slack_0 / 2;
+                    let slack_rest_0 = slack_0 % 2;
+                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
+                    let slack_1_div_2 = slack_1 / 2;
+                    let slack_rest_1 = slack_1 % 2;
+                    vec![
+                        slack_0_div_2 + slack_rest_0,
+                        slack_1_div_2 + slack_rest_1,
+                        slack_0_div_2,
+                        slack_1_div_2,
+                    ]
+                }
+                _ => unimplemented!(),
+            };
+            context.insert("output_dims", &output_dims);
+            context.insert("input_dims", &input_dims);
+
+            context.insert(
+                "M_x_H_x_W",
+                &(output_dims[1] * output_dims[2] * output_dims[3]),
+            );
+            context.insert("H_x_W", &(output_dims[2] * output_dims[3]));
+            context.insert(
+                "original_C_x_H_x_W",
+                &(input_dims[1] * input_dims[2] * input_dims[3]),
+            );
+            context.insert("original_H_x_W", &(input_dims[2] * input_dims[3]));
+            context.insert("original_width", &input_dims[3]);
+            context.insert("width", &output_dims[3]);
+            context.insert("original_height", &input_dims[2]);
+            context.insert("channel", &input_dims[1]);
+            context.insert("stride", strides);
+            context.insert("kernel_shape", kernel_shape);
+            context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
+            context.insert(
+                "kernel_channel_len",
+                &(kernel_shape[0] * kernel_shape[1] * input_dims[1]),
+            );
+            context.insert("pad", &pads);
+            context.insert("dilation", &dilations);
+
+            if node.get_op_type() == "ConvRelu" {
+                context.insert("conv_relu", &true);
+            }
+            // GLSL shader for convolution computation
+            if (strides == [1, 1])
+                && (kernel_shape == [1, 1])
+                && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
+                && (input_dims[1] % 16 == 0)
+                && (output_dims[1] % 4 == 0)
+            {
+                (
+                    "pool/conv_kernel_1.wgsl".to_string(),
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+                    1,
+                    1,
+                )
+            } else if (strides == [1, 1])
+                && (kernel_shape == [3, 3])
+                && (dilations == [1, 1])
+                && (output_dims[1] % 4 == 0)
+            {
+                (
+                    "pool/conv_kernel_3.wgsl".to_string(),
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+                    1,
+                    1,
+                )
+            } else {
+                (
+                    "pool/conv.wgsl".to_string(),
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                    1,
+                    1,
+                )
+            }
         }
         "Gemm" | "MatMul" => {
             let mut alpha_default = onnx::AttributeProto::new();
@@ -238,7 +361,7 @@ pub fn format_node(
             let len_0 = input_dims[0];
             let len_1 = input_dims[1] / 4;
 
-            let perm = get_attribute("perm", None, node).get_ints();
+            // TODO: add perm: let perm = get_attribute("perm", None, node).get_ints();
             context.insert("len_1", &len_1);
             context.insert("len_0", &len_0);
             ("matrix/transpose.wgsl".to_string(), (length / 4) as _, 1, 1)
