@@ -5,17 +5,15 @@ struct ArrayMatrix3 {
     data: [[stride(48)]] array<mat3x3<f32>>;
 }; // this is used as both input and output for convenience
 
-
-
 [[group(0), binding({{ bindings[0].counter }})]]
-var<storage, read_write> var_{{ bindings[0].tensor }}: Array;
+var<storage, read> var_{{ bindings[0].tensor }}: Array;
 
 [[group(0), binding({{ bindings[1].counter }})]]
-var<storage, read_write> var_{{ bindings[1].tensor }}: ArrayMatrix3;
+var<storage, read> var_{{ bindings[1].tensor }}: ArrayMatrix3;
 
 {% if input | length == 3 %} // Bias
 [[group(0), binding({{ bindings[2].counter }})]]
-var<storage, read_write> var_{{ bindings[2].tensor }}: ArrayVector;
+var<storage, read> var_{{ bindings[2].tensor }}: ArrayVector;
 {% endif %}  
 
 [[group(0), binding({{ bindings[3].counter }})]]
