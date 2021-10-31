@@ -12,7 +12,7 @@ var<storage, read> var_{{ bindings[2].tensor }}: ArrayVector;
 {% endif %}  
 
 [[group(0), binding({{ bindings[3].counter }})]]
-var<storage, read_write> var_{{ bindings[3].tensor }}: Array;
+var<storage, write> var_{{ bindings[3].tensor }}: Array;
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
