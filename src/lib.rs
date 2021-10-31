@@ -96,9 +96,16 @@ impl Session {
 
         // Pad convolution layer that has shape [3, 3] with 4 bytes.
         for node in model.get_graph().get_node() {
+            let mut pads_default = onnx::AttributeProto::new();
+            pads_default.set_ints(vec![0, 0, 0, 0]);
+
+            let mut strides_default = onnx::AttributeProto::new();
+            strides_default.set_ints(vec![1, 1]);
+
             if node.get_op_type() == "Conv"
                 && get_attribute("kernel_shape", None, node).get_ints() == [3, 3]
-                && get_attribute("pads", None, node).get_ints() == [1, 1, 1, 1]
+                && get_attribute("pads", Some(&pads_default), node).get_ints() == [1, 1, 1, 1]
+                && get_attribute("strides", Some(&strides_default), node).get_ints() == [1, 1]
             {
                 let string = node.get_input()[1].as_str();
                 kernel_3_inputs.push(string);
