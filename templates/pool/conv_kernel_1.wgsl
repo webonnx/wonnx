@@ -9,10 +9,13 @@ var<storage, read> var_{{ bindings[1].tensor }}: ArrayMatrix;
 {% if input | length == 3 %} // Bias
 [[group(0), binding({{ bindings[2].counter }})]]
 var<storage, read> var_{{ bindings[2].tensor }}: ArrayVector;
-{% endif %}  
 
 [[group(0), binding({{ bindings[3].counter }})]]
 var<storage, write> var_{{ bindings[3].tensor }}: Array;
+{% else %}
+[[group(0), binding({{ bindings[2].counter }})]]
+var<storage, write> var_{{ bindings[2].tensor }}: Array;
+{% endif %}  
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {

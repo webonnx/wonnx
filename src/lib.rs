@@ -141,7 +141,6 @@ impl Session {
                     InnerInfo {
                         buffer: resource::create_buffer_init(device, raw_data, input),
                         dims: initiated_data_dims,
-                        inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             } else {
@@ -174,7 +173,6 @@ pub async fn run(
             InnerInfo {
                 buffer: resource::create_buffer_init(device, data, input),
                 dims: dims.to_vec(),
-                inner_type: crate::compute::InnerType::ArrayVector,
             },
         );
     }
@@ -248,7 +246,6 @@ pub async fn run(
 pub struct InnerInfo {
     buffer: wgpu::Buffer,
     dims: Vec<i64>,
-    inner_type: compute::InnerType,
 }
 
 pub fn get_attribute<'a>(

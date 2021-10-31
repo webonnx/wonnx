@@ -50,7 +50,6 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: input_dims,
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
@@ -129,7 +128,6 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
@@ -208,7 +206,6 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
@@ -229,7 +226,6 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
@@ -254,7 +250,6 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
@@ -297,7 +292,6 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
@@ -318,26 +312,10 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
-        "Clip" => {
-            {
-                let mut inner_info = inner_infos.get_mut(&inputs[1]).unwrap_or_else(|| {
-                    panic!("Did not find initializer for input Clip {}", inputs[1])
-                });
-
-                inner_info.inner_type = crate::compute::InnerType::Array;
-            }
-            {
-                let mut inner_info = inner_infos.get_mut(&inputs[2]).unwrap_or_else(|| {
-                    panic!("Did not find initializer for input Clip {}", inputs[1])
-                });
-
-                inner_info.inner_type = crate::compute::InnerType::Array;
-            }
-        }
+        "Clip" => {}
         "Reshape" => {
             let reshape = initializers
                 .iter()
@@ -361,7 +339,6 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
@@ -388,7 +365,6 @@ pub fn generate_buffer<'a>(
                         outputs[0].as_str(),
                     ),
                     dims: output_dims.to_vec(),
-                    inner_type: crate::compute::InnerType::ArrayVector,
                 },
             );
         }
@@ -413,7 +389,6 @@ pub fn generate_buffer<'a>(
                             outputs[0].as_str(),
                         ),
                         dims: output_dims.to_vec(),
-                        inner_type: crate::compute::InnerType::ArrayVector,
                     },
                 );
             } else {

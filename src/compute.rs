@@ -23,7 +23,6 @@ impl fmt::Display for InnerType {
 struct Bindings {
     counter: u32,
     tensor: String,
-    inner_type: String,
 }
 
 pub fn wrapper(
@@ -57,10 +56,6 @@ pub fn wrapper(
     let mut bindings = vec![];
 
     for tensor in inputs.iter() {
-        let inner_type = &inner_infos
-            .get(tensor)
-            .unwrap_or_else(|| panic!("Invalid input tensor: {}", tensor))
-            .inner_type;
         entries.push(wgpu::BindGroupEntry {
             binding: binding_counter,
             resource: inner_infos
@@ -72,7 +67,6 @@ pub fn wrapper(
         bindings.push(Bindings {
             counter: binding_counter,
             tensor: tensor.to_string(),
-            inner_type: inner_type.to_string(),
         });
         binding_counter += 1;
     }
@@ -89,7 +83,6 @@ pub fn wrapper(
         bindings.push(Bindings {
             counter: binding_counter,
             tensor: tensor.to_string(),
-            inner_type: "ArrayVector".to_string(),
         });
         binding_counter += 1;
         info!(
