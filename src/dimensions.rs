@@ -1,23 +1,9 @@
-use crate::get_attribute;
 use crate::onnx;
 use crate::resource;
+use crate::utils::{get_attribute, get_dimension};
 use crate::InnerInfo;
 use std::collections::HashMap;
 use std::str::from_utf8;
-
-fn get_dimension(inputs_onnx: &[onnx::ValueInfoProto], input_name: &str) -> Vec<i64> {
-    inputs_onnx
-        .iter()
-        .find(|x| x.get_name() == input_name)
-        .unwrap_or_else(|| panic!("Dimensions for input: {} was not found", input_name))
-        .get_field_type()
-        .get_tensor_type()
-        .get_shape()
-        .get_dim()
-        .iter()
-        .map(|x| x.get_dim_value())
-        .collect()
-}
 
 pub fn generate_buffer<'a>(
     node: &onnx::NodeProto,

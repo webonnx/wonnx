@@ -1,5 +1,5 @@
-use crate::get_attribute;
 use crate::onnx;
+use crate::utils::get_attribute;
 use std::collections::HashMap;
 use std::str::from_utf8;
 use tera::Context;

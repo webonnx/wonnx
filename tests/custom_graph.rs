@@ -7,11 +7,11 @@ use wonnx::*;
 async fn run() {
     let steps = execute_gpu().await.unwrap();
     let n = 32;
-
-    assert_eq!(steps[0..5], [0.0, 1.0, 2.0, 3.0, 4.0]);
     for i in 0..n {
         println!("steps: {:?}", &steps[n / 2 * i..n / 2 * (i + 1)]);
     }
+
+    assert_eq!(steps[0..5], [0.0, 1.0, 2.0, 3.0, 4.0]);
     #[cfg(target_arch = "wasm32")]
     log::info!("steps[0..5]: {:#?}", &steps[0..5]);
 }
