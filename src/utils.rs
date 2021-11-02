@@ -29,16 +29,18 @@ pub fn get_attribute<'a>(
     }
 }
 
-pub fn get_dimension(inputs_onnx: &[onnx::ValueInfoProto], input_name: &str) -> Vec<i64> {
-    inputs_onnx
-        .iter()
-        .find(|x| x.get_name() == input_name)
-        .unwrap_or_else(|| panic!("Dimensions for input: {} was not found", input_name))
-        .get_field_type()
-        .get_tensor_type()
-        .get_shape()
-        .get_dim()
-        .iter()
-        .map(|x| x.get_dim_value())
-        .collect()
+pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> Option<Vec<i64>> {
+    if let Some(info) = value_info.iter().find(|x| x.get_name() == input_name) {
+        Some(
+            info.get_field_type()
+                .get_tensor_type()
+                .get_shape()
+                .get_dim()
+                .iter()
+                .map(|x| x.get_dim_value())
+                .collect(),
+        )
+    } else {
+        None
+    }
 }

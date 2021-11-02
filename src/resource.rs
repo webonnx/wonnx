@@ -68,7 +68,7 @@ pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buff
         label: Some(name),
         size,
         mapped_at_creation: false,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
+        usage: wgpu::BufferUsages::STORAGE,
     })
 }
 

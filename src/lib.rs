@@ -91,8 +91,9 @@ impl Session {
         let initializers = model.get_graph().get_initializer();
         let graph = model.get_graph();
 
-        let mut value_info = graph.get_value_info().to_vec();
-        value_info.extend_from_slice(&graph.get_output());
+        let value_info = graph.get_value_info();
+
+        let output_info = &graph.get_output();
 
         let mut kernel_3_inputs = vec![];
 
@@ -117,19 +118,31 @@ impl Session {
 
             let outputs = node.get_output();
 
-            let output_dims = get_dimension(&value_info, &outputs[0]);
-
-            inner_infos.insert(
-                outputs[0].clone(),
-                InnerInfo {
-                    buffer: resource::create_buffer(
-                        device,
-                        len(&output_dims) as _,
-                        outputs[0].as_str(),
-                    ),
-                    dims: output_dims,
-                },
-            );
+            if let Some(output_dims) = get_dimension(&value_info, &outputs[0]) {
+                inner_infos.insert(
+                    outputs[0].clone(),
+                    InnerInfo {
+                        buffer: resource::create_buffer(
+                            device,
+                            len(&output_dims) as _,
+                            outputs[0].as_str(),
+                        ),
+                        dims: output_dims,
+                    },
+                );
+            } else if let Some(output_dims) = get_dimension(&output_info, &outputs[0]) {
+                inner_infos.insert(
+                    outputs[0].clone(),
+                    InnerInfo {
+                        buffer: resource::output_buffer(
+                            device,
+                            len(&output_dims) as _,
+                            outputs[0].as_str(),
+                        ),
+                        dims: output_dims,
+                    },
+                );
+            }
         }
 
         for initializer in initializers {
@@ -218,6 +231,7 @@ pub async fn run(
     println!("time: post_wait: {:#?}", time_start.elapsed());
     Some(result)
 }
+
 pub struct InnerInfo {
     buffer: wgpu::Buffer,
     dims: Vec<i64>,
