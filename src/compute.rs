@@ -2,28 +2,14 @@ use log::{debug, info};
 use serde_derive::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt;
 use tera::{Context, Tera};
 
 use std::time::Instant;
-
-#[derive(Debug, Serialize)]
-pub enum InnerType {
-    Array,
-    ArrayVector,
-}
-
-impl fmt::Display for InnerType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
 
 #[derive(Serialize)]
 struct Bindings {
     counter: u32,
     tensor: String,
-    inner_type: String,
 }
 
 pub fn wrapper(
@@ -57,10 +43,6 @@ pub fn wrapper(
     let mut bindings = vec![];
 
     for tensor in inputs.iter() {
-        let inner_type = &inner_infos
-            .get(tensor)
-            .unwrap_or_else(|| panic!("Invalid input tensor: {}", tensor))
-            .inner_type;
         entries.push(wgpu::BindGroupEntry {
             binding: binding_counter,
             resource: inner_infos
@@ -72,7 +54,6 @@ pub fn wrapper(
         bindings.push(Bindings {
             counter: binding_counter,
             tensor: tensor.to_string(),
-            inner_type: inner_type.to_string(),
         });
         binding_counter += 1;
     }
@@ -89,7 +70,6 @@ pub fn wrapper(
         bindings.push(Bindings {
             counter: binding_counter,
             tensor: tensor.to_string(),
-            inner_type: "ArrayVector".to_string(),
         });
         binding_counter += 1;
         info!(
@@ -113,7 +93,7 @@ pub fn wrapper(
     // TODO: Make defining threads more clean.
 
     time = Instant::now() - time_before_render + time;
-    println!("time: {:#?}", time);
+    info!("time to compute node: {:#?}", time);
     // Generating the compute pipeline and binding group.
 
     // Instantiates the pipeline.
@@ -131,7 +111,7 @@ pub fn wrapper(
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
-        layout: &compute_pipeline.get_bind_group_layout(0u32),
+        layout: &compute_pipeline.get_bind_group_layout(0),
         entries: &entries,
     });
 
@@ -141,9 +121,57 @@ pub fn wrapper(
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
         cpass.set_pipeline(&compute_pipeline);
         cpass.set_bind_group(0, &bind_group, &[]);
-        // cpass.insert_debug_marker("compute");
         cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
     }
     queue.submit(Some(encoder.finish()));
+    Ok(())
+}
+
+pub fn compute(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    graph: &crate::onnx::GraphProto,
+    inner_infos: &HashMap<String, crate::InnerInfo>,
+    tera: &Tera,
+) -> Result<(), wgpu::Error> {
+    let mut iter = graph.get_node().iter();
+    let mut previous_node = iter.next().unwrap();
+    for node in iter {
+        let previous_node_op_type = previous_node.get_op_type();
+        let node_op_type = node.get_op_type();
+
+        if previous_node_op_type == "Conv" && node_op_type == "Relu" {
+            let mut tmp_node = crate::onnx::NodeProto::new();
+            tmp_node.set_op_type("ConvRelu".to_string());
+            tmp_node.set_name("ConvRelu".to_string());
+            tmp_node.set_input(protobuf::RepeatedField::from(
+                previous_node.get_input().to_vec(),
+            ));
+            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+
+            crate::compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
+        } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
+            crate::compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
+        } else if previous_node_op_type == "Relu" {
+            //        } else if ["Dropout"].contains(&node_op_type) {
+            //            let mut tmp_node = crate::onnx::NodeProto::new();
+            //            tmp_node.set_op_type(previous_node_op_type.to_string());
+            //            tmp_node.set_name("Some node".to_string());
+            //            tmp_node.set_input(protobuf::RepeatedField::from(
+            //                previous_node.get_input().to_vec(),
+            //            ));
+            //            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
+            //            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+            //
+            //            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
+        } else {
+            crate::compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
+        }
+        
+        previous_node = node;
+    }
+    crate::compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
+
     Ok(())
 }

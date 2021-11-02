@@ -21,9 +21,12 @@ async fn run() {
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
     let class_labels = get_imagenet_labels();
-    println!("probabilities.len(): {:#?}", probabilities.len());
 
     for i in 0..10 {
+        //      println!(
+        //          "probabilities[i*9..(i+1)*9]: {:#?}",
+        //          &probabilities[i * 12..(i + 1) * 12]
+        //      );
         println!(
             "Infered result: {} of class: {}",
             class_labels[probabilities[i].0], probabilities[i].0

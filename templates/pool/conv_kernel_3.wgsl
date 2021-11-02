@@ -1,18 +1,26 @@
 {% include "structs.wgsl" %}
 
+[[block]]
+struct ArrayMatrix3 {
+    data: [[stride(48)]] array<mat3x3<f32>>;
+}; // this is used as both input and output for convenience
+
 [[group(0), binding({{ bindings[0].counter }})]]
-var<storage, read_write> var_{{ bindings[0].tensor }}: Array;
+var<storage, read> var_{{ bindings[0].tensor }}: Array;
 
 [[group(0), binding({{ bindings[1].counter }})]]
-var<storage, read_write> var_{{ bindings[1].tensor }}: Array;
+var<storage, read> var_{{ bindings[1].tensor }}: ArrayMatrix3;
 
 {% if input | length == 3 %} // Bias
 [[group(0), binding({{ bindings[2].counter }})]]
-var<storage, read_write> var_{{ bindings[2].tensor }}: ArrayVector;
-{% endif %}  
+var<storage, read> var_{{ bindings[2].tensor }}: ArrayVector;
 
 [[group(0), binding({{ bindings[3].counter }})]]
-var<storage, read_write> var_{{ bindings[3].tensor }}: Array;
+var<storage, write> var_{{ bindings[3].tensor }}: Array;
+{% else %}
+[[group(0), binding({{ bindings[2].counter }})]]
+var<storage, write> var_{{ bindings[2].tensor }}: Array;
+{% endif %}  
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
@@ -29,21 +37,21 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         var result = vec4<f32>(0., 0., 0., 0.);
         
         let root_index = batch_number * {{ original_C_x_H_x_W }}u;
-        let root_kernel_index = m * {{ kernel_channel_len * 4 }}u;
+        let root_kernel_index = m * {{ channel * 4 }}u;
 
         for(var c: u32 = 0u; c < {{ channel }}u; c = c + 1u) {
             
             let base_index = root_index + c * {{ original_H_x_W }}u;
-            let base_kernel_index = root_kernel_index + c * {{ kernel_len }}u;
+            let base_kernel_index = root_kernel_index + c;
+
+            var kernel_matrix_0 = var_{{ input[1] }}.data[base_kernel_index];
+            var kernel_matrix_1 = var_{{ input[1] }}.data[base_kernel_index + {{ channel }}u];
+            var kernel_matrix_2 = var_{{ input[1] }}.data[base_kernel_index + {{ 2 * channel }}u];
+            var kernel_matrix_3 = var_{{ input[1] }}.data[base_kernel_index + {{ 3 * channel }}u];
 
             for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
 
                 var tmp_vec = vec3<f32>(0., 0., 0.);
-
-                var kernel_vector_0 = vec3<f32>(0., 0., 0.);
-                var kernel_vector_1 = vec3<f32>(0., 0., 0.);
-                var kernel_vector_2 = vec3<f32>(0., 0., 0.);
-                var kernel_vector_3 = vec3<f32>(0., 0., 0.);
 
 		let tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
 
@@ -60,19 +68,15 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                                 
                                 tmp_vec[j] = var_{{ input[0] }}.data[tmp_index];
 
-                                kernel_vector_0[j] = var_{{ input[1] }}.data[index_kernel];
-                                kernel_vector_1[j] = var_{{ input[1] }}.data[index_kernel + {{ kernel_channel_len }}u];
-                                kernel_vector_2[j] = var_{{ input[1] }}.data[index_kernel + {{ kernel_channel_len * 2 }}u];
-                                kernel_vector_3[j] = var_{{ input[1] }}.data[index_kernel + {{ kernel_channel_len * 3 }}u];
-				
                         }
   	        }
 		}
+
                result = tmp_vec * mat4x3<f32>(
-                       kernel_vector_0,
-                       kernel_vector_1,
-                       kernel_vector_2,
-                       kernel_vector_3,
+                       kernel_matrix_0[i],
+                       kernel_matrix_1[i],
+                       kernel_matrix_2[i],
+                       kernel_matrix_3[i]
                ) + result;
             }
 

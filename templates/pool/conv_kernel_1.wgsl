@@ -1,18 +1,21 @@
 {% include "structs.wgsl" %}
 
 [[group(0), binding({{ bindings[0].counter }})]]
-var<storage, read_write> var_{{ bindings[0].tensor }}: Array;
+var<storage, read> var_{{ bindings[0].tensor }}: Array;
 
 [[group(0), binding({{ bindings[1].counter }})]]
-var<storage, read_write> var_{{ bindings[1].tensor }}: ArrayMatrix;
+var<storage, read> var_{{ bindings[1].tensor }}: ArrayMatrix;
 
 {% if input | length == 3 %} // Bias
 [[group(0), binding({{ bindings[2].counter }})]]
-var<storage, read_write> var_{{ bindings[2].tensor }}: ArrayVector;
-{% endif %}  
+var<storage, read> var_{{ bindings[2].tensor }}: ArrayVector;
 
 [[group(0), binding({{ bindings[3].counter }})]]
-var<storage, read_write> var_{{ bindings[3].tensor }}: Array;
+var<storage, write> var_{{ bindings[3].tensor }}: Array;
+{% else %}
+[[group(0), binding({{ bindings[2].counter }})]]
+var<storage, write> var_{{ bindings[2].tensor }}: Array;
+{% endif %}  
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
@@ -34,15 +37,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                 var base_kernel_index = root_kernel_index + c;
                 
                 var matrix_0 = var_{{ input[1] }}.data[base_kernel_index];
-
-                base_kernel_index = base_kernel_index + {{ channel / 16 }}u;
-                var matrix_1 = var_{{ input[1] }}.data[base_kernel_index];
-
-                base_kernel_index = base_kernel_index + {{ channel / 16 }}u;
-                var matrix_2 = var_{{ input[1] }}.data[base_kernel_index];
-
-                base_kernel_index = base_kernel_index + {{ channel / 16 }}u;
-                var matrix_3 = var_{{ input[1] }}.data[base_kernel_index];
+                var matrix_1 = var_{{ input[1] }}.data[base_kernel_index + {{ channel / 16 }}u];
+                var matrix_2 = var_{{ input[1] }}.data[base_kernel_index + {{ 2 * channel / 16 }}u];
+                var matrix_3 = var_{{ input[1] }}.data[base_kernel_index + {{ 3 * channel / 16 }}u];
 
                 for(var index_c_vec: u32 = 0u; index_c_vec < 4u; index_c_vec = index_c_vec + 1u) {
                         

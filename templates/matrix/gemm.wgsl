@@ -1,6 +1,22 @@
-{% extends "base.wgsl" %}
-{% block structs %}{% include "struct-ArrayVector.wgsl" %}{% endblock structs %}
-{% block main %}
+{% include "structs.wgsl" %}
+
+[[group(0), binding({{ bindings[0].counter }})]]
+var<storage, read> var_{{ bindings[0].tensor }}: ArrayVector;
+
+[[group(0), binding({{ bindings[1].counter }})]]
+var<storage, read> var_{{ bindings[1].tensor }}: ArrayVector;
+
+{% if input | length == 3 %} // Bias
+[[group(0), binding({{ bindings[2].counter }})]]
+var<storage, read> var_{{ bindings[2].tensor }}: ArrayVector;
+
+[[group(0), binding({{ bindings[3].counter }})]]
+var<storage, write> var_{{ bindings[3].tensor }}: ArrayVector;
+{% else %}
+[[group(0), binding({{ bindings[2].counter }})]]
+var<storage, write> var_{{ bindings[2].tensor }}: ArrayVector;
+{% endif %}  
+
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
     let y = global_id.x % {{ right_columns / 4 | int }}u;
@@ -47,4 +63,3 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
     }       
 {% endif %}  
 }
-{% endblock main %}
