@@ -30,7 +30,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 
     // ONNX INPUTS
     let mut shape_dims = vec![];
-    for dim in dims.iter() {
+    for dim in &dims {
         let mut shape_tensor_proto_dim = onnx::TensorShapeProto_Dimension::new();
         shape_tensor_proto_dim.set_dim_value(*dim);
         shape_dims.push(shape_tensor_proto_dim)

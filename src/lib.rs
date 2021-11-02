@@ -1,7 +1,6 @@
 pub mod compute;
 use std::error;
 pub mod compiler;
-pub mod dimensions;
 pub mod onnx;
 pub mod resource;
 pub mod utils;
@@ -10,6 +9,7 @@ use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::time::Instant;
 use tera::Tera;
+use utils::{get_dimension, len};
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 /// Creates a new session connected to the GPU.
@@ -91,6 +91,9 @@ impl Session {
         let initializers = model.get_graph().get_initializer();
         let graph = model.get_graph();
 
+        let mut value_info = graph.get_value_info().to_vec();
+        value_info.extend_from_slice(&graph.get_output());
+
         let mut kernel_3_inputs = vec![];
 
         // Pad convolution layer that has shape [3, 3] with 4 bytes.
@@ -111,9 +114,25 @@ impl Session {
                 let string = node.get_input()[1].as_str();
                 kernel_3_inputs.push(string);
             }
+
+            let outputs = node.get_output();
+
+            let output_dims = get_dimension(&value_info, &outputs[0]);
+
+            inner_infos.insert(
+                outputs[0].clone(),
+                InnerInfo {
+                    buffer: resource::create_buffer(
+                        device,
+                        len(&output_dims) as _,
+                        outputs[0].as_str(),
+                    ),
+                    dims: output_dims,
+                },
+            );
         }
 
-        for initializer in initializers.iter() {
+        for initializer in initializers {
             let input = initializer.get_name();
 
             let dims = initializer.get_dims().to_vec();
@@ -150,12 +169,6 @@ impl Session {
             };
         }
 
-        let inputs = graph.get_input();
-
-        for node in graph.get_node().iter() {
-            dimensions::generate_buffer(node, inputs, device, &mut inner_infos, initializers);
-        }
-
         Ok(inner_infos)
     }
 }
@@ -166,11 +179,11 @@ pub async fn run(
 ) -> Option<Vec<f32>> {
     let device = &session.device;
     let inner_infos = &mut session.inner_infos;
-    for (input, (data, dims)) in input_data.iter() {
+    for (input, (data, dims)) in input_data {
         inner_infos.insert(
             input.to_string(),
             InnerInfo {
-                buffer: resource::create_buffer_init(device, data, input),
+                buffer: resource::create_buffer_init(device, data, &input),
                 dims: dims.to_vec(),
             },
         );

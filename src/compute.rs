@@ -42,7 +42,7 @@ pub fn wrapper(
     let mut entries = vec![];
     let mut bindings = vec![];
 
-    for tensor in inputs.iter() {
+    for tensor in inputs {
         entries.push(wgpu::BindGroupEntry {
             binding: binding_counter,
             resource: inner_infos
@@ -58,7 +58,7 @@ pub fn wrapper(
         binding_counter += 1;
     }
 
-    for tensor in outputs.iter() {
+    for tensor in outputs {
         entries.push(wgpu::BindGroupEntry {
             binding: binding_counter,
             resource: inner_infos
@@ -168,7 +168,7 @@ pub fn compute(
         } else {
             crate::compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
         }
-        
+
         previous_node = node;
     }
     crate::compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
