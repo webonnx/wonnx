@@ -43,15 +43,15 @@ async fn run() {
         [21., 33., 99., 117., 189., 207., 171., 183.]
     );
 
-    let conv_asymetric_stride = conv_kernel_3().await.unwrap();
-
-    assert_eq!(
-        conv_asymetric_stride,
-        [
-            10., 18., 24., 30., 36.,
-            37., 14., 18., 22., 26.,
-        ]
-    );
+    //    let conv_asymetric_stride = conv_kernel_3().await.unwrap();
+    //
+    //    assert_eq!(
+    //        conv_asymetric_stride,
+    //        [
+    //            10., 18., 24., 30., 36.,
+    //            37., 14., 18., 22., 26.,
+    //        ]
+    //    );
 
     let steps = conv_simple().await.unwrap();
     let conv = 1;

@@ -72,14 +72,6 @@ pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buff
     })
 }
 
-pub fn read_only_buffer(device: &wgpu::Device, array: &[f32]) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Storage Buffer"),
-        contents: bytemuck::cast_slice(array),
-        usage: wgpu::BufferUsages::STORAGE,
-    })
-}
-
 pub fn output_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
     let slacked_size = if size % 4 != 0 {
         size + (4 - size % 4)
@@ -95,10 +87,6 @@ pub fn output_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buff
         mapped_at_creation: false,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
     })
-}
-
-pub fn size(dims: &[i64]) -> i64 {
-    dims.iter().product::<i64>()
 }
 
 #[cfg(test)]

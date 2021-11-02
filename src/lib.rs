@@ -1,6 +1,4 @@
-pub mod boilerplate;
 pub mod compute;
-use std::convert::TryInto;
 use std::error;
 pub mod compiler;
 pub mod dimensions;

@@ -1,6 +1,6 @@
 use crate::onnx;
 use crate::resource;
-use crate::utils::{get_attribute, get_dimension};
+use crate::utils::{get_attribute, get_dimension, len};
 use crate::InnerInfo;
 use std::collections::HashMap;
 use std::str::from_utf8;
@@ -32,14 +32,14 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        resource::size(&input_dims) as _,
+                        len(&input_dims) as _,
                         outputs[0].as_str(),
                     ),
                     dims: input_dims,
                 },
             );
         }
-        "MaxPool" | "AveragePool" => {
+        "MaxPool" | "AveragePool" | "Conv" => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims.len() == 4usize);
 
@@ -110,85 +110,7 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        resource::size(&output_dims) as _,
-                        outputs[0].as_str(),
-                    ),
-                    dims: output_dims,
-                },
-            );
-        }
-        "Conv" => {
-            // TODO: Conv only support NxCxHxW for the moment.
-            debug_assert!(input_dims.len() == 4usize);
-
-            let mut auto_pad_default = onnx::AttributeProto::new();
-            auto_pad_default.set_s("NOTSET".to_string().into_bytes());
-
-            let auto_pad =
-                from_utf8(get_attribute("auto_pad", Some(&auto_pad_default), node).get_s())
-                    .unwrap();
-
-            let mut dilations_default = onnx::AttributeProto::new();
-            dilations_default.set_ints(vec![1, 1]);
-
-            let dilations = get_attribute("dilations", Some(&dilations_default), node).get_ints();
-
-            let kernel_shape = get_attribute("kernel_shape", None, node).get_ints();
-
-            let mut strides_default = onnx::AttributeProto::new();
-            strides_default.set_ints(vec![1, 1]);
-
-            let strides = get_attribute("strides", Some(&strides_default), node).get_ints();
-
-            let mut pads_default = onnx::AttributeProto::new();
-            pads_default.set_ints(vec![0, 0, 0, 0]);
-
-            let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
-
-            let mut output_dims = input_dims.clone();
-
-            let kernels = if inputs.len() >= 2 {
-                inner_infos.get(&inputs[1]).unwrap().dims[0]
-            } else {
-                input_dims[1]
-            };
-
-            match auto_pad {
-                "NOTSET" => {
-                    output_dims[0] = input_dims[0];
-                    output_dims[1] = kernels;
-                    output_dims[2] = (input_dims[2] - ((kernel_shape[0] - 1) * dilations[0] + 1)
-                        + pads[0]
-                        + pads[2])
-                        / strides[0]
-                        + 1;
-                    output_dims[3] = (input_dims[3] - ((kernel_shape[1] - 1) * dilations[1] + 1)
-                        + pads[1]
-                        + pads[3])
-                        / strides[1]
-                        + 1;
-                }
-                "SAME_UPPER" => {
-                    output_dims[0] = input_dims[0];
-                    output_dims[1] = kernels;
-                    output_dims[2] = input_dims[2] / strides[0];
-                    output_dims[3] = input_dims[3] / strides[1];
-                }
-                "SAME_LOWER" => {
-                    output_dims[0] = input_dims[0];
-                    output_dims[1] = kernels;
-                    output_dims[2] = input_dims[2] / strides[0];
-                    output_dims[3] = input_dims[3] / strides[1];
-                }
-                _ => unimplemented!(),
-            }
-
-            inner_infos.insert(
-                outputs[0].clone(),
-                InnerInfo {
-                    buffer: resource::create_buffer(
-                        device,
-                        resource::size(&output_dims) as _,
+                        len(&output_dims) as _,
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
@@ -208,7 +130,7 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        resource::size(&output_dims) as _,
+                        len(&output_dims) as _,
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
@@ -232,7 +154,7 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        resource::size(&output_dims) as _,
+                        len(&output_dims) as _,
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
@@ -274,7 +196,7 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        resource::size(&output_dims) as _,
+                        len(&output_dims) as _,
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
@@ -294,7 +216,7 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        resource::size(&output_dims) as _,
+                        len(&output_dims) as _,
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
@@ -321,7 +243,7 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        resource::size(&output_dims) as _,
+                        len(&output_dims) as _,
                         outputs[0].as_str(),
                     ),
                     dims: output_dims,
@@ -347,10 +269,10 @@ pub fn generate_buffer<'a>(
                 InnerInfo {
                     buffer: resource::create_buffer(
                         device,
-                        resource::size(&output_dims.to_vec()) as _,
+                        len(&output_dims) as _,
                         outputs[0].as_str(),
                     ),
-                    dims: output_dims.to_vec(),
+                    dims: output_dims,
                 },
             );
         }
@@ -362,7 +284,7 @@ pub fn generate_buffer<'a>(
             let axis = get_attribute("axis", Some(&axis_default), node).get_i();
 
             if axis == axis_default.get_i() {
-                let mut output_dims = [0; 2];
+                let mut output_dims = vec![0; 2];
 
                 output_dims[0] = input_dims[0];
                 output_dims[1] = input_dims[1..].iter().product();
@@ -371,10 +293,10 @@ pub fn generate_buffer<'a>(
                     InnerInfo {
                         buffer: resource::create_buffer(
                             device,
-                            resource::size(&output_dims.to_vec()) as _,
+                            len(&output_dims) as _,
                             outputs[0].as_str(),
                         ),
-                        dims: output_dims.to_vec(),
+                        dims: output_dims,
                     },
                 );
             } else {
