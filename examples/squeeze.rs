@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use log::info;
 use ndarray::s;
+use std::error;
 use std::time::Instant;
 use std::{
     fs,
@@ -12,6 +13,7 @@ use std::{
     time::Duration,
 };
 
+type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 // Args Management
 async fn run() {
     let probabilities = execute_gpu().await.unwrap();
@@ -38,7 +40,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Option<Vec<f32>> {
+async fn execute_gpu() -> Result<Vec<f32>> {
     let n: usize = 224;
     let mut input_data = HashMap::new();
     let image = load_image();

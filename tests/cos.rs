@@ -5,17 +5,12 @@ use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
 
 async fn run() {
-    let steps = execute_gpu().await.unwrap();
-
-    assert_eq!(steps[0..5], [1.0, 1.0, 1.0, 1.0, 1.0]);
-    println!("steps[0..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
     log::info!("steps[0..5]: {:#?}", &steps[0..5]);
-    assert_eq!(steps[0..5], [1.0, 1.0, 1.0, 1.0, 1.0]);
 }
 
-// Hardware management
-async fn execute_gpu() -> Option<Vec<f32>> {
+#[test]
+fn test_cos() {
     // USER INPUT
 
     let n: usize = 16;
@@ -64,14 +59,13 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 
     // LOGIC
 
-    let mut session = wonnx::Session::from_model(model)
-        .await
-        .expect("Session did not create");
+    let mut session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    wonnx::run(&mut session, input_data).await
+    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    assert_eq!(result, [1.0; 16]);
 }
 
-#[test]
 // #[wasm_bindgen_test]
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]

@@ -142,6 +142,8 @@ impl Session {
                         dims: output_dims,
                     },
                 );
+            } else {
+                panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
             }
         }
 
@@ -186,10 +188,19 @@ impl Session {
     }
 }
 
+#[cfg_attr(doc, aquamarine::aquamarine)]
+/// ```mermaid
+/// graph LR
+///     s([Source]) --> a[[aquamarine]]
+///     r[[rustdoc]] --> f([Docs w/ Mermaid!])
+///     subgraph rustc[Rust Compiler]
+///     a -. inject mermaid.js .-> r
+///     end
+/// ```
 pub async fn run(
     session: &mut Session,
     input_data: HashMap<String, (&[f32], &[i64])>,
-) -> Option<Vec<f32>> {
+) -> Result<Vec<f32>> {
     let device = &session.device;
     let inner_infos = &mut session.inner_infos;
     for (input, (data, dims)) in input_data {
@@ -229,7 +240,7 @@ pub async fn run(
     let result = bytemuck::cast_slice(&data).to_vec();
 
     println!("time: post_wait: {:#?}", time_start.elapsed());
-    Some(result)
+    Ok(result)
 }
 
 pub struct InnerInfo {
