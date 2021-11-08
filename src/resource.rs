@@ -56,7 +56,13 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
 }
 
 pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
-    let slice_size = size as usize * std::mem::size_of::<f32>();
+    let slacked_size = if size % 4 != 0 {
+        size + (4 - size % 4)
+    } else {
+        size
+    };
+
+    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
     let size = slice_size as wgpu::BufferAddress;
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(name),
@@ -67,7 +73,13 @@ pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buff
 }
 
 pub fn output_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
-    let slice_size = size as usize * std::mem::size_of::<f32>();
+    let slacked_size = if size % 4 != 0 {
+        size + (4 - size % 4)
+    } else {
+        size
+    };
+
+    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
     let size = slice_size as wgpu::BufferAddress;
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(name),

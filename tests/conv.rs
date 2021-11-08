@@ -4,31 +4,7 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
-
-pub fn tensor(name: &str, dimensions: &[i64]) -> wonnx::onnx::ValueInfoProto {
-    let mut dim_value = vec![];
-    for dimension in dimensions {
-        let mut dim_channel = onnx::TensorShapeProto_Dimension::new();
-        dim_channel.set_dim_value(*dimension);
-        dim_value.push(dim_channel);
-    }
-
-    let mut shape_tensor_proto = onnx::TensorShapeProto::new();
-    shape_tensor_proto.set_dim(protobuf::RepeatedField::from(dim_value));
-
-    let mut type_proto_tensor = crate::onnx::TypeProto_Tensor::new();
-    type_proto_tensor.set_elem_type(1);
-    type_proto_tensor.set_shape(shape_tensor_proto);
-
-    let mut type_proto = crate::onnx::TypeProto::new();
-    type_proto.set_tensor_type(type_proto_tensor);
-
-    let mut tensor = crate::onnx::ValueInfoProto::new();
-    tensor.set_name(name.to_string());
-    tensor.set_field_type(type_proto);
-
-    tensor
-}
+use wonnx::utils::tensor;
 
 pub fn initializer(name: &str, data: Vec<f32>, dimensions: Vec<i64>) -> wonnx::onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();

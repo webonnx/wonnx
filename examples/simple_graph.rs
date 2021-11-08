@@ -3,6 +3,8 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
+use std::error;
+type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
 async fn run() {
     let steps = execute_gpu().await.unwrap();
@@ -15,7 +17,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Option<Vec<f32>> {
+async fn execute_gpu() -> Result<Vec<f32>> {
     // USER INPUT
 
     let n: usize = 16;

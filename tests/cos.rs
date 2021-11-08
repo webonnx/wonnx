@@ -3,6 +3,7 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
+use wonnx::utils::tensor;
 
 async fn run() {
     #[cfg(target_arch = "wasm32")]
@@ -22,26 +23,9 @@ fn test_cos() {
 
     // ONNX INPUTS
 
-    let mut shape_tensor_proto_dim = onnx::TensorShapeProto_Dimension::new();
-    shape_tensor_proto_dim.set_dim_value(n as i64);
+    let input = tensor("X", &dims);
 
-    let mut shape_tensor_proto = onnx::TensorShapeProto::new();
-    shape_tensor_proto.set_dim(protobuf::RepeatedField::from(vec![shape_tensor_proto_dim]));
-
-    let mut type_proto_tensor = crate::onnx::TypeProto_Tensor::new();
-    type_proto_tensor.set_elem_type(1);
-    type_proto_tensor.set_shape(shape_tensor_proto);
-
-    let mut type_proto = crate::onnx::TypeProto::new();
-    type_proto.set_tensor_type(type_proto_tensor);
-
-    let mut input = crate::onnx::ValueInfoProto::new();
-    input.set_name("X".to_string());
-    input.set_field_type(type_proto.clone());
-
-    let mut output = crate::onnx::ValueInfoProto::new();
-    output.set_name("Y".to_string());
-    output.set_field_type(type_proto.clone());
+    let output = tensor("Y", &dims);
 
     let mut node = crate::onnx::NodeProto::new();
     node.set_op_type("Cos".to_string());

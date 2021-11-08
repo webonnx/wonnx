@@ -47,7 +47,7 @@ pub fn wrapper(
             binding: binding_counter,
             resource: inner_infos
                 .get(tensor.as_str())
-                .unwrap()
+                .unwrap_or_else(|| panic!("Tensor {} is not present in the inner infos", tensor))
                 .buffer
                 .as_entire_binding(),
         });

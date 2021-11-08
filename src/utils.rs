@@ -44,3 +44,27 @@ pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> O
         None
     }
 }
+pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
+    let mut dim_value = vec![];
+    for dimension in dimensions {
+        let mut dim_channel = onnx::TensorShapeProto_Dimension::new();
+        dim_channel.set_dim_value(*dimension);
+        dim_value.push(dim_channel);
+    }
+
+    let mut shape_tensor_proto = onnx::TensorShapeProto::new();
+    shape_tensor_proto.set_dim(protobuf::RepeatedField::from(dim_value));
+
+    let mut type_proto_tensor = onnx::TypeProto_Tensor::new();
+    type_proto_tensor.set_elem_type(1);
+    type_proto_tensor.set_shape(shape_tensor_proto);
+
+    let mut type_proto = onnx::TypeProto::new();
+    type_proto.set_tensor_type(type_proto_tensor);
+
+    let mut tensor = onnx::ValueInfoProto::new();
+    tensor.set_name(name.to_string());
+    tensor.set_field_type(type_proto);
+
+    tensor
+}
