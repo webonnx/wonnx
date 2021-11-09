@@ -223,7 +223,6 @@ pub async fn run(
 
     let buffer_slice = inner_infos
         .get(outputs[0].get_name())
-        //.get(&"squeezenet0_conv3_weight".to_string())
         .unwrap()
         .buffer
         .slice(..);

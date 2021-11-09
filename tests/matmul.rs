@@ -10,18 +10,8 @@ use ndarray;
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
 
-async fn run() {
-    let _ = execute_gpu().await.unwrap();
-
-    let _ = single_dimension_matrix_multiplication().await.unwrap();
-    // println!("steps: {:?}", &steps[n * i..n * (i + 1)]);
-    //assert_eq!(steps[0..5], [16.0, 16.0, 16.0, 16.0, 16.0]);
-    #[cfg(target_arch = "wasm32")]
-    log::info!("steps[0..5]: {:#?}", &steps[0..5]);
-}
-
-// Hardware management
-async fn execute_gpu() -> Option<Vec<f32>> {
+#[test]
+fn execute_gpu() {
     // USER INPUT
 
     let n: usize = 16;
@@ -102,28 +92,26 @@ async fn execute_gpu() -> Option<Vec<f32>> {
 
     // LOGIC
     let time_session = Instant::now();
-    let mut session = wonnx::Session::from_model(model)
-        .await
-        .expect("Session did not create");
+    let mut session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
+    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
     let time_finished_creation = Instant::now();
     println!(
         "time: finished_creation_session: {:#?}",
         time_finished_creation - time_session
     );
-    let result = wonnx::run(&mut session, input_data).await;
     let time_finished_computation = Instant::now();
     println!(
         "time: finished_computation: {:#?}",
         time_finished_computation - time_finished_creation
     );
 
-    assert_eq!(result.clone().unwrap().as_slice(), sum.as_slice().unwrap());
-    result
+    assert_eq!(result.clone().as_slice(), sum.as_slice().unwrap());
 }
 
-// Hardware management
-async fn single_dimension_matrix_multiplication() -> Option<Vec<f32>> {
+#[test]
+fn single_dimension_matrix_multiplication() {
     // USER INPUT
 
     let n: usize = 128;
@@ -222,37 +210,22 @@ async fn single_dimension_matrix_multiplication() -> Option<Vec<f32>> {
 
     // LOGIC
     let time_session = Instant::now();
-    let mut session = wonnx::Session::from_model(model)
-        .await
-        .expect("Session did not create");
+    let mut session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
     let time_finished_creation = Instant::now();
     println!(
         "time: finished_creation_session: {:#?}",
         time_finished_creation - time_session
     );
-    let result = wonnx::run(&mut session, input_data).await;
     let time_finished_computation = Instant::now();
     println!(
         "time: finished_computation: {:#?}",
         time_finished_computation - time_finished_creation
     );
-    for (a, b) in result.clone().unwrap().iter().zip(sum.as_slice().unwrap()) {
+    for (a, b) in result.iter().zip(sum.as_slice().unwrap()) {
         assert_relative_eq!(a, b, epsilon = 0.01)
-    }
-    result
-}
-#[test]
-fn main() {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        env_logger::init();
-        pollster::block_on(run());
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-        console_log::init().expect("could not initialize logger");
-        wasm_bindgen_futures::spawn_local(run());
     }
 }
