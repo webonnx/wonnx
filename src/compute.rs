@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::debug;
 use serde_derive::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;

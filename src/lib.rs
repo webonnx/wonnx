@@ -121,7 +121,7 @@ impl Session {
                         dims: output_dims,
                     },
                 );
-            } else if let Some(output_dims) = get_dimension(output_info, &outputs[0]) {
+            } else if let Some(_) = get_dimension(output_info, &outputs[0]) {
             } else {
                 panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
             }
