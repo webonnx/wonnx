@@ -1,4 +1,3 @@
-use log::info;
 use protobuf;
 use std::collections::HashMap;
 // use wasm_bindgen_test::*;
@@ -264,7 +263,7 @@ fn conv_asymetric_stride() {
     assert_eq!(result, [21., 33., 99., 117., 189., 207., 171., 183.]);
 }
 
-fn conv_kernel_3() {
+fn _conv_kernel_3() {
     // USER INPUT
 
     let n: usize = 4;

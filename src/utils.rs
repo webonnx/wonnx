@@ -1,49 +1,46 @@
 use crate::onnx;
-use std::collections::HashMap;
+use std::convert::From;
+use std::convert::Into;
+use std::str::from_utf8;
 
 pub fn len(dims: &[i64]) -> i64 {
     dims.iter().product::<i64>()
 }
 
-pub fn get_attribute<'a>(
-    attribute: &'a str,
-    defaults: Option<&'a onnx::AttributeProto>,
-    node: &'a onnx::NodeProto,
-) -> &'a onnx::AttributeProto {
-    match defaults {
-        Some(default) => node
-            .get_attribute()
+pub fn get_attribute<T: ToAttribute + std::convert::From<onnx::AttributeProto>>(
+    attribute: &str,
+    default: Option<T>,
+    node: &onnx::NodeProto,
+) -> T {
+    match (
+        node.get_attribute()
             .iter()
-            .find(|attr| attr.get_name() == attribute)
-            .unwrap_or(default),
-        None => node
-            .get_attribute()
-            .iter()
-            .find(|attr| attr.get_name() == attribute)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Did not find required attribute: {}, for node: {}",
-                    attribute,
-                    node.get_name()
-                )
-            }),
+            .find(|attr| attr.get_name() == attribute),
+        default,
+    ) {
+        (Some(attr), _) => attr.clone().into(),
+        (None, Some(default_attr)) => default_attr.into(),
+        (None, None) => panic!(
+            "Did not find attribute: {} for node: {}",
+            attribute,
+            node.get_name()
+        ),
     }
 }
 
 pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> Option<Vec<i64>> {
-    if let Some(info) = value_info.iter().find(|x| x.get_name() == input_name) {
-        Some(
+    value_info
+        .iter()
+        .find(|x| x.get_name() == input_name)
+        .map(|info| {
             info.get_field_type()
                 .get_tensor_type()
                 .get_shape()
                 .get_dim()
                 .iter()
                 .map(|x| x.get_dim_value())
-                .collect(),
-        )
-    } else {
-        None
-    }
+                .collect()
+        })
 }
 pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     let mut dim_value = vec![];
@@ -93,6 +90,14 @@ impl ToAttribute for Vec<i64> {
     }
 }
 
+impl ToAttribute for f32 {
+    fn to_attribute(self) -> onnx::AttributeProto {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_f(self);
+        attributes
+    }
+}
+
 impl ToAttribute for String {
     fn to_attribute(self) -> onnx::AttributeProto {
         let mut attributes = crate::onnx::AttributeProto::new();
@@ -113,6 +118,24 @@ pub fn attribute(name: &str, inputs: impl ToAttribute) -> onnx::AttributeProto {
     let mut attributes = inputs.to_attribute();
     attributes.set_name(name.to_string());
     attributes
+}
+
+impl From<onnx::AttributeProto> for Vec<i64> {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_ints().to_vec()
+    }
+}
+
+impl From<onnx::AttributeProto> for f32 {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_f()
+    }
+}
+
+impl From<onnx::AttributeProto> for String {
+    fn from(value: onnx::AttributeProto) -> Self {
+        from_utf8(value.get_s()).unwrap().to_string()
+    }
 }
 
 pub fn node(
@@ -162,56 +185,50 @@ pub fn model(graph: onnx::GraphProto) -> onnx::ModelProto {
     model
 }
 
-#[test]
-fn test_model() {
-    // USER INPUT
+#[cfg(test)]
+mod tests {
+    use crate::utils::{attribute, graph, initializer, model, node, tensor};
 
-    let n = 5;
-    let c = 1;
-    let mut input_data = HashMap::new();
+    #[test]
+    fn test_model() {
+        // USER INPUT
 
-    let data: Vec<f32> = (0..50).map(|x| x as f32).collect();
-    let dims = vec![2, c as i64, n as i64, n as i64];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+        let n = 5;
+        let c = 1;
+        let mut input_data = std::collections::HashMap::new();
 
-    // ONNX INPUTS
+        let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
+        let dims = vec![1, c as i64, n as i64, n as i64];
+        input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
 
-    let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1 as f32).collect();
+        // ONNX INPUTS
 
-    let conv_model = model(graph(
-        vec![tensor("X", &dims)],
-        vec![tensor("Y", &[2, 2, n, n])],
-        vec![initializer("W", data_w, &[2, c, 3, 3])],
-        vec![node(
-            vec!["X", "W"],
-            vec!["Y"],
-            "conv",
-            "Conv",
-            vec![
-                attribute("kernel_shape", vec![3, 3]),
-                attribute("auto_pad", "SAME_UPPER"),
-            ],
-        )],
-    ));
+        let kernel_n = 3;
+        let m = 1;
+        let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();
+        let conv_model = model(graph(
+            vec![tensor("X", &dims)],
+            vec![tensor("Y", &[1, 1, 3, 3])],
+            vec![initializer("W", data_w, &[2, c, 3, 3])],
+            vec![node(
+                vec!["X", "W"],
+                vec!["Y"],
+                "conv",
+                "Conv",
+                vec![attribute("kernel_shape", vec![3, 3])],
+            )],
+        ));
 
-    // LOGIC
+        // LOGIC
 
-    let mut session =
-        pollster::block_on(crate::Session::from_model(conv_model)).expect("Session did not create");
+        let mut session = pollster::block_on(crate::Session::from_model(conv_model))
+            .expect("Session did not create");
 
-    let result = pollster::block_on(crate::run(&mut session, input_data)).unwrap();
+        let result = pollster::block_on(crate::run(&mut session, input_data)).unwrap();
 
-    assert_eq!(
-        result,
-        [
-            12.0, 21.0, 27.0, 33.0, 24.0, 33.0, 54.0, 63.0, 72.0, 51.0, 63.0, 99.0, 108.0, 117.0,
-            81.0, 93.0, 144.0, 153.0, 162.0, 111.0, 72.0, 111.0, 117.0, 123.0, 84.0, 12.0, 21.0,
-            27.0, 33.0, 24.0, 33.0, 54.0, 63.0, 72.0, 51.0, 63.0, 99.0, 108.0, 117.0, 81.0, 93.0,
-            144.0, 153.0, 162.0, 111.0, 72.0, 111.0, 117.0, 123.0, 84.0, 112.0, 171.0, 177.0,
-            183.0, 124.0, 183.0, 279.0, 288.0, 297.0, 201.0, 213.0, 324.0, 333.0, 342.0, 231.0,
-            243.0, 369.0, 378.0, 387.0, 261.0, 172.0, 261.0, 267.0, 273.0, 184.0, 112.0, 171.0,
-            177.0, 183.0, 124.0, 183.0, 279.0, 288.0, 297.0, 201.0, 213.0, 324.0, 333.0, 342.0,
-            231.0, 243.0, 369.0, 378.0, 387.0, 261.0, 172.0, 261.0, 267.0, 273.0, 184.0
-        ]
-    );
+        assert_eq!(
+            result,
+            [54., 63., 72., 99., 108., 117., 144., 153., 162., 0., 0., 0.]
+        );
+    }
 }

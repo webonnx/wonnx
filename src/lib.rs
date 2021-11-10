@@ -99,18 +99,10 @@ impl Session {
 
         // Pad convolution layer that has shape [3, 3] with 4 bytes.
         for node in model.get_graph().get_node() {
-            let mut pads_default = onnx::AttributeProto::new();
-            pads_default.set_ints(vec![0, 0, 0, 0]);
-
-            let mut strides_default = onnx::AttributeProto::new();
-            strides_default.set_ints(vec![1, 1]);
-
             if node.get_op_type() == "Conv"
-                && utils::get_attribute("kernel_shape", None, node).get_ints() == [3, 3]
-                && utils::get_attribute("pads", Some(&pads_default), node).get_ints()
-                    == [1, 1, 1, 1]
-                && utils::get_attribute("strides", Some(&strides_default), node).get_ints()
-                    == [1, 1]
+                && utils::get_attribute::<Vec<i64>>("kernel_shape", None, node) == [3, 3]
+                && utils::get_attribute("pads", Some(vec![0, 0, 0, 0]), node) == [1, 1, 1, 1]
+                && utils::get_attribute("strides", Some(vec![1, 1]), node) == [1, 1]
             {
                 let string = node.get_input()[1].as_str();
                 kernel_3_inputs.push(string);
@@ -118,7 +110,7 @@ impl Session {
 
             let outputs = node.get_output();
 
-            if let Some(output_dims) = get_dimension(&value_info, &outputs[0]) {
+            if let Some(output_dims) = get_dimension(value_info, &outputs[0]) {
                 inner_infos.insert(
                     outputs[0].clone(),
                     InnerInfo {
@@ -130,7 +122,7 @@ impl Session {
                         dims: output_dims,
                     },
                 );
-            } else if let Some(output_dims) = get_dimension(&output_info, &outputs[0]) {
+            } else if let Some(output_dims) = get_dimension(output_info, &outputs[0]) {
                 inner_infos.insert(
                     outputs[0].clone(),
                     InnerInfo {
@@ -153,7 +145,7 @@ impl Session {
             let dims = initializer.get_dims().to_vec();
             let data = initializer.get_float_data();
             let mut raw_data = if !data.is_empty() {
-                bytemuck::cast_slice(&data)
+                bytemuck::cast_slice(data)
             } else {
                 initializer.get_raw_data()
             };

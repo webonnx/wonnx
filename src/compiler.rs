@@ -1,7 +1,5 @@
-use crate::onnx;
 use crate::utils::get_attribute;
 use std::collections::HashMap;
-use std::str::from_utf8;
 use tera::Context;
 
 pub fn format_node(
@@ -64,10 +62,7 @@ pub fn format_node(
         }
         // Not taking into account attributes
         "BatchNormalization" => {
-            let mut epsilon_default = onnx::AttributeProto::new();
-            epsilon_default.set_f(1.0);
-
-            let epsilon = get_attribute("epsilon", Some(&epsilon_default), node).get_f();
+            let epsilon = get_attribute("epsilon", Some(1.0), node);
             context.insert("epsilon", &epsilon);
 
             todo!();
@@ -80,10 +75,7 @@ pub fn format_node(
             //   )
         }
         "Celu" | "Elu" => {
-            let mut alpha_default = onnx::AttributeProto::new();
-            alpha_default.set_f(1.0);
-
-            let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
+            let alpha = get_attribute("alpha", Some(1.0), node);
             context.insert("alpha", &alpha);
             (
                 "endomorphism/activation.wgsl".to_string(),
@@ -108,31 +100,13 @@ pub fn format_node(
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims.len() == 4usize);
 
-            let mut auto_pad_default = onnx::AttributeProto::new();
-            auto_pad_default.set_s("NOTSET".to_string().into_bytes());
+            let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node);
+            let dilations = get_attribute("dilations", Some(vec![1, 1]), node);
+            let kernel_shape = get_attribute::<Vec<i64>>("kernel_shape", None, node);
+            let strides = get_attribute("strides", Some(vec![1, 1]), node);
+            let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node);
 
-            let auto_pad =
-                from_utf8(get_attribute("auto_pad", Some(&auto_pad_default), node).get_s())
-                    .unwrap();
-
-            let mut dilations_default = onnx::AttributeProto::new();
-            dilations_default.set_ints(vec![1, 1]);
-
-            let dilations = get_attribute("dilations", Some(&dilations_default), node).get_ints();
-
-            let kernel_shape = get_attribute("kernel_shape", None, node).get_ints();
-
-            let mut strides_default = onnx::AttributeProto::new();
-            strides_default.set_ints(vec![1, 1]);
-
-            let strides = get_attribute("strides", Some(&strides_default), node).get_ints();
-
-            let mut pads_default = onnx::AttributeProto::new();
-            pads_default.set_ints(vec![0, 0, 0, 0]);
-
-            let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
-
-            let pads = match auto_pad {
+            let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
                 "SAME_UPPER" => {
                     let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
@@ -179,8 +153,8 @@ pub fn format_node(
             context.insert("width", &output_dims[3]);
             context.insert("original_height", &input_dims[2]);
             context.insert("channel", &input_dims[1]);
-            context.insert("stride", strides);
-            context.insert("kernel_shape", kernel_shape);
+            context.insert("stride", &strides);
+            context.insert("kernel_shape", &kernel_shape);
             context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
             context.insert(
                 "kernel_channel_len",
@@ -204,31 +178,13 @@ pub fn format_node(
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims.len() == 4usize);
 
-            let mut auto_pad_default = onnx::AttributeProto::new();
-            auto_pad_default.set_s("NOTSET".to_string().into_bytes());
+            let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node);
+            let dilations = get_attribute("dilations", Some(vec![1, 1]), node);
+            let kernel_shape = get_attribute::<Vec<i64>>("kernel_shape", None, node);
+            let strides = get_attribute("strides", Some(vec![1, 1]), node);
+            let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node);
 
-            let auto_pad =
-                from_utf8(get_attribute("auto_pad", Some(&auto_pad_default), node).get_s())
-                    .unwrap();
-
-            let mut dilations_default = onnx::AttributeProto::new();
-            dilations_default.set_ints(vec![1, 1]);
-
-            let dilations = get_attribute("dilations", Some(&dilations_default), node).get_ints();
-
-            let kernel_shape = get_attribute("kernel_shape", None, node).get_ints();
-
-            let mut strides_default = onnx::AttributeProto::new();
-            strides_default.set_ints(vec![1, 1]);
-
-            let strides = get_attribute("strides", Some(&strides_default), node).get_ints();
-
-            let mut pads_default = onnx::AttributeProto::new();
-            pads_default.set_ints(vec![0, 0, 0, 0]);
-
-            let pads = get_attribute("pads", Some(&pads_default), node).get_ints();
-
-            let pads = match auto_pad {
+            let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
                 "SAME_UPPER" => {
                     let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
@@ -277,8 +233,8 @@ pub fn format_node(
             context.insert("width", &output_dims[3]);
             context.insert("original_height", &input_dims[2]);
             context.insert("channel", &input_dims[1]);
-            context.insert("stride", strides);
-            context.insert("kernel_shape", kernel_shape);
+            context.insert("stride", &strides);
+            context.insert("kernel_shape", &kernel_shape);
             context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
             context.insert(
                 "kernel_channel_len",
@@ -324,15 +280,8 @@ pub fn format_node(
             }
         }
         "Gemm" | "MatMul" => {
-            let mut alpha_default = onnx::AttributeProto::new();
-            alpha_default.set_f(1.0);
-
-            let alpha = get_attribute("alpha", Some(&alpha_default), node).get_f();
-
-            let mut beta_default = onnx::AttributeProto::new();
-            beta_default.set_f(1.0);
-
-            let beta = get_attribute("beta", Some(&beta_default), node).get_f();
+            let alpha = get_attribute("alpha", Some(1.0), node);
+            let beta = get_attribute("beta", Some(1.0), node);
 
             let left_columns = &input_dims[1];
             let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
