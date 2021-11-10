@@ -58,17 +58,20 @@ fn test_mnist() {
     ))
     .expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(wonnx::run(&mut session, input_data))
+        .unwrap()
+        .iter()
+        .enumerate()
+        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
+            if &val_max > val {
+                (idx_max, val_max)
+            } else {
+                (idx, *val)
+            }
+        });
 
-    let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
+    assert_eq!(result.0, 0);
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    assert_eq!(probabilities[0].0, 0);
-
-    let mut session = pollster::block_on(wonnx::Session::from_path(
-        "examples/data/models/opt-mnist.onnx",
-    ))
-    .expect("session did not create");
     let image = load_image("3.jpg");
     let dims = vec![1, 1 as i64, n as i64, n as i64];
     let mut input_data = HashMap::new();
@@ -76,18 +79,20 @@ fn test_mnist() {
         "Input3".to_string(),
         (image.as_slice().unwrap(), dims.as_slice()),
     );
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(wonnx::run(&mut session, input_data))
+        .unwrap()
+        .iter()
+        .enumerate()
+        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
+            if &val_max > val {
+                (idx_max, val_max)
+            } else {
+                (idx, *val)
+            }
+        });
 
-    let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
-    println!("probabilities: {:#?}", probabilities);
+    assert_eq!(result.0, 3);
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    assert_eq!(probabilities[0].0, 3);
-
-    let mut session = pollster::block_on(wonnx::Session::from_path(
-        "examples/data/models/opt-mnist.onnx",
-    ))
-    .expect("session did not create");
     let image = load_image("5.jpg");
     let dims = vec![1, 1 as i64, n as i64, n as i64];
     let mut input_data = HashMap::new();
@@ -95,17 +100,20 @@ fn test_mnist() {
         "Input3".to_string(),
         (image.as_slice().unwrap(), dims.as_slice()),
     );
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(wonnx::run(&mut session, input_data))
+        .unwrap()
+        .iter()
+        .enumerate()
+        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
+            if &val_max > val {
+                (idx_max, val_max)
+            } else {
+                (idx, *val)
+            }
+        });
 
-    let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
+    assert_eq!(result.0, 5);
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    assert_eq!(probabilities[0].0, 5);
-
-    let mut session = pollster::block_on(wonnx::Session::from_path(
-        "examples/data/models/opt-mnist.onnx",
-    ))
-    .expect("session did not create");
     let image = load_image("7.jpg");
     let dims = vec![1, 1 as i64, n as i64, n as i64];
     let mut input_data = HashMap::new();
@@ -113,12 +121,19 @@ fn test_mnist() {
         "Input3".to_string(),
         (image.as_slice().unwrap(), dims.as_slice()),
     );
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(wonnx::run(&mut session, input_data))
+        .unwrap()
+        .iter()
+        .enumerate()
+        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
+            if &val_max > val {
+                (idx_max, val_max)
+            } else {
+                (idx, *val)
+            }
+        });
 
-    let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
-
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    assert_eq!(probabilities[0].0, 7);
+    assert_eq!(result.0, 7);
 }
 
 #[test]

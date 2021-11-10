@@ -4,8 +4,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
-use std::time::Instant;
-
 #[derive(Serialize)]
 struct Bindings {
     counter: u32,
@@ -22,22 +20,15 @@ pub fn wrapper(
     let mut binding_counter: u32 = 0;
     // Generating the shader
 
-    let mut time = std::time::Duration::new(0, 0);
     let mut context = Context::new();
     let inputs = node.get_input();
     let outputs = node.get_output();
 
-    let time_before_render = Instant::now();
     let inputs = if ["Reshape", "Clip", "Squeeze"].contains(&node.get_op_type()) {
         inputs.get(0..1).unwrap()
     } else {
         inputs
     };
-    info!(
-        "Computing node: {}, with op_type: {}",
-        node.get_name(),
-        node.get_op_type()
-    );
     // Generating the shader
     let mut entries = vec![];
     let mut bindings = vec![];
@@ -72,7 +63,7 @@ pub fn wrapper(
             tensor: tensor.to_string(),
         });
         binding_counter += 1;
-        info!(
+        debug!(
             "output {} has size: {:?} at counter {}",
             tensor,
             inner_infos.get(tensor.as_str()).unwrap().dims,
@@ -92,8 +83,6 @@ pub fn wrapper(
     // debug!("x: {}", x);
     // TODO: Make defining threads more clean.
 
-    time = Instant::now() - time_before_render + time;
-    info!("time to compute node: {:#?}", time);
     // Generating the compute pipeline and binding group.
 
     // Instantiates the pipeline.

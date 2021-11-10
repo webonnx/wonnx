@@ -7,7 +7,6 @@ pub mod utils;
 use log::debug;
 use protobuf::{self, Message};
 use std::collections::HashMap;
-use std::time::Instant;
 use tera::Tera;
 use utils::{get_dimension, len};
 // Change the alias to `Box<error::Error>`.
@@ -123,17 +122,6 @@ impl Session {
                     },
                 );
             } else if let Some(output_dims) = get_dimension(output_info, &outputs[0]) {
-                inner_infos.insert(
-                    outputs[0].clone(),
-                    InnerInfo {
-                        buffer: resource::output_buffer(
-                            device,
-                            len(&output_dims) as _,
-                            outputs[0].as_str(),
-                        ),
-                        dims: output_dims,
-                    },
-                );
             } else {
                 panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
             }
@@ -204,20 +192,26 @@ pub async fn run(
             },
         );
     }
-    let time_start = Instant::now();
 
     let graph = session.model.get_graph();
     let outputs = graph.get_output();
+    let output_info = &graph.get_output();
+    let output_dims = get_dimension(output_info, &outputs[0].get_name()).unwrap();
+    inner_infos.insert(
+        outputs[0].get_name().to_string(),
+        InnerInfo {
+            buffer: resource::output_buffer(device, len(&output_dims) as _, outputs[0].get_name()),
+            dims: output_dims,
+        },
+    );
+
     let queue = &session.queue;
     let tera = &session.tera;
 
     compute::compute(device, queue, graph, inner_infos, tera).unwrap();
 
-    let buffer_slice = inner_infos
-        .get(outputs[0].get_name())
-        .unwrap()
-        .buffer
-        .slice(..);
+    let buffer = inner_infos.remove(outputs[0].get_name()).unwrap().buffer;
+    let buffer_slice = buffer.slice(..);
     // TODO: Define behavior for multi output.
     let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
 
@@ -229,8 +223,7 @@ pub async fn run(
     let data = buffer_slice.get_mapped_range();
     // Since contents are got in bytes, this converts these bytes back to f32
     let result = bytemuck::cast_slice(&data).to_vec();
-
-    println!("time: post_wait: {:#?}", time_start.elapsed());
+    drop(data);
     Ok(result)
 }
 

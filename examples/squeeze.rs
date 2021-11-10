@@ -55,10 +55,17 @@ async fn execute_gpu() -> Result<Vec<f32>> {
         .unwrap();
     let time_pre_compute = Instant::now();
     info!("Start Compute");
+    let a = wonnx::run(&mut session, input_data.clone()).await;
+    let time_post_compute = Instant::now();
+    println!(
+        "time: first_prediction: {:#?}",
+        time_post_compute - time_pre_compute
+    );
+    let time_pre_compute = Instant::now();
     let a = wonnx::run(&mut session, input_data).await;
     let time_post_compute = Instant::now();
     println!(
-        "time: post_compute: {:#?}",
+        "time: second_prediction: {:#?}",
         time_post_compute - time_pre_compute
     );
     a
@@ -68,8 +75,11 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {
         env_logger::init();
+        let time_pre_compute = Instant::now();
 
         pollster::block_on(run());
+        let time_post_compute = Instant::now();
+        println!("time: main: {:#?}", time_post_compute - time_pre_compute);
     }
     #[cfg(target_arch = "wasm32")]
     {

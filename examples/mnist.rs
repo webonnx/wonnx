@@ -53,7 +53,7 @@ fn main() {
         env_logger::init();
         let time_pre_compute = Instant::now();
         pollster::block_on(run());
-        println!("time: post_compute: {:#?}", time_pre_compute.elapsed());
+        println!("time: main: {:#?}", time_pre_compute.elapsed());
     }
     #[cfg(target_arch = "wasm32")]
     {
