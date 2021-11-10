@@ -7,7 +7,7 @@ pub fn len(dims: &[i64]) -> i64 {
     dims.iter().product::<i64>()
 }
 
-pub fn get_attribute<T: ToAttribute + std::convert::From<onnx::AttributeProto>>(
+pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
     attribute: &str,
     default: Option<T>,
     node: &onnx::NodeProto,
@@ -42,6 +42,7 @@ pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> O
                 .collect()
         })
 }
+
 pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     let mut dim_value = vec![];
     for dimension in dimensions {
@@ -76,66 +77,10 @@ pub fn initializer(name: &str, data: Vec<f32>, dimensions: &[i64]) -> onnx::Tens
     initializer
 }
 
-pub trait ToAttribute {
-    fn to_attribute(self) -> onnx::AttributeProto
-    where
-        Self: Sized;
-}
-
-impl ToAttribute for Vec<i64> {
-    fn to_attribute(self) -> onnx::AttributeProto {
-        let mut attributes = crate::onnx::AttributeProto::new();
-        attributes.set_ints(self);
-        attributes
-    }
-}
-
-impl ToAttribute for f32 {
-    fn to_attribute(self) -> onnx::AttributeProto {
-        let mut attributes = crate::onnx::AttributeProto::new();
-        attributes.set_f(self);
-        attributes
-    }
-}
-
-impl ToAttribute for String {
-    fn to_attribute(self) -> onnx::AttributeProto {
-        let mut attributes = crate::onnx::AttributeProto::new();
-        attributes.set_s(self.into_bytes());
-        attributes
-    }
-}
-
-impl ToAttribute for &str {
-    fn to_attribute(self) -> onnx::AttributeProto {
-        let mut attributes = crate::onnx::AttributeProto::new();
-        attributes.set_s(self.to_string().into_bytes());
-        attributes
-    }
-}
-
-pub fn attribute(name: &str, inputs: impl ToAttribute) -> onnx::AttributeProto {
-    let mut attributes = inputs.to_attribute();
+pub fn attribute(name: &str, inputs: impl Into<onnx::AttributeProto>) -> onnx::AttributeProto {
+    let mut attributes: onnx::AttributeProto = inputs.into();
     attributes.set_name(name.to_string());
     attributes
-}
-
-impl From<onnx::AttributeProto> for Vec<i64> {
-    fn from(value: onnx::AttributeProto) -> Self {
-        value.get_ints().to_vec()
-    }
-}
-
-impl From<onnx::AttributeProto> for f32 {
-    fn from(value: onnx::AttributeProto) -> Self {
-        value.get_f()
-    }
-}
-
-impl From<onnx::AttributeProto> for String {
-    fn from(value: onnx::AttributeProto) -> Self {
-        from_utf8(value.get_s()).unwrap().to_string()
-    }
 }
 
 pub fn node(
@@ -183,6 +128,56 @@ pub fn model(graph: onnx::GraphProto) -> onnx::ModelProto {
     let mut model = crate::onnx::ModelProto::new();
     model.set_graph(graph);
     model
+}
+
+impl From<Vec<i64>> for onnx::AttributeProto {
+    fn from(value: Vec<i64>) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_ints(value);
+        attributes
+    }
+}
+
+impl From<f32> for onnx::AttributeProto {
+    fn from(value: f32) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_f(value);
+        attributes
+    }
+}
+
+impl From<String> for onnx::AttributeProto {
+    fn from(value: String) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_s(value.into_bytes());
+        attributes
+    }
+}
+
+impl From<&str> for onnx::AttributeProto {
+    fn from(value: &str) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_s(value.to_string().into_bytes());
+        attributes
+    }
+}
+
+impl From<onnx::AttributeProto> for Vec<i64> {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_ints().to_vec()
+    }
+}
+
+impl From<onnx::AttributeProto> for f32 {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_f()
+    }
+}
+
+impl From<onnx::AttributeProto> for String {
+    fn from(value: onnx::AttributeProto) -> Self {
+        from_utf8(value.get_s()).unwrap().to_string()
+    }
 }
 
 #[cfg(test)]
