@@ -1,9 +1,11 @@
+use crate::{onnx, utils::node};
 use log::debug;
 use serde_derive::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
+const MAX_OPTIMIZATION_LEN: usize = 2;
 #[derive(Serialize)]
 struct Bindings {
     counter: u32,
@@ -123,44 +125,36 @@ pub fn compute(
     inner_infos: &HashMap<String, crate::InnerInfo>,
     tera: &Tera,
 ) -> Result<(), wgpu::Error> {
-    let mut iter = graph.get_node().iter();
-    let mut previous_node = iter.next().unwrap();
-    for node in iter {
-        let previous_node_op_type = previous_node.get_op_type();
-        let node_op_type = node.get_op_type();
+    let original_nodes = graph.get_node();
+    let n = original_nodes.iter().count();
 
-        if previous_node_op_type == "Conv" && node_op_type == "Relu" {
-            let mut tmp_node = crate::onnx::NodeProto::new();
-            tmp_node.set_op_type("ConvRelu".to_string());
-            tmp_node.set_name("ConvRelu".to_string());
-            tmp_node.set_input(protobuf::RepeatedField::from(
-                previous_node.get_input().to_vec(),
-            ));
-            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
-            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
+    let mut node_index = 0;
 
-            crate::compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
-        } else if previous_node_op_type == "Conv" && node_op_type != "Relu" {
-            crate::compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
-        } else if previous_node_op_type == "Relu" {
-            //        } else if ["Dropout"].contains(&node_op_type) {
-            //            let mut tmp_node = crate::onnx::NodeProto::new();
-            //            tmp_node.set_op_type(previous_node_op_type.to_string());
-            //            tmp_node.set_name("Some node".to_string());
-            //            tmp_node.set_input(protobuf::RepeatedField::from(
-            //                previous_node.get_input().to_vec(),
-            //            ));
-            //            tmp_node.set_attribute(protobuf::RepeatedField::from(previous_node.get_attribute()));
-            //            tmp_node.set_output(protobuf::RepeatedField::from(node.get_output().to_vec()));
-            //
-            //            compute::wrapper(device, queue, &tmp_node, inner_infos, tera).unwrap();
-        } else {
-            crate::compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
-        }
+    while node_index < n {
+        let nodes = &original_nodes[node_index..(usize::min(node_index + MAX_OPTIMIZATION_LEN, n))];
+        let names = nodes
+            .iter()
+            .map(|node| node.get_op_type())
+            .collect::<Vec<&str>>();
+        let runnable_node = match names.as_slice() {
+            ["Conv", "Relu", ..] => {
+                node_index += 2;
+                node(
+                    nodes[0].get_input().iter().map(|x| x.as_str()).collect(),
+                    nodes[1].get_output().iter().map(|x| x.as_str()).collect(),
+                    "ConvRelu",
+                    "ConvRelu",
+                    nodes[0].get_attribute().to_vec(),
+                )
+            }
+            [..] => {
+                node_index += 1;
+                nodes[0].clone()
+            }
+        };
 
-        previous_node = node;
+        crate::compute::wrapper(device, queue, &runnable_node, inner_infos, tera).unwrap();
     }
-    crate::compute::wrapper(device, queue, previous_node, inner_infos, tera).unwrap();
 
     Ok(())
 }
