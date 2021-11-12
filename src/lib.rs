@@ -11,6 +11,7 @@ use tera::Tera;
 use utils::{get_dimension, len};
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
+
 /// Creates a new session connected to the GPU.
 ///
 /// Generate a session that will translate the onnx format into WGSL instructions.
@@ -22,6 +23,47 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 /// ```ignore
 /// let mut session = Session::from_path("path/to/model.onnx").await.unwrap();
 /// ```
+// +----------------+
+// |ONNX Path       |
+// +----------------+
+//         v
+// +----------------+
+// |ONNX Model      |
+// +----------------+
+//         v
+// +----------------+
+// |Session         |
+// +----------------+
+//         v
+// +----------------+
+// |load            |
+// +----------------+
+//         v
+// +----------------+
+// |optimise        |
+// +----------------+
+//         v
+// +----------------+
+// |runp            |
+// +----------------+
+//         v
+// +----------------+
+// |wrap            |
+// +----------------+
+//         v
+// +----------------+
+// |compile         |
+// +----------------+
+//         v
+// +----------------+
+// |                |
+// +----------------+
+//         v
+// +----------------+
+// |                |
+// +----------------+
+///
+///
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -31,34 +73,17 @@ pub struct Session {
 }
 
 impl Session {
+    // Read an ONNX model from a path and create a session.
     pub async fn from_path(path: &str) -> Result<Session> {
-        let promise = resource::request_device_queue();
-
-        let tera = match Tera::new("templates/**/*.wgsl") {
-            Ok(t) => t,
-            Err(e) => {
-                println!("Parsing error(s): {}", e);
-                ::std::process::exit(1);
-            }
-        };
-        let (device, queue) = promise.await;
-
         let model = onnx::ModelProto::parse_from_bytes(
             &std::fs::read(path).expect("ONNX Model path not found."),
         )
         .expect("Could not deserialize the Model");
 
-        let inner_infos = Session::load_initializers(&device, &model).unwrap();
-
-        Ok(Session {
-            device,
-            queue,
-            model,
-            inner_infos,
-            tera,
-        })
+        Session::from_model(model).await
     }
 
+    // Create a Session given an ONNX model.
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
         let promise = resource::request_device_queue();
 
@@ -71,7 +96,7 @@ impl Session {
         };
         let (device, queue) = promise.await;
 
-        let inner_infos = Session::load_initializers(&device, &model).unwrap();
+        let inner_infos = Session::load(&device, &model).unwrap();
 
         Ok(Session {
             device,
@@ -82,7 +107,8 @@ impl Session {
         })
     }
 
-    pub fn load_initializers(
+    // Load the data within the onnx model initializers.
+    pub fn load(
         device: &wgpu::Device,
         model: &onnx::ModelProto,
     ) -> Result<HashMap<std::string::String, InnerInfo>> {
@@ -168,15 +194,6 @@ impl Session {
     }
 }
 
-#[cfg_attr(doc, aquamarine::aquamarine)]
-/// ```mermaid
-/// graph LR
-///     s([Source]) --> a[[aquamarine]]
-///     r[[rustdoc]] --> f([Docs w/ Mermaid!])
-///     subgraph rustc[Rust Compiler]
-///     a -. inject mermaid.js .-> r
-///     end
-/// ```
 pub async fn run(
     session: &mut Session,
     input_data: HashMap<String, (&[f32], &[i64])>,
