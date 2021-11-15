@@ -1,11 +1,9 @@
-use crate::{onnx, utils::node};
-use log::debug;
+use log::{debug, info};
 use serde_derive::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
-const MAX_OPTIMIZATION_LEN: usize = 2;
 #[derive(Serialize)]
 struct Bindings {
     counter: u32,
@@ -84,77 +82,53 @@ pub fn wrapper(
     debug!("shader: {}", shader);
     // debug!("x: {}", x);
     // TODO: Make defining threads more clean.
-
+    println!("node.get_name(): {:#?}", node.get_name());
     // Generating the compute pipeline and binding group.
-
     // Instantiates the pipeline.
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: None,
+        label: Some(&(node.get_name().to_string() + "_pipeline")),
         layout: None,
         module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: None,
+            label: Some(&(node.get_name().to_string() + "_shader")),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
         }),
         entry_point: "main",
     });
-
+    let mut bind_groups = vec![];
+    if binding_counter / 4 > 0 {
+        for index in 0..(binding_counter / 4) as usize {
+            bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &compute_pipeline.get_bind_group_layout(index as u32),
+                entries: &entries[index * 4..(index + 1) * 4],
+            }));
+        }
+    } else {
+        bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &compute_pipeline.get_bind_group_layout(0 as u32),
+            entries: &entries,
+        }));
+    }
     // Instantiates the bind group, once again specifying the binding of buffers.
 
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &compute_pipeline.get_bind_group_layout(0),
-        entries: &entries,
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some(&(node.get_name().to_string() + "_encoder")),
     });
-
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
     {
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some(&(node.get_name().to_string() + "_pass")),
+        });
         cpass.set_pipeline(&compute_pipeline);
-        cpass.set_bind_group(0, &bind_group, &[]);
+        if binding_counter / 4 > 0 {
+            for index in 0..(binding_counter / 4) as usize {
+                cpass.set_bind_group(index as u32, &bind_groups[index], &[]);
+            }
+        } else {
+            cpass.set_bind_group(0 as u32, &bind_groups[0], &[]);
+        }
         cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
     }
     queue.submit(Some(encoder.finish()));
-    Ok(())
-}
-
-pub fn compute(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    graph: &crate::onnx::GraphProto,
-    inner_infos: &HashMap<String, crate::InnerInfo>,
-    tera: &Tera,
-) -> Result<(), wgpu::Error> {
-    let original_nodes = graph.get_node();
-    let n = original_nodes.iter().count();
-
-    let mut node_index = 0;
-
-    while node_index < n {
-        let nodes = &original_nodes[node_index..(usize::min(node_index + MAX_OPTIMIZATION_LEN, n))];
-        let names = nodes
-            .iter()
-            .map(|node| node.get_op_type())
-            .collect::<Vec<&str>>();
-        let runnable_node = match names.as_slice() {
-            ["Conv", "Relu", ..] => {
-                node_index += 2;
-                node(
-                    nodes[0].get_input().iter().map(|x| x.as_str()).collect(),
-                    nodes[1].get_output().iter().map(|x| x.as_str()).collect(),
-                    "ConvRelu",
-                    "ConvRelu",
-                    nodes[0].get_attribute().to_vec(),
-                )
-            }
-            [..] => {
-                node_index += 1;
-                nodes[0].clone()
-            }
-        };
-
-        crate::compute::wrapper(device, queue, &runnable_node, inner_infos, tera).unwrap();
-    }
-
     Ok(())
 }

@@ -28,6 +28,15 @@ pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
     }
 }
 
+pub fn rename_attribute(
+    attribute: &onnx::AttributeProto,
+    new_name: String,
+) -> onnx::AttributeProto {
+    let mut attr = attribute.clone();
+    attr.set_name(new_name);
+    attr
+}
+
 pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> Option<Vec<i64>> {
     value_info
         .iter()
@@ -43,6 +52,7 @@ pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> O
         })
 }
 
+// TODO: Make dimension optional
 pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     let mut dim_value = vec![];
     for dimension in dimensions {

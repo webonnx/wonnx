@@ -25,7 +25,7 @@ var<storage, write> var_{{ bindings[2].tensor }}: Array;
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
-	let batch_number = gidx / {{ M_x_H_x_W / 4 }}u; 
+	let batch = gidx / {{ M_x_H_x_W / 4 }}u; 
 	let rest = gidx % {{ M_x_H_x_W / 4 }}u; 
 
         let m = rest / {{ H_x_W }}u;
@@ -36,7 +36,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         
         var result = vec4<f32>(0., 0., 0., 0.);
         
-        let root_index = batch_number * {{ original_C_x_H_x_W }}u;
+        let root_index = batch * {{ original_C_x_H_x_W }}u;
         let root_kernel_index = m * {{ channel * 4 }}u;
 
         for(var c: u32 = 0u; c < {{ channel }}u; c = c + 1u) {
@@ -89,7 +89,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         {% if input | length == 3 %}result = result + var_{{ input[2] }}.data[m]{% endif %};
 {% endif %}
 
-        let base_index = batch_number * {{ M_x_H_x_W }}u + m * {{ H_x_W * 4 }}u + y * {{ width }}u + x;
+        let base_index = batch * {{ M_x_H_x_W }}u + m * {{ H_x_W * 4 }}u + y * {{ width }}u + x;
         for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {
                 let index = base_index + index_vec * {{ H_x_W }}u;
 

@@ -1,6 +1,6 @@
 # wonnx
 
-Wonnx aims for Blazing Fast AI on any device.
+Wonnx aims for running blazing Fast AI on any device.
 
 ## Supported Platforms (enabled by `wgpu`)
 
@@ -40,7 +40,7 @@ cargo run --example squeeze --release
 ## To use
 
 ```rust
-async fn execute_gpu() -> Option<Vec<f32>> {
+async fn execute_gpu() -> Vec<f32> {
     // USER INPUT
 
     let n: usize = 512 * 512 * 128;
@@ -53,12 +53,12 @@ async fn execute_gpu() -> Option<Vec<f32>> {
         .await
         .unwrap();
 
-    wonnx::run(&mut session, input_data).await
+    wonnx::run(&mut session, input_data).await.unwrap()
 }
 ```
 
 > Examples are available in the `examples` folder
-
+ 
 ## Test 
 
 ```bash
