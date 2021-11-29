@@ -1,9 +1,22 @@
 {% include "structs.wgsl" %}
 
-{% for binding in bindings %}
-[[group(0), binding({{ binding.counter }})]]
-var<storage, read_write> var_{{ binding.tensor }}: Array;
-{% endfor %}
+[[group(0), binding(0)]]
+var<storage, read> var_{{ input[0] }}: Array;
+
+[[group(0), binding(1)]]
+var<storage, read> var_{{ input[1] }}: Array;
+
+{% if input | length == 3 %} // Bias
+[[group(0), binding(2)]]
+var<storage, read> var_{{ input[2] }}: Array;
+
+[[group(0), binding(3)]]
+var<storage, write> var_{{ output[0] }}: Array;
+
+{% else %}
+[[group(0), binding(2)]]
+var<storage, write> var_{{ output[0] }}: Array;
+{% endif %}  
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {

@@ -12,7 +12,7 @@ use crate::{
 
 use log::debug;
 
-const MAX_OPTIMIZATION_LEN: usize = 14;
+const MAX_OPTIMIZATION_LEN: usize = 7;
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
@@ -33,7 +33,19 @@ pub fn load(
     }
     let mut initializers = hash;
 
-    let value_info = graph.get_value_info();
+    let mut value_info = HashMap::new();
+
+    for info in graph.get_value_info() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        value_info.insert(info.get_name().to_string(), dims);
+    }
     let output_info = &graph.get_output();
     let original_nodes = graph.get_node();
 
@@ -218,7 +230,7 @@ pub fn load(
 
         // Initalialising Output
         let output = &nodes[optimisation_length - 1].get_output()[0];
-        if let Some(output_dims) = get_dimension(value_info, &output) {
+        if let Some(output_dims) = value_info.remove(output) {
             inner_infos.insert(
                 output.clone(),
                 InnerInfo {
@@ -234,6 +246,64 @@ pub fn load(
         } else {
             panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
         }
+        optimised_nodes.push(runnable_node);
+    }
+
+    //  graph.set_node(RepeatedField::from(optimised_nodes));
+
+    Ok((optimised_nodes, inner_infos))
+}
+
+pub fn load_sequentially(
+    graph: &crate::onnx::GraphProto,
+    device: &wgpu::Device,
+) -> Result<(Vec<NodeProto>, HashMap<String, InnerInfo>), wgpu::Error> {
+    let initializers = graph.get_initializer();
+    let mut hash = HashMap::new();
+    for initializer in initializers {
+        let input = initializer.get_name().to_string();
+        let dims = initializer.get_dims().to_vec();
+        let data = initializer.get_float_data();
+        let raw_data = if !data.is_empty() {
+            bytemuck::cast_slice(data)
+        } else {
+            initializer.get_raw_data()
+        };
+
+        hash.insert(input, (dims, raw_data));
+    }
+    let mut initializers = hash;
+
+    let value_info = graph.get_value_info();
+    let output_info = graph.get_output();
+    let original_nodes = graph.get_node();
+
+    let mut inner_infos = HashMap::new();
+    let n = original_nodes.iter().count();
+
+    let mut node_index = 0;
+    let mut optimised_nodes = vec![];
+
+    for node in original_nodes {
+        let inputs = node.get_input();
+        for input in inputs {
+            if let Some((dims, data)) = initializers.remove(input) {
+                if !data.is_empty() {
+                    inner_infos.insert(
+                        input.to_string(),
+                        InnerInfo {
+                            buffer: resource::create_buffer_init(device, data, input),
+                            dims,
+                        },
+                    );
+                } else {
+                    debug!("Not inserting input: {} with shape: {:?}", input, dims);
+                };
+            }
+        }
+
+        let runnable_node = node.clone();
+
         optimised_nodes.push(runnable_node);
     }
 

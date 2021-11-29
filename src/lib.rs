@@ -5,7 +5,6 @@ pub mod onnx;
 pub mod optimisation;
 pub mod resource;
 pub mod utils;
-use log::debug;
 use protobuf::{self, Message, RepeatedField};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -88,10 +87,10 @@ impl Session {
         let tera = match Tera::new("templates/**/*.wgsl") {
             Ok(t) => t,
             Err(e) => {
-                println!("Parsing error(s): {}", e);
-                ::std::process::exit(1);
+                panic!("Parsing error(s): {}", e);
             }
         };
+
         let (device, queue) = promise.await;
 
         let (nodes, inner_infos) = optimisation::load(&model.get_graph(), &device).unwrap();

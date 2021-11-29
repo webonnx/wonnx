@@ -1,14 +1,7 @@
 use log::{debug, info};
-use serde_derive::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use tera::{Context, Tera};
-
-#[derive(Serialize)]
-struct Bindings {
-    counter: u32,
-    tensor: String,
-}
 
 pub fn wrapper(
     device: &wgpu::Device,
@@ -29,9 +22,9 @@ pub fn wrapper(
     } else {
         inputs
     };
+
     // Generating the shader
     let mut entries = vec![];
-    let mut bindings = vec![];
 
     for tensor in inputs {
         entries.push(wgpu::BindGroupEntry {
@@ -42,10 +35,6 @@ pub fn wrapper(
                 .buffer
                 .as_entire_binding(),
         });
-        bindings.push(Bindings {
-            counter: binding_counter,
-            tensor: tensor.to_string(),
-        });
         binding_counter += 1;
     }
 
@@ -54,13 +43,9 @@ pub fn wrapper(
             binding: binding_counter,
             resource: inner_infos
                 .get(tensor.as_str())
-                .unwrap()
+                .unwrap_or_else(|| panic!("Tensor {} is not present in the inner infos", tensor))
                 .buffer
                 .as_entire_binding(),
-        });
-        bindings.push(Bindings {
-            counter: binding_counter,
-            tensor: tensor.to_string(),
         });
         binding_counter += 1;
         debug!(
@@ -70,7 +55,6 @@ pub fn wrapper(
             binding_counter
         );
     }
-    context.insert("bindings", &bindings);
 
     // TODO: Add attribute value binding
     let (shader_template, x, y, z) = crate::compiler::format_node(node, inner_infos, &mut context);
@@ -82,7 +66,6 @@ pub fn wrapper(
     debug!("shader: {}", shader);
     // debug!("x: {}", x);
     // TODO: Make defining threads more clean.
-    println!("node.get_name(): {:#?}", node.get_name());
     // Generating the compute pipeline and binding group.
     // Instantiates the pipeline.
     let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
