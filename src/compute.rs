@@ -76,7 +76,7 @@ pub fn wrapper(
     } else {
         bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &compute_pipeline.get_bind_group_layout(0 as u32),
+            layout: &compute_pipeline.get_bind_group_layout(0u32),
             entries: &entries,
         }));
     }
@@ -95,7 +95,7 @@ pub fn wrapper(
                 cpass.set_bind_group(index as u32, &bind_groups[index], &[]);
             }
         } else {
-            cpass.set_bind_group(0 as u32, &bind_groups[0], &[]);
+            cpass.set_bind_group(0u32, &bind_groups[0], &[]);
         }
         cpass.dispatch(x as u32, y as u32, z as u32); // Number of cells to run, the (x,y,z) size of item being processed
     }

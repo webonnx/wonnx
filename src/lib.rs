@@ -84,7 +84,7 @@ impl Session {
 
         let (device, queue) = promise.await;
 
-        let (nodes, inner_infos) = optimisation::load(&model.get_graph(), &device).unwrap();
+        let (nodes, inner_infos) = optimisation::load(model.get_graph(), &device).unwrap();
         let graph = model.mut_graph();
         graph.set_node(RepeatedField::from(nodes));
 
@@ -111,7 +111,7 @@ pub async fn run(session: &mut Session, input_data: HashMap<String, &[f32]>) -> 
     let graph = session.model.get_graph();
     let outputs = graph.get_output();
     let output_info = &graph.get_output();
-    let output_dims = get_dimension(output_info, &outputs[0].get_name()).unwrap();
+    let output_dims = get_dimension(output_info, outputs[0].get_name()).unwrap();
     inner_infos.insert(
         outputs[0].get_name().to_string(),
         resource::output_buffer(device, len(&output_dims) as _, outputs[0].get_name()),
@@ -120,10 +120,11 @@ pub async fn run(session: &mut Session, input_data: HashMap<String, &[f32]>) -> 
     let queue = &session.queue;
     let nodes = graph.get_node();
     println!("time: pre_run: {:#?}", time_pre_run.elapsed());
-
+    let time_run = Instant::now();
     for node in nodes {
-        compute::wrapper(device, queue, node, &inner_infos).unwrap();
+        compute::wrapper(device, queue, node, inner_infos).unwrap();
     }
+    println!("time: run: {:#?}", time_run.elapsed());
     // ompute::compute(device, queue, graph, inner_infos, tera).unwrap();
     let time_post_run = Instant::now();
     let buffer = inner_infos.remove(outputs[0].get_name()).unwrap();

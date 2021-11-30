@@ -19,7 +19,7 @@ pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
         default,
     ) {
         (Some(attr), _) => attr.clone().into(),
-        (None, Some(default_attr)) => default_attr.into(),
+        (None, Some(default_attr)) => default_attr,
         (None, None) => panic!(
             "Did not find attribute: {} for node: {}",
             attribute,

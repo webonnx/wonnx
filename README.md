@@ -46,7 +46,6 @@ async fn execute_gpu() -> Vec<f32> {
     let n: usize = 512 * 512 * 128;
     let mut input_data = HashMap::new();
     let data = vec![-1.0f32; n];
-    let dims = vec![n as i64];
     input_data.insert("x", data.as_slice());
 
     let mut session = wonnx::Session::from_path("examples/data/models/single_relu.onnx")
