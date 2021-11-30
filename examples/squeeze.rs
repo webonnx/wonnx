@@ -41,14 +41,9 @@ async fn run() {
 
 // Hardware management
 async fn execute_gpu() -> Result<Vec<f32>> {
-    let n: usize = 224;
     let mut input_data = HashMap::new();
     let image = load_image();
-    let dims = vec![1, 3 as i64, n as i64, n as i64];
-    input_data.insert(
-        "data".to_string(),
-        (image.as_slice().unwrap(), dims.as_slice()),
-    );
+    input_data.insert("data".to_string(), image.as_slice().unwrap());
 
     let mut session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx")
         .await

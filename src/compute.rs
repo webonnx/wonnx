@@ -1,19 +1,17 @@
-use log::{debug, info};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use tera::{Context, Tera};
+
+use crate::utils::get_attribute;
 
 pub fn wrapper(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     node: &crate::onnx::NodeProto,
-    inner_infos: &HashMap<String, crate::InnerInfo>,
-    tera: &Tera,
+    inner_infos: &HashMap<String, wgpu::Buffer>,
 ) -> Result<(), wgpu::Error> {
     let mut binding_counter: u32 = 0;
     // Generating the shader
 
-    let mut context = Context::new();
     let inputs = node.get_input();
     let outputs = node.get_output();
 
@@ -32,7 +30,6 @@ pub fn wrapper(
             resource: inner_infos
                 .get(tensor.as_str())
                 .unwrap_or_else(|| panic!("Tensor {} is not present in the inner infos", tensor))
-                .buffer
                 .as_entire_binding(),
         });
         binding_counter += 1;
@@ -44,26 +41,16 @@ pub fn wrapper(
             resource: inner_infos
                 .get(tensor.as_str())
                 .unwrap_or_else(|| panic!("Tensor {} is not present in the inner infos", tensor))
-                .buffer
                 .as_entire_binding(),
         });
         binding_counter += 1;
-        debug!(
-            "output {} has size: {:?} at counter {}",
-            tensor,
-            inner_infos.get(tensor.as_str()).unwrap().dims,
-            binding_counter
-        );
     }
 
-    // TODO: Add attribute value binding
-    let (shader_template, x, y, z) = crate::compiler::format_node(node, inner_infos, &mut context);
-
-    let shader = tera
-        .render(&shader_template, &context)
-        .expect("failed to render shader");
-
-    debug!("shader: {}", shader);
+    let shader = get_attribute::<String>("WGSL", None, node);
+    let threads = get_attribute::<Vec<i64>>("threads", None, node);
+    let x = threads[0];
+    let y = threads[1];
+    let z = threads[2];
     // debug!("x: {}", x);
     // TODO: Make defining threads more clean.
     // Generating the compute pipeline and binding group.
@@ -110,7 +97,7 @@ pub fn wrapper(
         } else {
             cpass.set_bind_group(0 as u32, &bind_groups[0], &[]);
         }
-        cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
+        cpass.dispatch(x as u32, y as u32, z as u32); // Number of cells to run, the (x,y,z) size of item being processed
     }
     queue.submit(Some(encoder.finish()));
     Ok(())

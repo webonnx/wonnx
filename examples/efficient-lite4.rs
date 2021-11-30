@@ -19,8 +19,7 @@ async fn execute_gpu() -> Option<Vec<f32>> {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..n * n).map(|x| x as f32).collect();
-    let dims = vec![1, 3 as i64, n as i64, n as i64];
-    input_data.insert("images:0".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("images:0".to_string(), data.as_slice());
 
     let mut session = wonnx::Session::from_path("examples/data/models/efficientnet-lite4-11.onnx")
         .await

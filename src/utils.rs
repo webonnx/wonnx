@@ -203,11 +203,10 @@ mod tests {
         let mut input_data = std::collections::HashMap::new();
 
         let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
-        let dims = vec![1, c as i64, n as i64, n as i64];
-        input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+        input_data.insert("X".to_string(), data.as_slice());
 
         // ONNX INPUTS
-
+        let dims = vec![1, c as i64, n as i64, n as i64];
         let kernel_n = 3;
         let m = 1;
         let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();

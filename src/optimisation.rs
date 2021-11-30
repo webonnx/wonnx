@@ -5,18 +5,24 @@ use crate::{
     resource,
     resource::padding,
     utils::node,
-    utils::rename_attribute,
     utils::{self, get_dimension, len},
-    InnerInfo,
+    utils::{attribute, rename_attribute},
 };
 
 use log::debug;
+use tera::Tera;
 
 const MAX_OPTIMIZATION_LEN: usize = 7;
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
-) -> Result<(Vec<NodeProto>, HashMap<String, InnerInfo>), wgpu::Error> {
+) -> Result<(Vec<NodeProto>, HashMap<String, wgpu::Buffer>), wgpu::Error> {
+    let tera = match Tera::new("templates/**/*.wgsl") {
+        Ok(t) => t,
+        Err(e) => {
+            panic!("Parsing error(s): {}", e);
+        }
+    };
     let initializers = graph.get_initializer();
     let mut hash = HashMap::new();
     for initializer in initializers {
@@ -35,6 +41,30 @@ pub fn load(
 
     let mut value_info = HashMap::new();
 
+    for info in graph.get_input() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        value_info.insert(info.get_name().to_string(), dims);
+    }
+
+    for info in graph.get_output() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        value_info.insert(info.get_name().to_string(), dims);
+    }
+
     for info in graph.get_value_info() {
         let dims = info
             .get_field_type()
@@ -46,6 +76,7 @@ pub fn load(
             .collect::<Vec<i64>>();
         value_info.insert(info.get_name().to_string(), dims);
     }
+
     let output_info = &graph.get_output();
     let original_nodes = graph.get_node();
 
@@ -64,7 +95,7 @@ pub fn load(
             .collect::<Vec<&str>>();
         let mut optimisation_length = 1;
 
-        let runnable_node = match names.as_slice() {
+        let mut runnable_node = match names.as_slice() {
             ["Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Concat", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Concat", ..] =>
             {
                 optimisation_length = 14;
@@ -123,10 +154,7 @@ pub fn load(
 
                 inner_infos.insert(
                     inputs[1].to_string(),
-                    InnerInfo {
-                        buffer: resource::create_buffer_init(device, &w_0, &raw_inputs[1]),
-                        dims: w_0_dims,
-                    },
+                    resource::create_buffer_init(device, &w_0, &raw_inputs[1]),
                 );
 
                 let mut b_0 = b_0_data.to_vec();
@@ -137,19 +165,13 @@ pub fn load(
 
                 inner_infos.insert(
                     inputs[2].to_string(),
-                    InnerInfo {
-                        buffer: resource::create_buffer_init(device, &b_0, &inputs[2]),
-                        dims: b_0_dims,
-                    },
+                    resource::create_buffer_init(device, &b_0, &inputs[2]),
                 );
                 let w_2_data = padding(w_2_data, 12, 4);
 
                 inner_infos.insert(
                     inputs[5].to_string(),
-                    InnerInfo {
-                        buffer: resource::create_buffer_init(device, &w_2_data, &inputs[5]),
-                        dims: w_2_dims,
-                    },
+                    resource::create_buffer_init(device, &w_2_data, &inputs[5]),
                 );
 
                 node(
@@ -181,14 +203,7 @@ pub fn load(
                         if !data.is_empty() {
                             inner_infos.insert(
                                 input.to_string(),
-                                InnerInfo {
-                                    buffer: resource::create_buffer_init(
-                                        device,
-                                        data.as_slice(),
-                                        input,
-                                    ),
-                                    dims,
-                                },
+                                resource::create_buffer_init(device, data.as_slice(), input),
                             );
                         } else {
                             debug!("Not inserting input: {} with shape: {:?}", input, dims);
@@ -211,10 +226,7 @@ pub fn load(
                         if !data.is_empty() {
                             inner_infos.insert(
                                 input.to_string(),
-                                InnerInfo {
-                                    buffer: resource::create_buffer_init(device, data, input),
-                                    dims,
-                                },
+                                resource::create_buffer_init(device, data, input),
                             );
                         } else {
                             debug!("Not inserting input: {} with shape: {:?}", input, dims);
@@ -230,22 +242,22 @@ pub fn load(
 
         // Initalialising Output
         let output = &nodes[optimisation_length - 1].get_output()[0];
-        if let Some(output_dims) = value_info.remove(output) {
+        if let Some(output_dims) = value_info.get(output) {
             inner_infos.insert(
                 output.clone(),
-                InnerInfo {
-                    buffer: resource::create_buffer(
-                        device,
-                        len(&output_dims) as _,
-                        output.as_str(),
-                    ),
-                    dims: output_dims,
-                },
+                resource::create_buffer(device, len(&output_dims) as _, output.as_str()),
             );
         } else if let Some(_) = get_dimension(output_info, &output) {
         } else {
             panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
         }
+
+        let (shader, x, y, z) = crate::compiler::format_node(&runnable_node, &value_info, &tera);
+        debug!("shader: {}", shader);
+        let attributes = runnable_node.mut_attribute();
+        attributes.push(attribute("WGSL", shader));
+        attributes.push(attribute("threads", vec![x as i64, y as i64, z as i64]));
+
         optimised_nodes.push(runnable_node);
     }
 
@@ -257,7 +269,7 @@ pub fn load(
 pub fn load_sequentially(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
-) -> Result<(Vec<NodeProto>, HashMap<String, InnerInfo>), wgpu::Error> {
+) -> Result<(Vec<NodeProto>, HashMap<String, wgpu::Buffer>), wgpu::Error> {
     let initializers = graph.get_initializer();
     let mut hash = HashMap::new();
     for initializer in initializers {
@@ -291,10 +303,7 @@ pub fn load_sequentially(
                 if !data.is_empty() {
                     inner_infos.insert(
                         input.to_string(),
-                        InnerInfo {
-                            buffer: resource::create_buffer_init(device, data, input),
-                            dims,
-                        },
+                        resource::create_buffer_init(device, data, input),
                     );
                 } else {
                     debug!("Not inserting input: {} with shape: {:?}", input, dims);
@@ -303,7 +312,6 @@ pub fn load_sequentially(
         }
 
         let runnable_node = node.clone();
-
         optimised_nodes.push(runnable_node);
     }
 

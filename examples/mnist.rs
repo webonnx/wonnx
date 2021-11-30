@@ -25,15 +25,10 @@ async fn run() {
 
 // Hardware management
 async fn execute_gpu() -> Option<Vec<f32>> {
-    let n: usize = 28;
     let mut input_data = HashMap::new();
 
     let image = load_image();
-    let dims = vec![1, 1 as i64, n as i64, n as i64];
-    input_data.insert(
-        "Input3".to_string(),
-        (image.as_slice().unwrap(), dims.as_slice()),
-    );
+    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
     let mut session = wonnx::Session::from_path("examples/data/models/opt-mnist.onnx")
         .await
         .unwrap();

@@ -25,7 +25,7 @@ async fn execute_gpu() -> Result<Vec<f32>> {
 
     let data: Vec<f32> = (0..50).map(|x| x as f32).collect();
     let dims = vec![2, c as i64, n as i64, n as i64];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
 

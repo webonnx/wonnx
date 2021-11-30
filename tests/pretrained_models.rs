@@ -8,11 +8,9 @@ use std::path::Path;
 use ndarray::s;
 #[test]
 fn test_relu() {
-    let n: usize = 2;
     let mut input_data = HashMap::new();
     let data = vec![-1.0f32, 1.0];
-    let dims = vec![1, n as i64];
-    input_data.insert("x".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("x".to_string(), data.as_slice());
 
     let mut session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/single_relu.onnx",
@@ -30,8 +28,7 @@ fn test_two_transposes() {
 
     let mut input_data = HashMap::new();
     let data = (0..2 * 3 * 4).map(|x| x as f32).collect::<Vec<f32>>();
-    let dims = vec![2, 3, 4];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice());
 
     let mut session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/two_transposes.onnx",
@@ -44,15 +41,9 @@ fn test_two_transposes() {
 
 #[test]
 fn test_mnist() {
-    let n: usize = 28;
-
     let image = load_image("0.jpg");
-    let dims = vec![1, 1 as i64, n as i64, n as i64];
     let mut input_data = HashMap::new();
-    input_data.insert(
-        "Input3".to_string(),
-        (image.as_slice().unwrap(), dims.as_slice()),
-    );
+    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
     let mut session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/opt-mnist.onnx",
     ))
@@ -73,12 +64,8 @@ fn test_mnist() {
     assert_eq!(result.0, 0);
 
     let image = load_image("3.jpg");
-    let dims = vec![1, 1 as i64, n as i64, n as i64];
     let mut input_data = HashMap::new();
-    input_data.insert(
-        "Input3".to_string(),
-        (image.as_slice().unwrap(), dims.as_slice()),
-    );
+    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
     let result = pollster::block_on(wonnx::run(&mut session, input_data))
         .unwrap()
         .iter()
@@ -94,12 +81,8 @@ fn test_mnist() {
     assert_eq!(result.0, 3);
 
     let image = load_image("5.jpg");
-    let dims = vec![1, 1 as i64, n as i64, n as i64];
     let mut input_data = HashMap::new();
-    input_data.insert(
-        "Input3".to_string(),
-        (image.as_slice().unwrap(), dims.as_slice()),
-    );
+    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
     let result = pollster::block_on(wonnx::run(&mut session, input_data))
         .unwrap()
         .iter()
@@ -115,12 +98,8 @@ fn test_mnist() {
     assert_eq!(result.0, 5);
 
     let image = load_image("7.jpg");
-    let dims = vec![1, 1 as i64, n as i64, n as i64];
     let mut input_data = HashMap::new();
-    input_data.insert(
-        "Input3".to_string(),
-        (image.as_slice().unwrap(), dims.as_slice()),
-    );
+    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
     let result = pollster::block_on(wonnx::run(&mut session, input_data))
         .unwrap()
         .iter()
@@ -138,14 +117,9 @@ fn test_mnist() {
 
 #[test]
 fn test_squeeze() {
-    let n: usize = 224;
     let mut input_data = HashMap::new();
     let image = load_squeezenet_image();
-    let dims = vec![1, 3 as i64, n as i64, n as i64];
-    input_data.insert(
-        "data".to_string(),
-        (image.as_slice().unwrap(), dims.as_slice()),
-    );
+    input_data.insert("data".to_string(), image.as_slice().unwrap());
 
     let mut session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/opt-squeeze.onnx",

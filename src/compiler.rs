@@ -1,25 +1,30 @@
 use crate::utils::get_attribute;
 use std::collections::HashMap;
-use tera::Context;
+use tera::{Context, Tera};
 
 pub fn format_node(
     node: &crate::onnx::NodeProto,
-    inner_infos: &HashMap<String, crate::InnerInfo>,
-    context: &mut Context,
+    dims_infos: &HashMap<String, Vec<i64>>,
+    tera: &Tera,
 ) -> (String, u32, u32, u32) {
     let inputs = node.get_input();
     let outputs = node.get_output();
+    let mut context = Context::new();
 
     context.insert("input", &inputs);
     context.insert("output", &outputs);
     context.insert("op_type", &node.get_op_type().to_lowercase());
 
-    let input_dims = &inner_infos.get(&inputs[0]).unwrap().dims;
-    let output_dims = &inner_infos.get(&outputs[0]).unwrap().dims;
+    let input_dims = &dims_infos
+        .get(&inputs[0])
+        .unwrap_or_else(|| panic!("{} not found", inputs[0]));
+    let output_dims = &dims_infos
+        .get(&outputs[0])
+        .unwrap_or_else(|| panic!("{} not found", outputs[0]));
 
     let length = crate::utils::len(input_dims);
 
-    match node.get_op_type() {
+    let (template, x, y, z) = match node.get_op_type() {
         // Map simple function
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
         | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => {
@@ -371,7 +376,7 @@ pub fn format_node(
             let beta = get_attribute("beta", Some(1.0), node);
 
             let left_columns = &input_dims[1];
-            let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
+            let right_columns = &dims_infos.get(&inputs[1]).unwrap()[1];
 
             context.insert("left_columns", &left_columns);
 
@@ -403,5 +408,11 @@ pub fn format_node(
             ("matrix/transpose.wgsl".to_string(), (length / 4) as _, 1, 1)
         }
         _ => unimplemented!(),
-    }
+    };
+
+    let shader = tera
+        .render(&template, &context)
+        .expect("failed to render shader");
+
+    (shader, x, y, z)
 }

@@ -18,7 +18,6 @@ fn execute_gpu() {
     let mut input_data = HashMap::new();
 
     let data_a = ndarray::Array2::eye(n);
-    let dims_a = vec![n as i64, n as i64];
     let mut data_b = ndarray::Array2::<f32>::zeros((n, n));
     data_b[[0, 0]] = 0.0;
     data_b[[0, 1]] = 0.5;
@@ -29,18 +28,11 @@ fn execute_gpu() {
     data_b[[2, 0]] = 2.0;
     data_b[[2, 1]] = 2.5;
     data_b[[2, 2]] = -2.5;
-    let dims_b = vec![n as i64, n as i64];
 
     let sum = data_a.dot(&data_b);
 
-    input_data.insert(
-        "A".to_string(),
-        (data_a.as_slice().unwrap(), dims_a.as_slice()),
-    );
-    input_data.insert(
-        "B".to_string(),
-        (data_b.as_slice().unwrap(), dims_b.as_slice()),
-    );
+    input_data.insert("A".to_string(), data_a.as_slice().unwrap());
+    input_data.insert("B".to_string(), data_b.as_slice().unwrap());
 
     // ONNX INPUTS
 
@@ -119,26 +111,14 @@ fn single_dimension_matrix_multiplication() {
 
     let data_a = ndarray::Array::random((1, n), Uniform::new(0., 10.));
 
-    let dims_a = vec![1 as i64, n as i64];
     let data_b = ndarray::Array::random((n, n), Uniform::new(0., 10.));
-    let dims_b = vec![n as i64, n as i64];
 
     let data_w = ndarray::Array::random((1, n), Uniform::new(0., 10.));
-    let dims_w = vec![1 as i64, n as i64];
     let sum = data_a.dot(&data_b) + data_w.clone();
 
-    input_data.insert(
-        "A".to_string(),
-        (data_a.as_slice().unwrap(), dims_a.as_slice()),
-    );
-    input_data.insert(
-        "B".to_string(),
-        (data_b.as_slice().unwrap(), dims_b.as_slice()),
-    );
-    input_data.insert(
-        "W".to_string(),
-        (data_w.as_slice().unwrap(), dims_w.as_slice()),
-    );
+    input_data.insert("A".to_string(), data_a.as_slice().unwrap());
+    input_data.insert("B".to_string(), data_b.as_slice().unwrap());
+    input_data.insert("W".to_string(), data_w.as_slice().unwrap());
 
     // ONNX INPUTS
 
