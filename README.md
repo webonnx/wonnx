@@ -19,10 +19,12 @@ Wonnx aims for running blazing Fast AI on any device.
 - Install Rust
 - Install Vulkan, Metal, or DX12 for the GPU API.
 - Then: 
+
 ```bash
-cargo run --example custom_graph
+cargo run --example squeeze --release
 ```
-- Download [mnist](https://github.com/onnx/models/blob/master/vision/classification/mnist/model/mnist-8.onnx) or [squeezenet](https://github.com/onnx/models/blob/master/vision/classification/squeezenet/model/squeezenet1.0-9.onnx)
+
+## To run a model from scratch
 
 - To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
 
@@ -31,12 +33,12 @@ cargo run --example custom_graph
 python -m onnxsim mnist-8.onnx  opt-mnist.onnx
 ```
 
-- Then you can run it with:
+- Then you can run it following the example in the examples folder:
 
 ```bash
 cargo run --example mnist --release
-cargo run --example squeeze --release
 ```
+
 ## To use
 
 ```rust
