@@ -1,25 +1,30 @@
 use crate::utils::get_attribute;
 use std::collections::HashMap;
-use tera::Context;
+use tera::{Context, Tera};
 
 pub fn format_node(
     node: &crate::onnx::NodeProto,
-    inner_infos: &HashMap<String, crate::InnerInfo>,
-    context: &mut Context,
+    dims_infos: &HashMap<String, Vec<i64>>,
+    tera: &Tera,
 ) -> (String, u32, u32, u32) {
     let inputs = node.get_input();
     let outputs = node.get_output();
+    let mut context = Context::new();
 
     context.insert("input", &inputs);
     context.insert("output", &outputs);
     context.insert("op_type", &node.get_op_type().to_lowercase());
 
-    let input_dims = &inner_infos.get(&inputs[0]).unwrap().dims;
-    let output_dims = &inner_infos.get(&outputs[0]).unwrap().dims;
+    let input_dims = &dims_infos
+        .get(&inputs[0])
+        .unwrap_or_else(|| panic!("{} not found", inputs[0]));
+    let output_dims = &dims_infos
+        .get(&outputs[0])
+        .unwrap_or_else(|| panic!("{} not found", outputs[0]));
 
     let length = crate::utils::len(input_dims);
 
-    match node.get_op_type() {
+    let (template, x, y, z) = match node.get_op_type() {
         // Map simple function
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
         | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => {
@@ -279,12 +284,99 @@ pub fn format_node(
                 )
             }
         }
+        "SqueezenetConvGroup" => {
+            debug_assert!(
+                input_dims.len() == 4usize,
+                "This group only support 4 dimensions."
+            );
+
+            let dilations_0 = get_attribute("dilations_0", Some(vec![1, 1]), node);
+            let kernel_shape_0 = get_attribute::<Vec<i64>>("kernel_shape_0", None, node);
+            let strides_0 = get_attribute("strides_0", Some(vec![1, 1]), node);
+            let _pads_0 = get_attribute("pads_0", Some(vec![0, 0, 0, 0]), node);
+
+            let dilations_1 = get_attribute("dilations_1", Some(vec![1, 1]), node);
+            let kernel_shape_1 = get_attribute::<Vec<i64>>("kernel_shape_1", None, node);
+            let strides_1 = get_attribute("strides_1", Some(vec![1, 1]), node);
+            let _pads_1 = get_attribute("pads_1", Some(vec![0, 0, 0, 0]), node);
+
+            let dilations_2 = get_attribute("dilations_2", Some(vec![1, 1]), node);
+            let kernel_shape_2 = get_attribute::<Vec<i64>>("kernel_shape_2", None, node);
+            let strides_2 = get_attribute("strides_2", Some(vec![1, 1]), node);
+            let _pads_2 = get_attribute("pads_2", Some(vec![0, 0, 0, 0]), node);
+
+            debug_assert!(
+                dilations_0 == [1, 1],
+                "This group configuration is not yet implemented"
+            );
+            debug_assert!(
+                dilations_1 == [1, 1],
+                "This group configuration is not yet implemented"
+            );
+            debug_assert!(
+                dilations_2 == [1, 1],
+                "This group configuration is not yet implemented"
+            );
+
+            debug_assert!(
+                strides_0 == [1, 1],
+                "This group configuration is not yet implemented"
+            );
+            debug_assert!(
+                strides_1 == [1, 1],
+                "This group configuration is not yet implemented"
+            );
+            debug_assert!(
+                strides_2 == [1, 1],
+                "This group configuration is not yet implemented"
+            );
+
+            debug_assert!(
+                kernel_shape_0 == [1, 1],
+                "This group configuration is not yet implemented"
+            );
+            debug_assert!(
+                kernel_shape_1 == [1, 1],
+                "This group configuration is not yet implemented"
+            );
+            debug_assert!(
+                kernel_shape_2 == [3, 3],
+                "This group configuration is not yet implemented"
+            );
+
+            context.insert("output_dims", &output_dims);
+            context.insert("input_dims", &input_dims);
+
+            context.insert(
+                "M_x_H_x_W",
+                &(output_dims[1] * output_dims[2] * output_dims[3]),
+            );
+            context.insert("H_x_W", &(output_dims[2] * output_dims[3]));
+            context.insert(
+                "original_C_x_H_x_W",
+                &(input_dims[1] * input_dims[2] * input_dims[3]),
+            );
+            context.insert("original_H_x_W", &(input_dims[2] * input_dims[3]));
+            context.insert("original_width", &input_dims[3]);
+            context.insert("width", &output_dims[3]);
+            context.insert("original_height", &input_dims[2]);
+            context.insert("channel", &input_dims[1]);
+
+            // GLSL shader for convolution computation
+
+            (
+                "containers/SqueezenetConvGroup.wgsl".to_string(),
+                (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+                1,
+                1,
+            )
+        }
         "Gemm" | "MatMul" => {
             let alpha = get_attribute("alpha", Some(1.0), node);
             let beta = get_attribute("beta", Some(1.0), node);
 
             let left_columns = &input_dims[1];
-            let right_columns = &inner_infos.get(&inputs[1]).unwrap().dims[1];
+            let right_columns = &dims_infos.get(&inputs[1]).unwrap()[1];
 
             context.insert("left_columns", &left_columns);
 
@@ -316,5 +408,11 @@ pub fn format_node(
             ("matrix/transpose.wgsl".to_string(), (length / 4) as _, 1, 1)
         }
         _ => unimplemented!(),
-    }
+    };
+
+    let shader = tera
+        .render(&template, &context)
+        .expect("failed to render shader");
+
+    (shader, x, y, z)
 }

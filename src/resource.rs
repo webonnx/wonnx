@@ -89,6 +89,17 @@ pub fn output_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buff
     })
 }
 
+// Padding as byte
+pub fn padding(data: &[u8], chunk_size: usize, padding_size: usize) -> Vec<u8> {
+    let mut padded_data = vec![];
+    let n = data.len() / chunk_size;
+    for i in 0..n {
+        padded_data.extend(&data[chunk_size * i..chunk_size * (i + 1)]);
+        padded_data.extend(vec![0; padding_size]);
+    }
+    padded_data
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

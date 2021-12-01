@@ -6,16 +6,13 @@ var<storage, read> var_{{ input[0] }}: Array;
 [[group(0), binding(1)]]
 var<storage, read> var_{{ input[1] }}: ArrayMatrix;
 
-{% if input | length == 3 %} // Bias
 [[group(0), binding(2)]]
 var<storage, read> var_{{ input[2] }}: ArrayVector;
 
+//[[group(0), binding(3)]]
+
 [[group(0), binding(3)]]
 var<storage, write> var_{{ output[0] }}: Array;
-{% else %}
-[[group(0), binding(2)]]
-var<storage, write> var_{{ output[0] }}: Array;
-{% endif %}  
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
@@ -31,6 +28,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         let root_index = batch * {{ original_C_x_H_x_W }}u + xy;
         let root_kernel_index = m * {{ channel / 16 * 4 }}u;
 
+        var matrix_0 = var_{{ input[2] }}.data[0];
         for(var c: u32 = 0u; c < {{ channel / 16 }}u; c = c + 1u) {
 
                 let base_index = root_index + c * {{ 16 * original_H_x_W }}u;
@@ -60,11 +58,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                 }
 	}
 
-{% if op_type is matching("convrelu") %}
         result = max(result{% if input | length == 3 %} + var_{{ input[2] }}.data[m]{% endif %}, vec4<f32>(0., 0., 0., 0.));
-{% else %}
-        {% if input | length == 3 %}result = result + var_{{ input[2] }}.data[m]{% endif %};
-{% endif %}
 
         let base_index = batch * {{ M_x_H_x_W }}u + m * {{ H_x_W * 4 }}u + xy;
         for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {

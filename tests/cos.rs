@@ -19,7 +19,7 @@ fn test_cos() {
 
     let data = vec![0.0f32; n];
     let dims = vec![n as i64];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
 

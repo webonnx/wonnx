@@ -27,7 +27,7 @@ fn conv_pad() {
 
     let data: Vec<f32> = (0..50).map(|x| x as f32).collect();
     let dims = vec![2, c as i64, n as i64, n as i64];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
 
@@ -81,7 +81,7 @@ fn conv_without_pad() {
 
     let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
     let dims = vec![1, c as i64, n as i64, n as i64];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
 
@@ -122,8 +122,7 @@ fn conv_stride() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..35).map(|x| x as f32).collect();
-    let dims = vec![1, c as i64, 7 as i64, 5 as i64];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
 
@@ -198,8 +197,7 @@ fn conv_asymetric_stride() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..35).map(|x| x as f32).collect();
-    let dims = vec![1, c as i64, 7 as i64, 5 as i64];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
 
@@ -271,8 +269,7 @@ fn _conv_kernel_3() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..16).map(|x| x as f32).collect();
-    let dims = vec![2, c as i64, n as i64, n as i64];
-    input_data.insert("X".to_string(), (data.as_slice(), dims.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
 

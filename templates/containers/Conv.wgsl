@@ -4,19 +4,16 @@
 var<storage, read> var_{{ input[0] }}: Array;
 
 [[group(0), binding(1)]]
-var<storage, read> var_{{ input[1] }}: Array;
+var<storage, read> var_{{ input[1] }}: ArrayMatrix;
 
-{% if input | length == 3 %} // Bias
 [[group(0), binding(2)]]
-var<storage, read> var_{{ input[2] }}: Array;
+var<storage, read> var_{{ input[2] }}: ArrayVector;
 
 [[group(0), binding(3)]]
 var<storage, write> var_{{ output[0] }}: Array;
 
-{% else %}
-[[group(0), binding(2)]]
-var<storage, write> var_{{ output[0] }}: Array;
-{% endif %}  
+[[group(0), binding(4)]]
+var<storage, read> var_{{ output[0] }}: Array;
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
