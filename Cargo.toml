@@ -17,11 +17,8 @@ bytemuck = "1.7.2"
 env_logger = "0.9.0"
 pollster = "0.2.4"
 log = "0.4.14" 
-bytemuck_derive = "1.0.1"
 protobuf = { version = "2", features = ["with-bytes"] }
 tera = "1.12.1"
-serde_derive = "1.0.68"
-serde = "1.0.68"
 
 
 [dev-dependencies]
