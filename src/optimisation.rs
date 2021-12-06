@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     onnx::{self, NodeProto},
     resource,
@@ -7,16 +5,26 @@ use crate::{
     utils::node,
     utils::{self, len},
     utils::{attribute, rename_attribute},
+    Result,
 };
+
+use std::collections::HashMap;
 
 use log::debug;
 use tera::Tera;
 
 const MAX_OPTIMIZATION_LEN: usize = 7;
+
+impl NodeProto {
+    fn add_node(&mut self, node: NodeProto) -> Result<()> {
+        Ok(())
+    }
+}
+
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
-) -> Result<(Vec<NodeProto>, HashMap<String, wgpu::Buffer>), wgpu::Error> {
+) -> Result<(Vec<NodeProto>, HashMap<String, wgpu::Buffer>)> {
     let tera = match Tera::new("templates/**/*.wgsl") {
         Ok(t) => t,
         Err(e) => {
@@ -83,6 +91,11 @@ pub fn load(
     let mut node_index = 0;
 
     let mut optimised_nodes = vec![];
+    let limits = wgpu::Limits::default().max_storage_buffer_binding_size;
+    let mut size = 0;
+    let mut current_node = NodeProto::new();
+    let mut optimisation_length = 1;
+    let mut exit = false;
 
     while node_index < n {
         let nodes = &base_nodes[node_index..(usize::min(node_index + MAX_OPTIMIZATION_LEN, n))];
@@ -92,7 +105,7 @@ pub fn load(
             .collect::<Vec<&str>>();
         let mut optimisation_length = 1;
 
-        let mut runnable_node = match names.as_slice() {
+        current_node = match names.as_slice() {
             ["Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Concat", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Concat", ..] =>
             {
                 optimisation_length = 14;
@@ -125,19 +138,13 @@ pub fn load(
                     .collect::<Vec<onnx::AttributeProto>>();
 
                 attributes.append(
-                    &mut nodes[2]
-                        .get_attribute()
-                        .iter()
-                        .map(|x| rename_attribute(x, x.get_name().to_string() + "_1"))
-                        .collect::<Vec<onnx::AttributeProto>>(),
-                );
-                attributes.append(
                     &mut nodes[4]
                         .get_attribute()
                         .iter()
                         .map(|x| rename_attribute(x, x.get_name().to_string() + "_2"))
                         .collect::<Vec<onnx::AttributeProto>>(),
                 );
+
                 let w_0_data = initializers.remove(inputs[1]).unwrap();
                 let b_0_data = initializers.remove(inputs[2]).unwrap();
                 let w_1_data = initializers.remove(inputs[3]).unwrap();
@@ -232,79 +239,31 @@ pub fn load(
             }
         };
 
-        node_index += optimisation_length;
-
-        // Initalialising Output
-        let output = &nodes[optimisation_length - 1].get_output()[0];
-        if let Some(output_dims) = value_info.get(output) {
-            inner_infos.insert(
-                output.clone(),
-                resource::create_buffer(device, len(output_dims) as _, output.as_str()),
-            );
-        } else {
-            panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
-        }
-
-        let (shader, x, y, z) = crate::compiler::format_node(&runnable_node, &value_info, &tera);
-        debug!("shader: {}", shader);
-        let attributes = runnable_node.mut_attribute();
-        attributes.push(attribute("WGSL", shader));
-        attributes.push(attribute("threads", vec![x as i64, y as i64, z as i64]));
-
-        optimised_nodes.push(runnable_node);
-    }
-
-    //  graph.set_node(RepeatedField::from(optimised_nodes));
-
-    Ok((optimised_nodes, inner_infos))
-}
-
-pub fn load_sequentially(
-    graph: &crate::onnx::GraphProto,
-    device: &wgpu::Device,
-) -> Result<(Vec<NodeProto>, HashMap<String, wgpu::Buffer>), wgpu::Error> {
-    let initializers = graph.get_initializer();
-    let mut hash = HashMap::new();
-    for initializer in initializers {
-        let input = initializer.get_name().to_string();
-        let dims = initializer.get_dims().to_vec();
-        let data = initializer.get_float_data();
-        let raw_data = if !data.is_empty() {
-            bytemuck::cast_slice(data)
-        } else {
-            initializer.get_raw_data()
-        };
-
-        hash.insert(input, (dims, raw_data));
-    }
-    let mut initializers = hash;
-
-    let original_nodes = graph.get_node();
-
-    let mut inner_infos = HashMap::new();
-
-    let mut optimised_nodes = vec![];
-
-    for node in original_nodes {
-        let inputs = node.get_input();
-        for input in inputs {
-            if let Some((dims, data)) = initializers.remove(input) {
-                if !data.is_empty() {
-                    inner_infos.insert(
-                        input.to_string(),
-                        resource::create_buffer_init(device, data, input),
-                    );
-                } else {
-                    debug!("Not inserting input: {} with shape: {:?}", input, dims);
-                };
+        exit = true;
+        // Exit node if necessary.
+        if exit {
+            // Initalialising Output
+            let output = &nodes[optimisation_length - 1].get_output()[0];
+            if let Some(output_dims) = value_info.get(output) {
+                inner_infos.insert(
+                    output.clone(),
+                    resource::create_buffer(device, len(output_dims) as _, output.as_str()),
+                );
+            } else {
+                panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
             }
+
+            let (shader, x, y, z) = crate::compiler::format_node(&current_node, &value_info, &tera);
+            debug!("shader: {}", shader);
+            let attributes = current_node.mut_attribute();
+            attributes.push(attribute("WGSL", shader));
+            attributes.push(attribute("threads", vec![x as i64, y as i64, z as i64]));
+
+            optimised_nodes.push(current_node);
         }
 
-        let runnable_node = node.clone();
-        optimised_nodes.push(runnable_node);
+        node_index += optimisation_length;
     }
-
-    //  graph.set_node(RepeatedField::from(optimised_nodes));
 
     Ok((optimised_nodes, inner_infos))
 }

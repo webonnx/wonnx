@@ -4,7 +4,9 @@ pub mod compiler;
 pub mod onnx;
 pub mod optimisation;
 pub mod resource;
+pub mod sequencer;
 pub mod utils;
+
 use protobuf::{self, Message, RepeatedField};
 use std::collections::HashMap;
 use std::time::Instant;
