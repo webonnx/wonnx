@@ -104,6 +104,8 @@ jobs:
     steps:
       - name: checkout repo
         uses: actions/checkout@v2
+        with:
+          lfs: true
 
       # Only run clippy on MSRV
       - name: install rust stable
