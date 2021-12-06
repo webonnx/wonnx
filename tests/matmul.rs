@@ -98,7 +98,6 @@ fn execute_gpu() {
     assert_eq!(result.clone().as_slice(), sum.as_slice().unwrap());
 }
 
-#[test]
 fn single_dimension_matrix_multiplication() {
     // USER INPUT
 
