@@ -169,7 +169,7 @@ jobs:
           # run native tests
           for backend in ${{ matrix.backends }}; do
             echo "======= NATIVE TESTS $backend ======";
-            WGPU_BACKEND=$backend cargo test  --no-fail-fast -- --nocapture --test-threads=1
+            WGPU_BACKEND=$backend cargo test  --no-fail-fast -- --nocapture --test-threads=1 --verbose
           done
   fmt:
     name: Format
