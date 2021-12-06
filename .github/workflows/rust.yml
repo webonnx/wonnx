@@ -1,22 +1,193 @@
-name: Rust
+name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [master, staging]
   pull_request:
-    branches: [ master ]
 
 env:
-  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUST_VERSION: 1.53
+
+# We distinguish the following kinds of builds:
+# - local: build for the same target as we compile on, and do local tests
+# - other: build without testing, e.g. cross-build
+# - web: build for the Web
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows
+          - name: Windows x86_64
+            os: windows-2019
+            target: x86_64-pc-windows-msvc
+            tool: clippy
+            kind: local
+            backends: dx12 # dx11
 
-    runs-on: ubuntu-latest
+          - name: Windows Nightly x86_64
+            os: windows-2019
+            target: x86_64-pc-windows-msvc
+            tool: check
+            kind: other
+          
+          # MacOS
+          - name: MacOS x86_64
+            os: macos-10.15
+            target: x86_64-apple-darwin
+            tool: clippy
+            # Mac has no software runners, so don't run tests
+            kind: other
+
+          - name: MacOS aarch64
+            os: macos-11
+            target: aarch64-apple-darwin
+            tool: check
+            # Mac has no software runners, so don't run tests
+            kind: other
+          
+          # IOS
+          - name: IOS aarch64
+            os: macos-10.15
+            target: aarch64-apple-ios
+            tool: clippy
+            kind: other
+
+
+          # Linux
+          - name: Linux x86_64
+            os: ubuntu-20.04
+            target: x86_64-unknown-linux-gnu
+            tool: clippy
+            kind: local
+            backends: vulkan # gl
+
+          - name: Linux aarch64
+            os: ubuntu-20.04
+            target: aarch64-unknown-linux-gnu
+            tool: check
+            kind: other
+
+          - name: Linux Nightly x86_64
+            os: ubuntu-20.04
+            target: x86_64-unknown-linux-gnu
+            tool: check
+            kind: other
+
+          
+          # Android
+          - name: Android aarch64
+            os: ubuntu-20.04
+            target: aarch64-linux-android
+            tool: clippy
+            kind: other
+
+          
+          # WebGPU/WebGL
+          - name: WebAssembly
+            os: ubuntu-20.04
+            target: wasm32-unknown-unknown
+            tool: clippy
+            kind: web
+
+    name: Check ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    env:
+      PKG_CONFIG_ALLOW_CROSS: 1 # allow android to work
+      RUSTFLAGS: --cfg=web_sys_unstable_apis -D warnings
+      RUSTDOCFLAGS: -Dwarnings
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      - name: checkout repo
+        uses: actions/checkout@v2
+
+      # Only run clippy on MSRV
+      - name: install rust stable
+        if: matrix.tool == 'clippy'
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          target: ${{ matrix.target }}
+          profile: minimal
+          override: true
+          components: clippy
+
+      # Other builds can use nightly
+      - name: install rust nightly
+        if: matrix.tool != 'clippy'
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+          profile: minimal
+          override: true
+
+      - name: caching
+        uses: Swatinem/rust-cache@v1
+        with:
+          key: ${{ matrix.target }}-a # suffix for cache busting
+
+      - name: add android apk to path
+        if: matrix.os == 'ubuntu-20.04' && matrix.target == 'aarch64-linux-android'
+        run: |
+          echo "$ANDROID_HOME/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+      - name: install llvmpipe and lavapipe
+        if: matrix.os == 'ubuntu-20.04' && matrix.target != 'aarch64-linux-android' && matrix.kind == 'local'
+        run: |
+          sudo apt-get update -y -qq
+          sudo add-apt-repository ppa:oibaf/graphics-drivers -y
+          sudo apt-get update
+          sudo apt install -y libegl1-mesa libgl1-mesa-dri libxcb-xfixes0-dev mesa-vulkan-drivers
+      # We enable line numbers for panics, but that's it
+      - name: disable debug
+        shell: bash
+        run: |
+          mkdir .cargo
+          echo """[profile.dev]
+          debug = 1" > .cargo/config.toml
+      - name: check web
+        if: matrix.kind == 'web'
+        run: |
+          cargo ${{matrix.tool}} --target ${{ matrix.target }} -p wgpu
+          # Build for WebGL
+          cargo ${{matrix.tool}} --target ${{ matrix.target }} -p wgpu --features webgl -- -D warnings
+          # build docs
+          cargo doc --target ${{ matrix.target }} -p wgpu --no-deps
+      - name: check native
+        if: matrix.kind == 'local' || matrix.kind == 'other'
+        run: |
+          # check with no features
+          cargo ${{matrix.tool}} --target ${{ matrix.target }} 
+      - name: local tests
+        if: matrix.kind == 'local'
+        shell: bash
+        run: |
+          # run unit and player tests
+          cargo test --no-fail-fast
+          # run native tests
+          for backend in ${{ matrix.backends }}; do
+            echo "======= NATIVE TESTS $backend ======";
+            WGPU_BACKEND=$backend cargo test  --no-fail-fast -- --nocapture --test-threads=1
+          done
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v2
+
+      - name: install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt
+
+      - name: run rustfmt
+        run: |
+          cargo fmt -- --check
