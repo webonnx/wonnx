@@ -152,11 +152,7 @@ jobs:
       - name: check web
         if: matrix.kind == 'web'
         run: |
-          cargo ${{matrix.tool}} --target ${{ matrix.target }} -p wgpu
-          # Build for WebGL
-          cargo ${{matrix.tool}} --target ${{ matrix.target }} -p wgpu --features webgl -- -D warnings
-          # build docs
-          cargo doc --target ${{ matrix.target }} -p wgpu --no-deps
+          cargo ${{matrix.tool}} --target ${{ matrix.target }} 
       - name: check native
         if: matrix.kind == 'local' || matrix.kind == 'other'
         run: |

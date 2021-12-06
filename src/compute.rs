@@ -91,8 +91,12 @@ pub fn wrapper(
         });
         cpass.set_pipeline(&compute_pipeline);
         if binding_counter / 4 > 0 {
-            for index in 0..(binding_counter / 4) as usize {
-                cpass.set_bind_group(index as u32, &bind_groups[index], &[]);
+            for (index, bind_group) in bind_groups
+                .iter()
+                .enumerate()
+                .take((binding_counter / 4) as usize)
+            {
+                cpass.set_bind_group(index as u32, bind_group, &[]);
             }
         } else {
             cpass.set_bind_group(0u32, &bind_groups[0], &[]);
