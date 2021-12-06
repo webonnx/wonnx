@@ -151,10 +151,10 @@ jobs:
           mkdir .cargo
           echo """[profile.dev]
           debug = 1" > .cargo/config.toml
-      - name: check web
-        if: matrix.kind == 'web'
-        run: |
-          cargo ${{matrix.tool}} --target ${{ matrix.target }} 
+    #  - name: check web
+    #    if: matrix.kind == 'web'
+    #    run: |
+    #      cargo ${{matrix.tool}} --target ${{ matrix.target }} 
       - name: check native
         if: matrix.kind == 'local' || matrix.kind == 'other'
         run: |
