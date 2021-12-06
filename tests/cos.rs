@@ -5,11 +5,6 @@ use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
 use wonnx::utils::tensor;
 
-async fn run() {
-    #[cfg(target_arch = "wasm32")]
-    log::info!("steps[0..5]: {:#?}", &steps[0..5]);
-}
-
 #[test]
 fn test_cos() {
     // USER INPUT
@@ -48,19 +43,4 @@ fn test_cos() {
 
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
     assert_eq!(result, [1.0; 16]);
-}
-
-// #[wasm_bindgen_test]
-fn main() {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        env_logger::init();
-        pollster::block_on(run());
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-        console_log::init().expect("could not initialize logger");
-        wasm_bindgen_futures::spawn_local(run());
-    }
 }

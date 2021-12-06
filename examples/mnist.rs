@@ -17,10 +17,6 @@ async fn run() {
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
     println!("Infered result: {}", probabilities[0].0);
-    // println!("steps[1..5]: {:#?}", &steps[0..5]);
-    #[cfg(target_arch = "wasm32")]
-    // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
-    assert_eq!(steps[0..5], [0.0, 0.0, 0.0, 0.0, 0.0]);
 }
 
 // Hardware management

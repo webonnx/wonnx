@@ -34,9 +34,6 @@ async fn run() {
             class_labels[probabilities[i].0], probabilities[i].0
         );
     }
-    #[cfg(target_arch = "wasm32")]
-    // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
-    assert_eq!(steps[0..5], [0.0, 0.0, 0.0, 0.0, 0.0]);
 }
 
 // Hardware management

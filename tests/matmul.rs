@@ -1,4 +1,4 @@
-use approx::assert_relative_eq;
+// use approx::assert_relative_eq;
 use protobuf;
 use std::collections::HashMap;
 // use wasm_bindgen_test::*;
@@ -98,11 +98,11 @@ fn execute_gpu() {
     assert_eq!(result.clone().as_slice(), sum.as_slice().unwrap());
 }
 
-fn single_dimension_matrix_multiplication() {
+fn _single_dimension_matrix_multiplication() {
     // USER INPUT
 
     let n = 128.;
-    let mut input_data = HashMap::new();
+    let input_data = HashMap::new();
 
     //let mut data_a = ndarray::ArrayBase::range(0., n, 1.);
     //data_a.reshape((1, n as _));
@@ -192,7 +192,7 @@ fn single_dimension_matrix_multiplication() {
     let mut session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let _result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
     let time_finished_creation = Instant::now();
     println!(
