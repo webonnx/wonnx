@@ -53,7 +53,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                                 let tmp_index = base_index + tmp_y * {{ original_width }}u + tmp_x;
                                 let index_kernel = base_kernel_index + i * {{ kernel_shape[1] }}u + j;
 
-                                result = fma(var_{{ input[0] }}.data[tmp_index],var_{{ input[1] }}.data[index_kernel], result);
+                                result = var_{{ input[0] }}.data[tmp_index] * var_{{ input[1] }}.data[index_kernel] + result;
 				
                         }
   	        }
