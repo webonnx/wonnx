@@ -5,28 +5,17 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
     // `()` indicates that the macro takes no argument.
     // The macro will expand into the contents of this block.
 
-    let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+    let instance = wgpu::Instance::new(wgpu::Backends::all());
 
     let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptionsBase {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: None,
-            force_fallback_adapter: false,
-        })
+        .request_adapter(&wgpu::RequestAdapterOptionsBase::default())
         .await
         .expect("No GPU Found for referenced preference");
 
     // `request_device` instantiates the feature specific connection to the GPU, defining some parameters,
     //  `features` being the available features.
     adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                features: wgpu::Features::empty(),
-                limits: wgpu::Limits::downlevel_defaults(),
-            },
-            None,
-        )
+        .request_device(&wgpu::DeviceDescriptor::default(), None)
         .await
         .expect("Could not create adapter for GPU device")
 }
