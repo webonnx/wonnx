@@ -126,7 +126,7 @@ pub fn sequence(
             node(
                 nodes[0].get_input().iter().map(|x| x.as_str()).collect(),
                 nodes[1].get_output().iter().map(|x| x.as_str()).collect(),
-                "ConvRelu",
+                &(nodes[0].get_name().to_string() + nodes[1].get_name()),
                 "ConvRelu",
                 nodes[0].get_attribute().to_vec(),
             )

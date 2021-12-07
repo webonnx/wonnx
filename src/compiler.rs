@@ -260,7 +260,7 @@ pub fn format_node(
             {
                 (
                     "pool/conv_kernel_1.wgsl".to_string(),
-                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 1024) as _,
                     1,
                     1,
                 )
@@ -271,14 +271,14 @@ pub fn format_node(
             {
                 (
                     "pool/conv_kernel_3.wgsl".to_string(),
-                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 1024) as _,
                     1,
                     1,
                 )
             } else {
                 (
                     "pool/conv.wgsl".to_string(),
-                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 256) as _,
                     1,
                     1,
                 )
