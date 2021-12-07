@@ -9,14 +9,14 @@ use crate::{
     utils::{self, node, rename_attribute},
 };
 
-fn sequence(
+pub fn sequence(
     names: &[&str],
     nodes: &[NodeProto],
     device: &Device,
     initializers: &mut HashMap<String, &[u8]>,
     inner_infos: &mut HashMap<String, Buffer>,
-) -> (NodeProto, i32) {
-    let mut optimisation_length = 0;
+) -> (NodeProto, usize) {
+    let mut optimisation_length = 1;
     let result = match names {
         ["Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Concat", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Concat", ..] =>
         {
