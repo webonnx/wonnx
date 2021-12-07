@@ -22,7 +22,7 @@ var<storage, write> var_{{ output[0] }}: Array;
 var<storage, write> var_{{ output[0] }}: Array;
 {% endif %}  
 
-[[stage(compute), workgroup_size(1)]]
+[[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
 	let batch = gidx / {{ M_x_H_x_W / 4 }}u; 
