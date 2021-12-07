@@ -1,5 +1,11 @@
 # wonnx
 
+
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/haixuantao/wonnx/CI)
+![Crates.io (latest)](https://img.shields.io/crates/dv/wonnx)
+![Crates.io](https://img.shields.io/crates/l/wonnx)
+
+
 Wonnx aims for running blazing Fast AI on any device.
 
 ## Supported Platforms (enabled by `wgpu`)
