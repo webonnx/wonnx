@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use log::debug;
-use wgpu::{Buffer, Device};
+use wgpu::{Buffer, BufferUsages, Device};
 
 use crate::{
     onnx::{self, NodeProto},
@@ -69,7 +69,7 @@ pub fn sequence(
 
             inner_infos.insert(
                 inputs[1].to_string(),
-                resource::create_buffer_init(device, &w_0, &raw_inputs[1]),
+                resource::create_buffer_init(device, &w_0, &raw_inputs[1], BufferUsages::STORAGE),
             );
 
             let mut b_0 = b_0_data.to_vec();
@@ -78,13 +78,13 @@ pub fn sequence(
 
             inner_infos.insert(
                 inputs[2].to_string(),
-                resource::create_buffer_init(device, &b_0, inputs[2]),
+                resource::create_buffer_init(device, &b_0, inputs[2], BufferUsages::STORAGE),
             );
             let w_2_data = padding(w_2_data, 12, 4);
 
             inner_infos.insert(
                 inputs[5].to_string(),
-                resource::create_buffer_init(device, &w_2_data, inputs[5]),
+                resource::create_buffer_init(device, &w_2_data, inputs[5], BufferUsages::STORAGE),
             );
 
             node(
@@ -115,7 +115,12 @@ pub fn sequence(
                     if !data.is_empty() {
                         inner_infos.insert(
                             input.to_string(),
-                            resource::create_buffer_init(device, data.as_slice(), input),
+                            resource::create_buffer_init(
+                                device,
+                                data.as_slice(),
+                                input,
+                                BufferUsages::STORAGE,
+                            ),
                         );
                     } else {
                         debug!("Not inserting input: {}", input);
@@ -138,7 +143,12 @@ pub fn sequence(
                     if !data.is_empty() {
                         inner_infos.insert(
                             input.to_string(),
-                            resource::create_buffer_init(device, data, input),
+                            resource::create_buffer_init(
+                                device,
+                                data,
+                                input,
+                                BufferUsages::STORAGE,
+                            ),
                         );
                     } else {
                         debug!("Not inserting input: {}", input);

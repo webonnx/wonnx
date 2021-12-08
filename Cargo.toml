@@ -1,6 +1,6 @@
 [package]
 name = "wonnx"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["haixuanTao <tao.xavier@outlook.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -19,7 +19,7 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu= "0.11.0"
+wgpu= "0.11.1"
 bytemuck = "1.7.2"
 env_logger = "0.9.0"
 pollster = "0.2.4"
@@ -31,8 +31,8 @@ tera = "1.15.0"
 [dev-dependencies]
 # approx = "0.5.0"
 image = "0.23.14"
-ndarray = "0.15.3"
-ureq = "2.2.0"
+ndarray = "0.15.4"
+ureq = "2.3.1"
 # wgpu-profiler = "0.7.0"
 # onnxruntime = { path = "/home/peter/Documents/CONTRIB/onnxruntime-rs/onnxruntime", features = ["cuda"]}
 

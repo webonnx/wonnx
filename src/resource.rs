@@ -1,4 +1,4 @@
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, BufferUsages};
 
 // Get a device and a queue
 pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
@@ -24,6 +24,7 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
     device: &wgpu::Device,
     array: &[T],
     name: &str,
+    usage: BufferUsages,
 ) -> wgpu::Buffer {
     let size = array.len();
     if size % 4 != 0 && size != 0 {
@@ -33,18 +34,18 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
             contents: bytemuck::cast_slice(&array),
-            usage: wgpu::BufferUsages::STORAGE,
+            usage,
         })
     } else {
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
             contents: bytemuck::cast_slice(array),
-            usage: wgpu::BufferUsages::STORAGE,
+            usage,
         })
     }
 }
 
-pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
+pub fn buffer(device: &wgpu::Device, size: u64, name: &str, usage: BufferUsages) -> wgpu::Buffer {
     let slacked_size = if size % 4 != 0 {
         size + (4 - size % 4)
     } else {
@@ -57,24 +58,7 @@ pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buff
         label: Some(name),
         size,
         mapped_at_creation: false,
-        usage: wgpu::BufferUsages::STORAGE,
-    })
-}
-
-pub fn output_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
-    let slacked_size = if size % 4 != 0 {
-        size + (4 - size % 4)
-    } else {
-        size
-    };
-
-    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
-    let size = slice_size as wgpu::BufferAddress;
-    device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some(name),
-        size,
-        mapped_at_creation: false,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
+        usage,
     })
 }
 
@@ -100,6 +84,11 @@ mod tests {
     fn test_create_buffer_init() {
         let (device, _) = pollster::block_on(crate::resource::request_device_queue());
         let data = [1.0, 2.0, 3.0, 4.0];
-        let _ = crate::resource::create_buffer_init(&device, &data, "test");
+        let _ = crate::resource::create_buffer_init(
+            &device,
+            &data,
+            "test",
+            wgpu::BufferUsages::STORAGE,
+        );
     }
 }

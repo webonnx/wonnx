@@ -1,6 +1,3 @@
-use std::borrow::Cow;
-use std::collections::HashMap;
-
 use crate::utils::get_attribute;
 
 pub fn wrapper(
@@ -8,44 +5,9 @@ pub fn wrapper(
     queue: &wgpu::Queue,
     node: &crate::onnx::NodeProto,
     pipeline: &wgpu::ComputePipeline,
-    inner_infos: &HashMap<String, wgpu::Buffer>,
+    bind_groups: &Vec<wgpu::BindGroup>,
 ) -> Result<(), wgpu::Error> {
-    let mut binding_counter: u32 = 0;
     // Generating the shader
-
-    let inputs = node.get_input();
-    let outputs = node.get_output();
-
-    let inputs = if ["Reshape", "Clip", "Squeeze"].contains(&node.get_op_type()) {
-        inputs.get(0..1).unwrap()
-    } else {
-        inputs
-    };
-
-    // Generating the shader
-    let mut entries = vec![];
-
-    for tensor in inputs {
-        entries.push(wgpu::BindGroupEntry {
-            binding: binding_counter,
-            resource: inner_infos
-                .get(tensor.as_str())
-                .unwrap_or_else(|| panic!("Tensor {} is not present in the inner infos", tensor))
-                .as_entire_binding(),
-        });
-        binding_counter += 1;
-    }
-
-    for tensor in outputs {
-        entries.push(wgpu::BindGroupEntry {
-            binding: binding_counter,
-            resource: inner_infos
-                .get(tensor.as_str())
-                .unwrap_or_else(|| panic!("Tensor {} is not present in the inner infos", tensor))
-                .as_entire_binding(),
-        });
-        binding_counter += 1;
-    }
 
     let threads = get_attribute::<Vec<i64>>("threads", None, node);
     let x = threads[0];
@@ -56,22 +18,6 @@ pub fn wrapper(
     // Generating the compute pipeline and binding group.
     // Instantiates the pipeline.
 
-    let mut bind_groups = vec![];
-    if binding_counter / 4 > 0 {
-        for index in 0..(binding_counter / 4) as usize {
-            bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &pipeline.get_bind_group_layout(index as u32),
-                entries: &entries[index * 4..(index + 1) * 4],
-            }));
-        }
-    } else {
-        bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &pipeline.get_bind_group_layout(0u32),
-            entries: &entries,
-        }));
-    }
     // Instantiates the bind group, once again specifying the binding of buffers.
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -82,16 +28,8 @@ pub fn wrapper(
             label: Some(&(node.get_name().to_string() + "_pass")),
         });
         cpass.set_pipeline(&pipeline);
-        if binding_counter / 4 > 0 {
-            for (index, bind_group) in bind_groups
-                .iter()
-                .enumerate()
-                .take((binding_counter / 4) as usize)
-            {
-                cpass.set_bind_group(index as u32, bind_group, &[]);
-            }
-        } else {
-            cpass.set_bind_group(0u32, &bind_groups[0], &[]);
+        for (index, bind_group) in bind_groups.iter().enumerate() {
+            cpass.set_bind_group(index as u32, bind_group, &[]);
         }
         cpass.dispatch(x as u32, y as u32, z as u32); // Number of cells to run, the (x,y,z) size of item being processed
     }
