@@ -21,6 +21,7 @@ var<storage, write> var_{{ output[0] }}: Array;
 [[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
+        if (gidx < {{len_output }}u) {
 	let batch = gidx / {{ M_x_H_x_W }}u; 
 	let rest = gidx % {{ M_x_H_x_W }}u; 
 
@@ -69,4 +70,5 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 {% else %}
         var_{{ output[0] }}.data[gidx] = result{% if input | length == 3 %} + var_{{ input[2] }}.data[m]{% endif %};
 {% endif %}
+        }
 }

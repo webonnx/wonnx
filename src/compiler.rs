@@ -1,4 +1,4 @@
-use crate::utils::{ceil, get_attribute};
+use crate::utils::{ceil, get_attribute, len};
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
@@ -21,6 +21,7 @@ pub fn format_node(
     let output_dims = &dims_infos
         .get(&outputs[0])
         .unwrap_or_else(|| panic!("{} not found", outputs[0]));
+    context.insert("len_output", &len(output_dims));
 
     let length = crate::utils::len(input_dims);
 
@@ -103,9 +104,7 @@ pub fn format_node(
             );
             (
                 "matrix/concat.wgsl".to_string(),
-                (output_dims.iter().product::<i64>() / 256
-                    + (output_dims.iter().product::<i64>() % 256 != 0) as i64)
-                    as u32,
+                ceil(output_dims.iter().product::<i64>(), 256) as u32,
                 1,
                 1,
             )
