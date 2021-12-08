@@ -28,6 +28,10 @@ pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
     }
 }
 
+pub fn ceil(num: i64, div: i64) -> i64 {
+    num / div + (num % div != 0) as i64
+}
+
 pub fn rename_attribute(
     attribute: &onnx::AttributeProto,
     new_name: String,

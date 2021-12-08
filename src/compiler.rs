@@ -1,4 +1,4 @@
-use crate::utils::get_attribute;
+use crate::utils::{ceil, get_attribute};
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
@@ -94,9 +94,18 @@ pub fn format_node(
                 "len_0",
                 &(input_dims[0] * input_dims[1] * input_dims[2] * input_dims[3]),
             );
+            let inputs_1 = &dims_infos
+                .get(&inputs[0])
+                .unwrap_or_else(|| panic!("{} not found", inputs[1]));
+            context.insert(
+                "len_1",
+                &(inputs_1[0] * inputs_1[1] * inputs_1[2] * inputs_1[3]),
+            );
             (
                 "matrix/concat.wgsl".to_string(),
-                (output_dims.iter().product::<i64>() / 16) as u32,
+                (output_dims.iter().product::<i64>() / 256
+                    + (output_dims.iter().product::<i64>() % 256 != 0) as i64)
+                    as u32,
                 1,
                 1,
             )
@@ -174,7 +183,10 @@ pub fn format_node(
             // GLSL shader for convolution computation
             (
                 "pool/aggregate.wgsl".to_string(),
-                (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+                ceil(
+                    output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3],
+                    1024,
+                ) as _,
                 1,
                 1,
             )
@@ -260,7 +272,10 @@ pub fn format_node(
             {
                 (
                     "pool/conv_kernel_1.wgsl".to_string(),
-                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+                    ceil(
+                        output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3],
+                        1024,
+                    ) as _,
                     1,
                     1,
                 )
@@ -271,14 +286,14 @@ pub fn format_node(
             {
                 (
                     "pool/conv_kernel_3.wgsl".to_string(),
-                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 1024) as _,
                     1,
                     1,
                 )
             } else {
                 (
                     "pool/conv.wgsl".to_string(),
-                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3]) as _,
+                    (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 256) as _,
                     1,
                     1,
                 )
