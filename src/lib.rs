@@ -67,6 +67,7 @@ pub struct Session {
     pub queue: wgpu::Queue,
     pub model: onnx::ModelProto,
     pub inner_infos: HashMap<String, wgpu::Buffer>,
+    pub pipelines: Vec<wgpu::ComputePipeline>,
 }
 
 impl Session {
@@ -86,7 +87,9 @@ impl Session {
 
         let (device, queue) = promise.await;
 
-        let (nodes, inner_infos) = optimisation::load(model.get_graph(), &device).unwrap();
+        let (nodes, inner_infos, pipelines) =
+            optimisation::load(model.get_graph(), &device).unwrap();
+
         let graph = model.mut_graph();
         graph.set_node(RepeatedField::from(nodes));
 
@@ -95,6 +98,7 @@ impl Session {
             queue,
             model,
             inner_infos,
+            pipelines,
         })
     }
 }
@@ -102,6 +106,7 @@ impl Session {
 pub async fn run(session: &mut Session, input_data: HashMap<String, &[f32]>) -> Result<Vec<f32>> {
     let time_pre_run = Instant::now();
     let device = &session.device;
+    let pipelines = &session.pipelines;
     let inner_infos = &mut session.inner_infos;
     for (input, data) in input_data {
         inner_infos.insert(
@@ -123,8 +128,8 @@ pub async fn run(session: &mut Session, input_data: HashMap<String, &[f32]>) -> 
     let nodes = graph.get_node();
     println!("time: pre_run: {:#?}", time_pre_run.elapsed());
     let time_run = Instant::now();
-    for node in nodes {
-        compute::wrapper(device, queue, node, inner_infos).unwrap();
+    for (node, pipeline) in nodes.iter().zip(pipelines) {
+        compute::wrapper(device, queue, node, pipeline, inner_infos).unwrap();
     }
     println!("time: run: {:#?}", time_run.elapsed());
     // ompute::compute(device, queue, graph, inner_infos, tera).unwrap();

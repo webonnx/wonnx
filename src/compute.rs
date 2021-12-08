@@ -7,6 +7,7 @@ pub fn wrapper(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     node: &crate::onnx::NodeProto,
+    pipeline: &wgpu::ComputePipeline,
     inner_infos: &HashMap<String, wgpu::Buffer>,
 ) -> Result<(), wgpu::Error> {
     let mut binding_counter: u32 = 0;
@@ -46,7 +47,6 @@ pub fn wrapper(
         binding_counter += 1;
     }
 
-    let shader = get_attribute::<String>("WGSL", None, node);
     let threads = get_attribute::<Vec<i64>>("threads", None, node);
     let x = threads[0];
     let y = threads[1];
@@ -55,28 +55,20 @@ pub fn wrapper(
     // TODO: Make defining threads more clean.
     // Generating the compute pipeline and binding group.
     // Instantiates the pipeline.
-    let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some(&(node.get_name().to_string() + "_pipeline")),
-        layout: None,
-        module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some(&(node.get_name().to_string() + "_shader")),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
-        }),
-        entry_point: "main",
-    });
+
     let mut bind_groups = vec![];
     if binding_counter / 4 > 0 {
         for index in 0..(binding_counter / 4) as usize {
             bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: &compute_pipeline.get_bind_group_layout(index as u32),
+                layout: &pipeline.get_bind_group_layout(index as u32),
                 entries: &entries[index * 4..(index + 1) * 4],
             }));
         }
     } else {
         bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &compute_pipeline.get_bind_group_layout(0u32),
+            layout: &pipeline.get_bind_group_layout(0u32),
             entries: &entries,
         }));
     }
@@ -89,7 +81,7 @@ pub fn wrapper(
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(&(node.get_name().to_string() + "_pass")),
         });
-        cpass.set_pipeline(&compute_pipeline);
+        cpass.set_pipeline(&pipeline);
         if binding_counter / 4 > 0 {
             for (index, bind_group) in bind_groups
                 .iter()

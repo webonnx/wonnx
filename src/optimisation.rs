@@ -9,7 +9,7 @@ use crate::{
     Result,
 };
 
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use log::debug;
 use tera::Tera;
@@ -25,7 +25,11 @@ impl NodeProto {
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
-) -> Result<(Vec<NodeProto>, HashMap<String, wgpu::Buffer>)> {
+) -> Result<(
+    Vec<NodeProto>,
+    HashMap<String, wgpu::Buffer>,
+    Vec<wgpu::ComputePipeline>,
+)> {
     let tera = match Tera::new("templates/**/*.wgsl") {
         Ok(t) => t,
         Err(e) => {
@@ -93,6 +97,7 @@ pub fn load(
 
     let mut optimised_nodes = vec![];
     let mut exit = false;
+    let mut pipelines = vec![];
 
     while node_index < n {
         let nodes = &base_nodes[node_index..(usize::min(node_index + MAX_OPTIMIZATION_LEN, n))];
@@ -118,13 +123,25 @@ pub fn load(
         let (shader, x, y, z) = crate::compiler::format_node(&current_node, &value_info, &tera);
         debug!("shader: {}", shader);
         let attributes = current_node.mut_attribute();
-        attributes.push(attribute("WGSL", shader));
+        attributes.push(attribute("WGSL", shader.clone()));
         attributes.push(attribute("threads", vec![x as i64, y as i64, z as i64]));
+
+        pipelines.push(
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: None,
+                layout: None,
+                module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
+                }),
+                entry_point: "main",
+            }),
+        );
 
         optimised_nodes.push(current_node);
 
         node_index += optimisation_length;
     }
 
-    Ok((optimised_nodes, inner_infos))
+    Ok((optimised_nodes, inner_infos, pipelines))
 }
