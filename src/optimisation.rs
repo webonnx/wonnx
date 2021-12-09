@@ -1,8 +1,7 @@
 use crate::{
     resource,
     sequencer::sequence,
-    utils::attribute,
-    utils::{ceil, get_dimension, len},
+    utils::{ceil, dimensions_infos, get_dimension, initializers, len},
     Result,
 };
 
@@ -31,63 +30,15 @@ pub fn load(
         }
     };
 
-    let mut initializers = HashMap::new();
-    for initializer in graph.get_initializer() {
-        let input = initializer.get_name().to_string();
-        let data = initializer.get_float_data();
-        let raw_data = if !data.is_empty() {
-            bytemuck::cast_slice(data)
-        } else {
-            initializer.get_raw_data()
-        };
-
-        initializers.insert(input, raw_data);
-    }
-    let mut value_info = HashMap::new();
-
-    for info in graph.get_input() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
-        value_info.insert(info.get_name().to_string(), dims);
-    }
-
-    for info in graph.get_output() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
-        value_info.insert(info.get_name().to_string(), dims);
-    }
-
-    for info in graph.get_value_info() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
-        value_info.insert(info.get_name().to_string(), dims);
-    }
+    let mut initializers = initializers(graph);
+    let dims_info = dimensions_infos(graph);
 
     let base_nodes = graph.get_node();
 
     let mut inner_infos = HashMap::new();
 
-    let inputs = graph.get_input();
-    let input_info = &graph.get_input();
-    for input in inputs {
+    let input_info = graph.get_input();
+    for input in input_info {
         let input_dims = get_dimension(input_info, input.get_name()).unwrap();
         inner_infos.insert(
             input.get_name().to_string(),
@@ -104,11 +55,9 @@ pub fn load(
 
     let mut node_index = 0;
 
-    let mut optimised_nodes = vec![];
     let mut builders = vec![];
 
     let output_info = &graph.get_output().to_vec();
-    let output_names: Vec<&str> = output_info.iter().map(|output| output.get_name()).collect();
 
     while node_index < n {
         let nodes = &base_nodes[node_index..(usize::min(node_index + MAX_OPTIMIZATION_LEN, n))];
@@ -116,14 +65,16 @@ pub fn load(
             .iter()
             .map(|node| node.get_op_type())
             .collect::<Vec<&str>>();
-        let (mut current_node, optimisation_length) =
+        let (current_node, optimisation_length) =
             sequence(&names, nodes, device, &mut initializers, &mut inner_infos);
 
-        // Exit node if necessary.
         // Initalialising Output
         let output = &nodes[optimisation_length - 1].get_output()[0];
-        if let Some(output_dims) = value_info.get(output) {
-            if output_names.contains(&output.as_str()) {
+        if let Some(output_dims) = dims_info.get(output) {
+            if output_info
+                .iter()
+                .any(|el| el.get_name() == output.as_str())
+            {
                 inner_infos.insert(
                     output.clone(),
                     resource::buffer(
@@ -148,27 +99,12 @@ pub fn load(
             panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
         }
 
-        let (shader, x, y, z) = crate::compiler::format_node(&current_node, &value_info, &tera);
+        let (shader, x, y, z) = crate::compiler::format_node(&current_node, &dims_info, &tera);
         debug!("shader: {}", shader);
-        let attributes = current_node.mut_attribute();
-        attributes.push(attribute("WGSL", shader.clone()));
-        attributes.push(attribute("threads", vec![x as i64, y as i64, z as i64]));
 
         let mut binding_counter: u32 = 0;
-        // Generating the shader
 
         let inputs = current_node.get_input();
-        let outputs = current_node.get_output();
-        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
-            layout: None,
-            module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
-            }),
-            entry_point: "main",
-        });
-
         let inputs = if ["Reshape", "Clip", "Squeeze"].contains(&current_node.get_op_type()) {
             inputs.get(0..1).unwrap()
         } else {
@@ -191,7 +127,7 @@ pub fn load(
             binding_counter += 1;
         }
 
-        for tensor in outputs {
+        for tensor in current_node.get_output() {
             entries.push(wgpu::BindGroupEntry {
                 binding: binding_counter,
                 resource: inner_infos
@@ -204,12 +140,16 @@ pub fn load(
             binding_counter += 1;
         }
 
-        // debug!("x: {}", x);
-        // TODO: Make defining threads more clean.
-        // Generating the compute pipeline and binding group.
-        // Instantiates the pipeline.
-
         let mut bind_groups = vec![];
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: None,
+            layout: None,
+            module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
+            }),
+            entry_point: "main",
+        });
         for index in 0..ceil(binding_counter.into(), 4) as usize {
             bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
@@ -222,8 +162,6 @@ pub fn load(
             bind_groups,
             threads: (x, y, z),
         });
-        // Instantiates the bind group, once again specifying the binding of buffers.
-        optimised_nodes.push(current_node);
 
         node_index += optimisation_length;
     }

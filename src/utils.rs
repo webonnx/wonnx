@@ -1,4 +1,5 @@
 use crate::onnx;
+use std::collections::HashMap;
 use std::convert::From;
 use std::convert::Into;
 use std::str::from_utf8;
@@ -56,6 +57,63 @@ pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> O
         })
 }
 
+pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Vec<i64>> {
+    let mut dims_info = HashMap::new();
+
+    for info in graph_proto.get_input() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        dims_info.insert(info.get_name().to_string(), dims);
+    }
+
+    for info in graph_proto.get_output() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        dims_info.insert(info.get_name().to_string(), dims);
+    }
+
+    for info in graph_proto.get_value_info() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        dims_info.insert(info.get_name().to_string(), dims);
+    }
+
+    dims_info
+}
+
+pub fn initializers(graph_proto: &onnx::GraphProto) -> HashMap<String, &[u8]> {
+    let mut initializers = HashMap::new();
+    for initializer in graph_proto.get_initializer() {
+        let input = initializer.get_name().to_string();
+        let data = initializer.get_float_data();
+        let raw_data = if !data.is_empty() {
+            bytemuck::cast_slice(data)
+        } else {
+            initializer.get_raw_data()
+        };
+
+        initializers.insert(input, raw_data);
+    }
+    initializers
+}
 // TODO: Make dimension optional
 pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     let mut dim_value = vec![];

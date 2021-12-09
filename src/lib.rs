@@ -108,6 +108,10 @@ impl Session {
     }
 }
 
+// Run use the element loaded into the session to produce the inference.
+// It copy input data to the buffers.
+// Run the command encoder.
+// Copy the output into an exit buffer that can be deleted.
 pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Result<Vec<f32>> {
     let time_pre_run = Instant::now();
     let device = &session.device;
@@ -115,6 +119,7 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     let builders = &session.builders;
     let inner_infos = &session.inner_infos;
 
+    // Copy input data
     for (input, data) in input_data {
         let n = data.len();
         let input_buffer =
@@ -129,10 +134,12 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     println!("time: pre_run: {:#?}", time_pre_run.elapsed());
     let time_run = Instant::now();
 
+    // Run the command encoder generated during the load
     for builder in builders {
         compute::wrapper(device, queue, builder).unwrap();
     }
 
+    // Copy the output data into the exit buffer.
     let buffer_exit = resource::buffer(
         device,
         len(&session.output_dims) as _,
@@ -153,14 +160,15 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     queue.submit(Some(encoder.finish()));
 
     println!("time: run: {:#?}", time_run.elapsed());
-    // ompute::compute(device, queue, graph, inner_infos, tera).unwrap();
     let time_post_run = Instant::now();
+
     let buffer_slice = buffer_exit.slice(..);
     // TODO: Define behavior for multi output.
     let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
 
     device.poll(wgpu::Maintain::Wait);
-    // // OUTPUT
+
+    // OUTPUT
 
     buffer_future.await.expect("failed to run compute on gpu!");
     // Gets contents of buffer
