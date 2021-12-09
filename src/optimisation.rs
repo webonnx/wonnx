@@ -1,5 +1,4 @@
 use crate::{
-    onnx::NodeProto,
     resource,
     sequencer::sequence,
     utils::attribute,
@@ -15,15 +14,16 @@ use wgpu::BufferUsages;
 
 const MAX_OPTIMIZATION_LEN: usize = 7;
 
+pub struct EncoderBuilder {
+    pub pipeline: wgpu::ComputePipeline,
+    pub bind_groups: Vec<wgpu::BindGroup>,
+    pub threads: (u32, u32, u32),
+}
+
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
-) -> Result<(
-    Vec<NodeProto>,
-    HashMap<String, wgpu::Buffer>,
-    Vec<wgpu::ComputePipeline>,
-    Vec<Vec<wgpu::BindGroup>>,
-)> {
+) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>)> {
     let tera = match Tera::new("templates/**/*.wgsl") {
         Ok(t) => t,
         Err(e) => {
@@ -105,8 +105,7 @@ pub fn load(
     let mut node_index = 0;
 
     let mut optimised_nodes = vec![];
-    let mut pipelines = vec![];
-    let mut groups = vec![];
+    let mut builders = vec![];
 
     let output_info = &graph.get_output().to_vec();
     let output_names: Vec<&str> = output_info.iter().map(|output| output.get_name()).collect();
@@ -218,13 +217,16 @@ pub fn load(
                 entries: &entries[index * 4..usize::min(binding_counter as _, (index + 1) * 4)],
             }));
         }
-        pipelines.push(pipeline);
+        builders.push(EncoderBuilder {
+            pipeline,
+            bind_groups,
+            threads: (x, y, z),
+        });
         // Instantiates the bind group, once again specifying the binding of buffers.
-        groups.push(bind_groups);
         optimised_nodes.push(current_node);
 
         node_index += optimisation_length;
     }
 
-    Ok((optimised_nodes, inner_infos, pipelines, groups))
+    Ok((inner_infos, builders))
 }

@@ -7,7 +7,8 @@ pub mod resource;
 pub mod sequencer;
 pub mod utils;
 
-use protobuf::{self, Message, RepeatedField};
+use optimisation::EncoderBuilder;
+use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::time::Instant;
 use utils::{get_dimension, len};
@@ -66,10 +67,10 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub model: onnx::ModelProto,
     pub inner_infos: HashMap<String, wgpu::Buffer>,
-    pub pipelines: Vec<wgpu::ComputePipeline>,
-    pub groups: Vec<Vec<wgpu::BindGroup>>,
+    pub builders: Vec<EncoderBuilder>,
+    pub output: String,
+    pub output_dims: Vec<i64>,
 }
 
 impl Session {
@@ -84,24 +85,25 @@ impl Session {
     }
 
     // Create a Session given an ONNX model.
-    pub async fn from_model(mut model: onnx::ModelProto) -> Result<Session> {
+    pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
         let promise = resource::request_device_queue();
 
         let (device, queue) = promise.await;
 
-        let (nodes, inner_infos, pipelines, groups) =
-            optimisation::load(model.get_graph(), &device).unwrap();
+        let (inner_infos, builders) = optimisation::load(model.get_graph(), &device).unwrap();
 
-        let graph = model.mut_graph();
-        graph.set_node(RepeatedField::from(nodes));
+        let graph = model.get_graph();
+        let output = graph.get_output()[0].get_name().to_string();
+        let output_info = &graph.get_output();
+        let output_dims = get_dimension(output_info, &output).unwrap();
 
         Ok(Session {
             device,
             queue,
-            model,
             inner_infos,
-            pipelines,
-            groups,
+            builders,
+            output,
+            output_dims,
         })
     }
 }
@@ -110,9 +112,9 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     let time_pre_run = Instant::now();
     let device = &session.device;
     let queue = &session.queue;
-    let pipelines = &session.pipelines;
-    let groups = &session.groups;
+    let builders = &session.builders;
     let inner_infos = &session.inner_infos;
+
     for (input, data) in input_data {
         let n = data.len();
         let input_buffer =
@@ -125,27 +127,29 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     }
 
     println!("time: pre_run: {:#?}", time_pre_run.elapsed());
-    let graph = session.model.get_graph();
-    let nodes = graph.get_node();
     let time_run = Instant::now();
-    for ((node, pipeline), bind_groups) in nodes.iter().zip(pipelines).zip(groups) {
-        compute::wrapper(device, queue, node, pipeline, bind_groups).unwrap();
+
+    for builder in builders {
+        compute::wrapper(device, queue, builder).unwrap();
     }
 
-    let outputs = graph.get_output();
-    let output_info = &graph.get_output();
-    let output_dims = get_dimension(output_info, outputs[0].get_name()).unwrap();
     let buffer_exit = resource::buffer(
         device,
-        len(&output_dims) as _,
-        outputs[0].get_name(),
+        len(&session.output_dims) as _,
+        &session.output,
         BufferUsages::COPY_DST | BufferUsages::MAP_READ,
     );
 
     let mut encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    let buffer = inner_infos.get(outputs[0].get_name()).unwrap();
-    encoder.copy_buffer_to_buffer(buffer, 0, &buffer_exit, 0, (len(&output_dims) * 4) as _);
+    let buffer = inner_infos.get(&session.output).unwrap();
+    encoder.copy_buffer_to_buffer(
+        buffer,
+        0,
+        &buffer_exit,
+        0,
+        (len(&session.output_dims) * 4) as _,
+    );
     queue.submit(Some(encoder.finish()));
 
     println!("time: run: {:#?}", time_run.elapsed());
