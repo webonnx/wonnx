@@ -51,7 +51,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
             
 
 {% if op_type is matching("averagepool") %}
-        result = result/ {{ kernel_len }}.;
+        result = result / {{ kernel_len }}.;
 {% endif %}
 
         let base_index = batch * {{ M_x_H_x_W }}u + m * {{ H_x_W * 4 }}u + y * {{ width }}u + x;

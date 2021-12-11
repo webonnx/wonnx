@@ -104,7 +104,8 @@ pub fn sequence(
                         && get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0]) == [1, 1, 1, 1]
                         && get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
                     {
-                        padding(data, 12, 4)
+                        //  padding(data, 12, 4)
+                        data.to_vec()
                     } else {
                         data.to_vec()
                     };
