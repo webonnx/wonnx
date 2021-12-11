@@ -99,16 +99,17 @@ pub fn sequence(
             let inputs = nodes[0].get_input();
             for input in inputs {
                 if let Some(data) = initializers.remove(input) {
-                    let data = if input == &inputs[1]
-                        && get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0]) == [3, 3]
-                        && get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0]) == [1, 1, 1, 1]
-                        && get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
-                    {
-                        //  padding(data, 12, 4)
-                        data.to_vec()
-                    } else {
-                        data.to_vec()
-                    };
+                    // let data = if input == &inputs[1]
+                    //     && get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0]) == [3, 3]
+                    //     && get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0]) == [1, 1, 1, 1]
+                    //     && get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
+                    // {
+                    //     //  padding(data, 12, 4)
+                    //     data.to_vec()
+                    // } else {
+                    //     data.to_vec()
+                    // };
+                    let data = data.to_vec();
 
                     // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
 
