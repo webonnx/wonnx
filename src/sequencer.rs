@@ -5,7 +5,7 @@ use wgpu::{Buffer, BufferUsages, Device};
 use crate::{
     onnx::{self, NodeProto},
     resource::{self, padding},
-    utils::{get_attribute, node, rename_attribute},
+    utils::{node, rename_attribute},
 };
 
 pub fn sequence(
