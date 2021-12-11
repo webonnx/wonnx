@@ -140,12 +140,11 @@ pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     tensor
 }
 
-pub fn initializer(name: &str, data: Vec<f32>, dimensions: &[i64]) -> onnx::TensorProto {
+// Remove dimensions
+pub fn initializer(name: &str, data: Vec<f32>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
     initializer.set_name(name.to_string());
     initializer.set_float_data(data);
-    initializer.set_data_type(1);
-    initializer.set_dims(dimensions.to_vec());
     initializer
 }
 
@@ -185,12 +184,14 @@ pub fn node(
 pub fn graph(
     inputs: Vec<onnx::ValueInfoProto>,
     outputs: Vec<onnx::ValueInfoProto>,
+    infos: Vec<onnx::ValueInfoProto>,
     initializers: Vec<onnx::TensorProto>,
     nodes: Vec<onnx::NodeProto>,
 ) -> onnx::GraphProto {
     let mut graph = onnx::GraphProto::new();
     graph.set_node(protobuf::RepeatedField::from(nodes));
     graph.set_input(protobuf::RepeatedField::from(inputs));
+    graph.set_value_info(protobuf::RepeatedField::from(infos));
     graph.set_output(protobuf::RepeatedField::from(outputs));
     graph.set_initializer(protobuf::RepeatedField::from(initializers));
     graph
@@ -271,11 +272,12 @@ mod tests {
         let dims = vec![1, c as i64, n as i64, n as i64];
         let kernel_n = 3;
         let m = 1;
-        let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();
+        let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
         let conv_model = model(graph(
             vec![tensor("X", &dims)],
             vec![tensor("Y", &[1, 1, 3, 3])],
-            vec![initializer("W", data_w, &[2, c, 3, 3])],
+            vec![tensor("W", &[2, c, 3, 3])],
+            vec![initializer("W", data_w)],
             vec![node(
                 vec!["X", "W"],
                 vec!["Y"],
@@ -287,14 +289,11 @@ mod tests {
 
         // LOGIC
 
-        let mut session = pollster::block_on(crate::Session::from_model(conv_model))
+        let session = pollster::block_on(crate::Session::from_model(conv_model))
             .expect("Session did not create");
 
-        let result = pollster::block_on(crate::run(&mut session, input_data)).unwrap();
+        let result = pollster::block_on(crate::run(&session, input_data)).unwrap();
 
-        assert_eq!(
-            result,
-            [54., 63., 72., 99., 108., 117., 144., 153., 162., 0., 0., 0.]
-        );
+        assert_eq!(result, [54., 63., 72., 99., 108., 117., 144., 153., 162.]);
     }
 }

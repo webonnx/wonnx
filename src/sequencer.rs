@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
-use log::debug;
 use wgpu::{Buffer, BufferUsages, Device};
 
 use crate::{
     onnx::{self, NodeProto},
     resource::{self, padding},
-    utils::{self, node, rename_attribute},
+    utils::{get_attribute, node, rename_attribute},
 };
 
 pub fn sequence(
@@ -101,30 +100,26 @@ pub fn sequence(
             for input in inputs {
                 if let Some(data) = initializers.remove(input) {
                     let data = if input == &inputs[1]
-                        && utils::get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0])
-                            == [3, 3]
-                        && utils::get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0])
-                            == [1, 1, 1, 1]
-                        && utils::get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
+                        && get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0]) == [3, 3]
+                        && get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0]) == [1, 1, 1, 1]
+                        && get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
                     {
                         padding(data, 12, 4)
                     } else {
                         data.to_vec()
                     };
 
-                    if !data.is_empty() {
-                        inner_infos.insert(
-                            input.to_string(),
-                            resource::create_buffer_init(
-                                device,
-                                data.as_slice(),
-                                input,
-                                BufferUsages::STORAGE,
-                            ),
-                        );
-                    } else {
-                        debug!("Not inserting input: {}", input);
-                    };
+                    // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
+
+                    inner_infos.insert(
+                        input.to_string(),
+                        resource::create_buffer_init(
+                            device,
+                            data.as_slice(),
+                            input,
+                            BufferUsages::STORAGE,
+                        ),
+                    );
                 }
             }
 
@@ -140,19 +135,12 @@ pub fn sequence(
             let inputs = nodes[0].get_input();
             for input in inputs {
                 if let Some(data) = initializers.remove(input) {
-                    if !data.is_empty() {
-                        inner_infos.insert(
-                            input.to_string(),
-                            resource::create_buffer_init(
-                                device,
-                                data,
-                                input,
-                                BufferUsages::STORAGE,
-                            ),
-                        );
-                    } else {
-                        debug!("Not inserting input: {}", input);
-                    };
+                    // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
+
+                    inner_infos.insert(
+                        input.to_string(),
+                        resource::create_buffer_init(device, data, input, BufferUsages::STORAGE),
+                    );
                 }
             }
 

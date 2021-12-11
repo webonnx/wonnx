@@ -26,33 +26,17 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
     name: &str,
     usage: BufferUsages,
 ) -> wgpu::Buffer {
-    let size = array.len();
-    if size % 4 != 0 && size != 0 {
-        let mut array = array.to_vec();
-        array.resize(size + 4 - size % 4, array[0]);
+    let array = resize(array.to_vec());
 
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(name),
-            contents: bytemuck::cast_slice(&array),
-            usage,
-        })
-    } else {
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(name),
-            contents: bytemuck::cast_slice(array),
-            usage,
-        })
-    }
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(name),
+        contents: bytemuck::cast_slice(&array),
+        usage,
+    })
 }
 
 pub fn buffer(device: &wgpu::Device, size: u64, name: &str, usage: BufferUsages) -> wgpu::Buffer {
-    let slacked_size = if size % 4 != 0 {
-        size + (4 - size % 4)
-    } else {
-        size
-    };
-
-    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
+    let slice_size = usize::max(16, size as usize * std::mem::size_of::<f32>());
     let size = slice_size as wgpu::BufferAddress;
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(name),
@@ -60,6 +44,15 @@ pub fn buffer(device: &wgpu::Device, size: u64, name: &str, usage: BufferUsages)
         mapped_at_creation: false,
         usage,
     })
+}
+
+pub fn resize<T: Clone + bytemuck::Pod>(mut array: Vec<T>) -> Vec<T> {
+    let size = array.len();
+    if size < 4 && size != 0 {
+        array.resize(size + 4 - size % 4, array[0]);
+    }
+
+    array
 }
 
 // Padding as byte

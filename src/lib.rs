@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::time::Instant;
 use utils::{get_dimension, len};
 use wgpu::BufferUsages;
+
+use crate::resource::resize;
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
@@ -40,19 +42,11 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 // +----------------+
 //         v
 // +----------------+
-// |load (omce)     |
+// |load (once)     |
 // +----------------+
 //         v
 // +----------------+
 // |run             |
-// +----------------+
-//         v
-// +----------------+
-// |wrap            |
-// +----------------+
-//         v
-// +----------------+
-// |compile         |
 // +----------------+
 //         v
 // +----------------+
@@ -94,7 +88,7 @@ impl Session {
 
         let graph = model.get_graph();
         let output = graph.get_output()[0].get_name().to_string();
-        let output_info = &graph.get_output();
+        let output_info = graph.get_output();
         let output_dims = get_dimension(output_info, &output).unwrap();
 
         Ok(Session {
@@ -121,14 +115,24 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
 
     // Copy input data
     for (input, data) in input_data {
-        let n = data.len();
-        let input_buffer =
-            resource::create_buffer_init(device, data, &input, BufferUsages::COPY_SRC);
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        //let n = data.len();
+        //let input_buffer =
+        //    resource::create_buffer_init(device, data, &input, BufferUsages::COPY_SRC);
+        //let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         let buffer = inner_infos.get(&input).unwrap();
-        encoder.copy_buffer_to_buffer(&input_buffer, 0, buffer, 0, (n * 4) as _);
-        queue.submit(Some(encoder.finish()));
+        {
+            let buffer_slice = buffer.slice(..);
+            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Write);
+            device.poll(wgpu::Maintain::Wait);
+            buffer_future.await.unwrap();
+            let mut buffer_write = buffer_slice.get_mapped_range_mut();
+            buffer_write.copy_from_slice(bytemuck::cast_slice(&resize(data.to_vec())));
+            drop(buffer_write);
+            buffer.unmap();
+        }
+
+        //encoder.copy_buffer_to_buffer(&input_buffer, 0, buffer, 0, (n * 4) as _);
+        //queue.submit(Some(encoder.finish()));
     }
 
     println!("time: pre_run: {:#?}", time_pre_run.elapsed());
@@ -140,20 +144,19 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     }
 
     // Copy the output data into the exit buffer.
-    let buffer_exit = resource::buffer(
+    let staging_buffer = resource::buffer(
         device,
         len(&session.output_dims) as _,
-        &session.output,
+        &(String::from("staging_") + &session.output),
         BufferUsages::COPY_DST | BufferUsages::MAP_READ,
     );
 
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
     let buffer = inner_infos.get(&session.output).unwrap();
     encoder.copy_buffer_to_buffer(
         buffer,
         0,
-        &buffer_exit,
+        &staging_buffer,
         0,
         (len(&session.output_dims) * 4) as _,
     );
@@ -162,7 +165,7 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     println!("time: run: {:#?}", time_run.elapsed());
     let time_post_run = Instant::now();
 
-    let buffer_slice = buffer_exit.slice(..);
+    let buffer_slice = staging_buffer.slice(..);
     // TODO: Define behavior for multi output.
     let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
 

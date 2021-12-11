@@ -1,4 +1,5 @@
 use crate::{
+    compiler::format_node,
     resource,
     sequencer::sequence,
     utils::{ceil, dimensions_infos, get_dimension, initializers, len},
@@ -46,7 +47,7 @@ pub fn load(
                 device,
                 len(&input_dims) as _,
                 input.get_name(),
-                BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                BufferUsages::STORAGE | BufferUsages::MAP_WRITE,
             ),
         );
     }
@@ -67,6 +68,8 @@ pub fn load(
             .collect::<Vec<&str>>();
         let (current_node, optimisation_length) =
             sequence(&names, nodes, device, &mut initializers, &mut inner_infos);
+        let (shader, x, y, z) = format_node(&current_node, &dims_info, &tera);
+        debug!("shader: {}", shader);
 
         // Initalialising Output
         let output = &nodes[optimisation_length - 1].get_output()[0];
@@ -81,7 +84,7 @@ pub fn load(
                         device,
                         len(output_dims) as _,
                         output.as_str(),
-                        BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+                        BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::MAP_READ,
                     ),
                 );
             } else {
@@ -98,9 +101,6 @@ pub fn load(
         } else {
             panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
         }
-
-        let (shader, x, y, z) = crate::compiler::format_node(&current_node, &dims_info, &tera);
-        debug!("shader: {}", shader);
 
         let mut binding_counter: u32 = 0;
 
