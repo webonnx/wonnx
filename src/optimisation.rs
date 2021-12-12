@@ -22,17 +22,34 @@ impl NodeProto {
     }
 }
 
+lazy_static! {
+    pub static ref TEMPLATES: Tera = {
+        let mut tera = Tera::default();
+        tera.add_raw_template("endomorphism/activation.wgsl", include_str!("../templates/endomorphism/activation.wgsl")).unwrap();
+        tera.add_raw_template("endomorphism/arithmetic.wgsl", include_str!("../templates/endomorphism/arithmetic.wgsl")).unwrap();
+        tera.add_raw_template("endomorphism/batchnormalization.wgsl", include_str!("../templates/endomorphism/batchnormalization.wgsl")).unwrap();
+        tera.add_raw_template("endomorphism/copy.wgsl", include_str!("../templates/endomorphism/copy.wgsl")).unwrap();
+        tera.add_raw_template("endomorphism/map.wgsl", include_str!("../templates/endomorphism/map.wgsl")).unwrap();
+        tera.add_raw_template("containers/conv.wgsl", include_str!("../templates/containers/conv.wgsl")).unwrap();
+        tera.add_raw_template("containers/squeezenet_conv_group.wgsl", include_str!("../templates/containers/squeezenet_conv_group.wgsl")).unwrap();
+        tera.add_raw_template("matrix/concat.wgsl", include_str!("../templates/matrix/concat.wgsl")).unwrap();
+        tera.add_raw_template("matrix/gemm_1.wgsl", include_str!("../templates/matrix/gemm_1.wgsl")).unwrap();
+        tera.add_raw_template("matrix/gemm.wgsl", include_str!("../templates/matrix/gemm.wgsl")).unwrap();
+        tera.add_raw_template("matrix/transpose.wgsl", include_str!("../templates/matrix/transpose.wgsl")).unwrap();
+        tera.add_raw_template("pool/aggregate.wgsl", include_str!("../templates/pool/aggregate.wgsl")).unwrap();
+        tera.add_raw_template("pool/conv_kernel_1.wgsl", include_str!("../templates/pool/conv_kernel_1.wgsl")).unwrap();
+        tera.add_raw_template("pool/conv_kernel_3.wgsl", include_str!("../templates/pool/conv_kernel_3.wgsl")).unwrap();
+        tera.add_raw_template("pool/conv.wgsl", include_str!("../templates/pool/conv.wgsl")).unwrap();
+        tera.add_raw_template("base.wgsl", include_str!("../templates/base.wgsl")).unwrap();
+        tera.add_raw_template("structs.wgsl", include_str!("../templates/structs.wgsl")).unwrap();
+        tera
+    };
+}
+
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
 ) -> Result<(Vec<NodeProto>, HashMap<String, wgpu::Buffer>)> {
-    let tera = match Tera::new("templates/**/*.wgsl") {
-        Ok(t) => t,
-        Err(e) => {
-            panic!("Parsing error(s): {}", e);
-        }
-    };
-
     let mut initializers = HashMap::new();
     for initializer in graph.get_initializer() {
         let input = initializer.get_name().to_string();
@@ -115,7 +132,7 @@ pub fn load(
             panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
         }
 
-        let (shader, x, y, z) = crate::compiler::format_node(&current_node, &value_info, &tera);
+        let (shader, x, y, z) = crate::compiler::format_node(&current_node, &value_info, &TEMPLATES);
         debug!("shader: {}", shader);
         let attributes = current_node.mut_attribute();
         attributes.push(attribute("WGSL", shader));
