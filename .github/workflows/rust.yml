@@ -165,7 +165,7 @@ jobs:
         shell: bash
         run: |
           # run unit and player tests
-          cargo test --no-fail-fast
+          cargo test --no-fail-fast -- --nocapture
           # run native tests
           for backend in ${{ matrix.backends }}; do
             echo "======= NATIVE TESTS $backend ======";

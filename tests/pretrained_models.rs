@@ -1,11 +1,8 @@
-use std::collections::HashMap;
-// Indicates a f32 overflow in an intermediate Collatz value
-// use wasm_bindgen_test::*;
-
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
+use ndarray::s;
+use std::collections::HashMap;
 use std::path::Path;
 
-use ndarray::s;
 #[test]
 fn test_relu() {
     let mut input_data = HashMap::new();
