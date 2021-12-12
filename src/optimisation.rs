@@ -30,8 +30,8 @@ lazy_static! {
         tera.add_raw_template("endomorphism/batchnormalization.wgsl", include_str!("../templates/endomorphism/batchnormalization.wgsl")).unwrap();
         tera.add_raw_template("endomorphism/copy.wgsl", include_str!("../templates/endomorphism/copy.wgsl")).unwrap();
         tera.add_raw_template("endomorphism/map.wgsl", include_str!("../templates/endomorphism/map.wgsl")).unwrap();
-        tera.add_raw_template("containers/Conv.wgsl", include_str!("../templates/containers/Conv.wgsl")).unwrap();
-        tera.add_raw_template("containers/SqueezenetConvGroup.wgsl", include_str!("../templates/containers/SqueezenetConvGroup.wgsl")).unwrap();
+        tera.add_raw_template("containers/conv.wgsl", include_str!("../templates/containers/conv.wgsl")).unwrap();
+        tera.add_raw_template("containers/squeezenet_conv_group.wgsl", include_str!("../templates/containers/squeezenet_conv_group.wgsl")).unwrap();
         tera.add_raw_template("matrix/concat.wgsl", include_str!("../templates/matrix/concat.wgsl")).unwrap();
         tera.add_raw_template("matrix/gemm_1.wgsl", include_str!("../templates/matrix/gemm_1.wgsl")).unwrap();
         tera.add_raw_template("matrix/gemm.wgsl", include_str!("../templates/matrix/gemm.wgsl")).unwrap();
