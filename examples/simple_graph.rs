@@ -29,7 +29,7 @@ async fn execute_gpu() -> Result<Vec<f32>> {
 
     // ONNX INPUTS
 
-    let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1 as f32).collect();
+    let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1.0f32).collect();
 
     let model = model(graph(
         vec![tensor("X", &dims)],

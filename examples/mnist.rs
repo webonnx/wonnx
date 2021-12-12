@@ -14,7 +14,7 @@ async fn run() {
 
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
     println!("Infered result: {}", probabilities[0].0);
 }
@@ -61,7 +61,7 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
             .join("7.jpg"),
     )
     .unwrap()
-    .resize_exact(28 as u32, 28 as u32, FilterType::Nearest)
+    .resize_exact(28, 28, FilterType::Nearest)
     .to_rgb8();
 
     // Python:
@@ -72,14 +72,11 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
     // See https://github.com/onnx/models/blob/master/vision/classification/imagenet_inference.ipynb
     // for pre-processing image.
     // WARNING: Note order of declaration of arguments: (_,c,j,i)
-    let array = ndarray::Array::from_shape_fn((1, 1, 28, 28), |(_, c, j, i)| {
+    ndarray::Array::from_shape_fn((1, 1, 28, 28), |(_, c, j, i)| {
         let pixel = image_buffer.get_pixel(i as u32, j as u32);
         let channels = pixel.channels();
 
         // range [0, 255] -> range [0, 1]
         (channels[c] as f32) / 255.0
-    });
-
-    // Batch of 1
-    array
+    })
 }

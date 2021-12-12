@@ -7,6 +7,9 @@ pub mod resource;
 pub mod sequencer;
 pub mod utils;
 
+#[macro_use]
+extern crate lazy_static;
+
 use protobuf::{self, Message, RepeatedField};
 use std::collections::HashMap;
 use std::time::Instant;
