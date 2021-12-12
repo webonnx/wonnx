@@ -20,7 +20,7 @@ async fn run() {
 
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
     let class_labels = get_imagenet_labels();
 
@@ -75,11 +75,14 @@ fn main() {
 }
 
 pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
-    let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
+    let args: Vec<String> = std::env::args().collect();
+    let image_path = if args.len() == 2 {
+        Path::new(&args[1]).to_path_buf()
+    } else {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("examples/data/images")
-            .join("pelican.jpeg"),
-    )
+            .join("pelican.jpeg")
+    }
     .unwrap()
     .resize_to_fill(224 as u32, 224 as u32, FilterType::Nearest)
     .to_rgb8();

@@ -1861,6 +1861,7 @@ dependencies = [
  "getrandom",
  "image",
  "js-sys",
+ "lazy_static",
  "log",
  "ndarray",
  "parking_lot",

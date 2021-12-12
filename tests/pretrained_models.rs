@@ -125,7 +125,7 @@ fn test_squeeze() {
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
     let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
     assert_eq!(probabilities[0].0, 22);
 }
@@ -139,7 +139,7 @@ pub fn load_image(
             .join(image_path),
     )
     .unwrap()
-    .resize_exact(28 as u32, 28 as u32, FilterType::Nearest)
+    .resize_exact(28, 28, FilterType::Nearest)
     .to_rgb8();
 
     // Python:
@@ -150,16 +150,13 @@ pub fn load_image(
     // See https://github.com/onnx/models/blob/master/vision/classification/imagenet_inference.ipynb
     // for pre-processing image.
     // WARNING: Note order of declaration of arguments: (_,c,j,i)
-    let array = ndarray::Array::from_shape_fn((1, 1, 28, 28), |(_, c, j, i)| {
+    ndarray::Array::from_shape_fn((1, 1, 28, 28), |(_, c, j, i)| {
         let pixel = image_buffer.get_pixel(i as u32, j as u32);
         let channels = pixel.channels();
 
         // range [0, 255] -> range [0, 1]
         (channels[c] as f32) / 255.0
-    });
-
-    // Batch of 1
-    array
+    })
 }
 
 pub fn load_squeezenet_image(
@@ -170,7 +167,7 @@ pub fn load_squeezenet_image(
             .join("bald_eagle.jpeg"),
     )
     .unwrap()
-    .resize_exact(224 as u32, 224 as u32, FilterType::Nearest)
+    .resize_exact(224, 224, FilterType::Nearest)
     .to_rgb8();
 
     // Python:

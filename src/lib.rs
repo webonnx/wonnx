@@ -7,6 +7,9 @@ pub mod resource;
 pub mod sequencer;
 pub mod utils;
 
+#[macro_use]
+extern crate lazy_static;
+
 use optimisation::EncoderBuilder;
 use protobuf::{self, Message};
 use std::collections::HashMap;

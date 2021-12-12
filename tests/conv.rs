@@ -1,4 +1,3 @@
-use protobuf;
 use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::*;
@@ -31,7 +30,7 @@ fn conv_pad() {
 
     // ONNX INPUTS
 
-    let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1 as f32).collect();
+    let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1.0f32).collect();
 
     let conv_model = model(graph(
         vec![tensor("X", &dims)],
@@ -88,7 +87,7 @@ fn conv_without_pad() {
 
     let kernel_n = 3;
     let m = 1;
-    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();
+    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
     let conv_model = model(graph(
         vec![tensor("X", &dims)],
         vec![tensor("Y", &[1, 1, 3, 3])],
@@ -131,7 +130,7 @@ fn conv_stride() {
 
     let kernel_n = 3;
     let m = 1;
-    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();
+    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
     let mut initializer_w = crate::onnx::TensorProto::new();
     initializer_w.set_name("W".to_string());
     initializer_w.set_float_data(data_w);
@@ -206,7 +205,7 @@ fn conv_asymetric_stride() {
 
     let kernel_n = 3;
     let m = 1;
-    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();
+    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
     let mut initializer_w = crate::onnx::TensorProto::new();
     initializer_w.set_name("W".to_string());
     initializer_w.set_float_data(data_w);
@@ -273,7 +272,7 @@ fn _conv_kernel_3() {
     // ONNX INPUTS
 
     let mut dim_batch = onnx::TensorShapeProto_Dimension::new();
-    dim_batch.set_dim_value(2 as i64);
+    dim_batch.set_dim_value(2i64);
 
     let mut dim_channel = onnx::TensorShapeProto_Dimension::new();
     dim_channel.set_dim_value(c as i64);
@@ -306,7 +305,7 @@ fn _conv_kernel_3() {
 
     let kernel_n = 3;
     let m = 2;
-    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();
+    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1f32).collect();
     let mut initializer_w = crate::onnx::TensorProto::new();
     initializer_w.set_name("W".to_string());
     initializer_w.set_float_data(data_w);

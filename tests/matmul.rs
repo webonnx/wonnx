@@ -1,5 +1,4 @@
 // use approx::assert_relative_eq;
-use protobuf;
 use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::*;
@@ -95,7 +94,7 @@ fn execute_gpu() {
         time_finished_computation - time_finished_creation
     );
 
-    assert_eq!(result.clone().as_slice(), sum.as_slice().unwrap());
+    assert_eq!(result.as_slice(), sum.as_slice().unwrap());
 }
 
 fn _single_dimension_matrix_multiplication() {
@@ -122,7 +121,7 @@ fn _single_dimension_matrix_multiplication() {
     // ONNX INPUTS
 
     let mut shape_tensor_proto_dim_unit = onnx::TensorShapeProto_Dimension::new();
-    shape_tensor_proto_dim_unit.set_dim_value(1 as i64);
+    shape_tensor_proto_dim_unit.set_dim_value(1i64);
 
     let mut shape_tensor_proto_dim = onnx::TensorShapeProto_Dimension::new();
     shape_tensor_proto_dim.set_dim_value(n as i64);
