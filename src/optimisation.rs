@@ -1,11 +1,9 @@
 use crate::{
-    onnx::{self, NodeProto},
+    onnx::{NodeProto},
     resource,
-    resource::padding,
     sequencer::sequence,
-    utils::node,
-    utils::{self, len},
-    utils::{attribute, rename_attribute},
+    utils::{len},
+    utils::{attribute},
     Result,
 };
 
@@ -15,12 +13,6 @@ use log::debug;
 use tera::Tera;
 
 const MAX_OPTIMIZATION_LEN: usize = 7;
-
-impl NodeProto {
-    fn add_node(&mut self, node: NodeProto) -> Result<()> {
-        Ok(())
-    }
-}
 
 lazy_static! {
     pub static ref TEMPLATES: Tera = {
@@ -109,7 +101,6 @@ pub fn load(
     let mut node_index = 0;
 
     let mut optimised_nodes = vec![];
-    let mut exit = false;
 
     while node_index < n {
         let nodes = &base_nodes[node_index..(usize::min(node_index + MAX_OPTIMIZATION_LEN, n))];

@@ -213,7 +213,7 @@ mod tests {
         let dims = vec![1, c as i64, n as i64, n as i64];
         let kernel_n = 3;
         let m = 1;
-        let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1 as f32).collect();
+        let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
         let conv_model = model(graph(
             vec![tensor("X", &dims)],
             vec![tensor("Y", &[1, 1, 3, 3])],
