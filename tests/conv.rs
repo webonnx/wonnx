@@ -35,7 +35,8 @@ fn conv_pad() {
     let conv_model = model(graph(
         vec![tensor("X", &dims)],
         vec![tensor("Y", &[2, 2, n, n])],
-        vec![initializer("W", data_w, &[2, c, 3, 3])],
+        vec![tensor("W", &[2, c, 3, 3])],
+        vec![initializer("W", data_w)],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
@@ -90,7 +91,8 @@ fn conv_without_pad() {
     let conv_model = model(graph(
         vec![tensor("X", &dims)],
         vec![tensor("Y", &[1, 1, 3, 3])],
-        vec![initializer("W", data_w, &[2, c, 3, 3])],
+        vec![tensor("W", &[2, c, 3, 3])],
+        vec![initializer("W", data_w)],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
@@ -107,10 +109,7 @@ fn conv_without_pad() {
 
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
-    assert_eq!(
-        result,
-        [54., 63., 72., 99., 108., 117., 144., 153., 162., 0., 0., 0.]
-    );
+    assert_eq!(result, [54., 63., 72., 99., 108., 117., 144., 153., 162.]);
 }
 
 #[test]

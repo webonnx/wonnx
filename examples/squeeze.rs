@@ -80,16 +80,14 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
         Path::new(&args[1]).to_path_buf()
     } else {
         Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("examples/data/images")
-        .join("bald_eagle.jpeg")
+            .join("examples/data/images")
+            .join("pelican.jpeg")
     };
 
-    let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
-        image_path,
-    )
-    .unwrap()
-    .resize_exact(224, 224, FilterType::Nearest)
-    .to_rgb8();
+    let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(image_path)
+        .unwrap()
+        .resize_to_fill(224 as u32, 224 as u32, FilterType::Nearest)
+        .to_rgb8();
 
     // Python:
     // # image[y, x, RGB]

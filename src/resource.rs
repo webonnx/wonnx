@@ -1,4 +1,4 @@
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, BufferUsages};
 
 // Get a device and a queue
 pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
@@ -24,58 +24,35 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
     device: &wgpu::Device,
     array: &[T],
     name: &str,
+    usage: BufferUsages,
 ) -> wgpu::Buffer {
+    let array = resize(array.to_vec());
+
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(name),
+        contents: bytemuck::cast_slice(&array),
+        usage,
+    })
+}
+
+pub fn buffer(device: &wgpu::Device, size: u64, name: &str, usage: BufferUsages) -> wgpu::Buffer {
+    let slice_size = usize::max(16, size as usize * std::mem::size_of::<f32>());
+    let size = slice_size as wgpu::BufferAddress;
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(name),
+        size,
+        mapped_at_creation: false,
+        usage,
+    })
+}
+
+pub fn resize<T: Clone + bytemuck::Pod>(mut array: Vec<T>) -> Vec<T> {
     let size = array.len();
-    if size % 4 != 0 && size != 0 {
-        let mut array = array.to_vec();
+    if size < 4 && size != 0 {
         array.resize(size + 4 - size % 4, array[0]);
-
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(name),
-            contents: bytemuck::cast_slice(&array),
-            usage: wgpu::BufferUsages::STORAGE,
-        })
-    } else {
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(name),
-            contents: bytemuck::cast_slice(array),
-            usage: wgpu::BufferUsages::STORAGE,
-        })
     }
-}
 
-pub fn create_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
-    let slacked_size = if size % 4 != 0 {
-        size + (4 - size % 4)
-    } else {
-        size
-    };
-
-    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
-    let size = slice_size as wgpu::BufferAddress;
-    device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some(name),
-        size,
-        mapped_at_creation: false,
-        usage: wgpu::BufferUsages::STORAGE,
-    })
-}
-
-pub fn output_buffer(device: &wgpu::Device, size: u64, name: &str) -> wgpu::Buffer {
-    let slacked_size = if size % 4 != 0 {
-        size + (4 - size % 4)
-    } else {
-        size
-    };
-
-    let slice_size = usize::max(16, slacked_size as usize * std::mem::size_of::<f32>());
-    let size = slice_size as wgpu::BufferAddress;
-    device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some(name),
-        size,
-        mapped_at_creation: false,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
-    })
+    array
 }
 
 // Padding as byte
@@ -100,6 +77,11 @@ mod tests {
     fn test_create_buffer_init() {
         let (device, _) = pollster::block_on(crate::resource::request_device_queue());
         let data = [1.0, 2.0, 3.0, 4.0];
-        let _ = crate::resource::create_buffer_init(&device, &data, "test");
+        let _ = crate::resource::create_buffer_init(
+            &device,
+            &data,
+            "test",
+            wgpu::BufferUsages::STORAGE,
+        );
     }
 }

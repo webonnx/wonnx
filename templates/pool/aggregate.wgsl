@@ -9,6 +9,8 @@ var<storage, write> var_{{ output[0] }}: Array;
 [[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
+        if (gidx < {{ len_output / 4 }}u) {
+
 	let batch = gidx / {{ M_x_H_x_W / 4 }}u; 
 	let rest = gidx % {{ M_x_H_x_W / 4 }}u; 
 
@@ -49,7 +51,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
             
 
 {% if op_type is matching("averagepool") %}
-        result = result/ {{ kernel_len }}.;
+        result = result / {{ kernel_len }}.;
 {% endif %}
 
         let base_index = batch * {{ M_x_H_x_W }}u + m * {{ H_x_W * 4 }}u + y * {{ width }}u + x;
@@ -57,5 +59,6 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                 let index = base_index + index_vec * {{ H_x_W }}u;
 
                 var_{{ output[0] }}.data[index] = result[index_vec];
+        }
         }
 }

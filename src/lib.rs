@@ -10,10 +10,14 @@ pub mod utils;
 #[macro_use]
 extern crate lazy_static;
 
-use protobuf::{self, Message, RepeatedField};
+use optimisation::EncoderBuilder;
+use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::time::Instant;
 use utils::{get_dimension, len};
+use wgpu::BufferUsages;
+
+use crate::resource::resize;
 // Change the alias to `Box<error::Error>`.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
@@ -41,19 +45,11 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 // +----------------+
 //         v
 // +----------------+
-// |load (omce)     |
+// |load (once)     |
 // +----------------+
 //         v
 // +----------------+
 // |run             |
-// +----------------+
-//         v
-// +----------------+
-// |wrap            |
-// +----------------+
-//         v
-// +----------------+
-// |compile         |
 // +----------------+
 //         v
 // +----------------+
@@ -68,8 +64,10 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub model: onnx::ModelProto,
     pub inner_infos: HashMap<String, wgpu::Buffer>,
+    pub builders: Vec<EncoderBuilder>,
+    pub output: String,
+    pub output_dims: Vec<i64>,
 }
 
 impl Session {
@@ -84,61 +82,92 @@ impl Session {
     }
 
     // Create a Session given an ONNX model.
-    pub async fn from_model(mut model: onnx::ModelProto) -> Result<Session> {
+    pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
         let promise = resource::request_device_queue();
 
         let (device, queue) = promise.await;
 
-        let (nodes, inner_infos) = optimisation::load(model.get_graph(), &device).unwrap();
-        let graph = model.mut_graph();
-        graph.set_node(RepeatedField::from(nodes));
+        let (inner_infos, builders) = optimisation::load(model.get_graph(), &device).unwrap();
+
+        let graph = model.get_graph();
+        let output = graph.get_output()[0].get_name().to_string();
+        let output_info = graph.get_output();
+        let output_dims = get_dimension(output_info, &output).unwrap();
 
         Ok(Session {
             device,
             queue,
-            model,
             inner_infos,
+            builders,
+            output,
+            output_dims,
         })
     }
 }
 
-pub async fn run(session: &mut Session, input_data: HashMap<String, &[f32]>) -> Result<Vec<f32>> {
+// Run use the element loaded into the session to produce the inference.
+// It copy input data to the buffers.
+// Run the command encoder.
+// Copy the output into an exit buffer that can be deleted.
+pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Result<Vec<f32>> {
     let time_pre_run = Instant::now();
     let device = &session.device;
-    let inner_infos = &mut session.inner_infos;
+    let queue = &session.queue;
+    let builders = &session.builders;
+    let inner_infos = &session.inner_infos;
+
+    // Copy input data
     for (input, data) in input_data {
-        inner_infos.insert(
-            input.to_string(),
-            resource::create_buffer_init(device, data, &input),
-        );
+        let buffer = inner_infos.get(&input).unwrap();
+        {
+            let buffer_slice = buffer.slice(..);
+            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Write);
+            device.poll(wgpu::Maintain::Wait);
+            buffer_future.await.unwrap();
+            let mut buffer_write = buffer_slice.get_mapped_range_mut();
+            buffer_write.copy_from_slice(bytemuck::cast_slice(&resize(data.to_vec())));
+            drop(buffer_write);
+            buffer.unmap();
+        }
     }
 
-    let graph = session.model.get_graph();
-    let outputs = graph.get_output();
-    let output_info = &graph.get_output();
-    let output_dims = get_dimension(output_info, outputs[0].get_name()).unwrap();
-    inner_infos.insert(
-        outputs[0].get_name().to_string(),
-        resource::output_buffer(device, len(&output_dims) as _, outputs[0].get_name()),
-    );
-
-    let queue = &session.queue;
-    let nodes = graph.get_node();
     println!("time: pre_run: {:#?}", time_pre_run.elapsed());
     let time_run = Instant::now();
-    for node in nodes {
-        compute::wrapper(device, queue, node, inner_infos).unwrap();
+
+    // Run the command encoder generated during the load
+    for builder in builders {
+        compute::wrapper(device, queue, builder).unwrap();
     }
+
+    // Copy the output data into the exit buffer.
+    let staging_buffer = resource::buffer(
+        device,
+        len(&session.output_dims) as _,
+        &(String::from("staging_") + &session.output),
+        BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+    );
+
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+    let buffer = inner_infos.get(&session.output).unwrap();
+    encoder.copy_buffer_to_buffer(
+        buffer,
+        0,
+        &staging_buffer,
+        0,
+        (len(&session.output_dims) * 4) as _,
+    );
+    queue.submit(Some(encoder.finish()));
+
     println!("time: run: {:#?}", time_run.elapsed());
-    // ompute::compute(device, queue, graph, inner_infos, tera).unwrap();
     let time_post_run = Instant::now();
-    let buffer = inner_infos.remove(outputs[0].get_name()).unwrap();
-    let buffer_slice = buffer.slice(..);
+
+    let buffer_slice = staging_buffer.slice(..);
     // TODO: Define behavior for multi output.
     let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
 
     device.poll(wgpu::Maintain::Wait);
-    // // OUTPUT
+
+    // OUTPUT
 
     buffer_future.await.expect("failed to run compute on gpu!");
     // Gets contents of buffer

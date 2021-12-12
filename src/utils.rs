@@ -1,4 +1,5 @@
 use crate::onnx;
+use std::collections::HashMap;
 use std::convert::From;
 use std::convert::Into;
 use std::str::from_utf8;
@@ -56,6 +57,63 @@ pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> O
         })
 }
 
+pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Vec<i64>> {
+    let mut dims_info = HashMap::new();
+
+    for info in graph_proto.get_input() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        dims_info.insert(info.get_name().to_string(), dims);
+    }
+
+    for info in graph_proto.get_output() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        dims_info.insert(info.get_name().to_string(), dims);
+    }
+
+    for info in graph_proto.get_value_info() {
+        let dims = info
+            .get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>();
+        dims_info.insert(info.get_name().to_string(), dims);
+    }
+
+    dims_info
+}
+
+pub fn initializers(graph_proto: &onnx::GraphProto) -> HashMap<String, &[u8]> {
+    let mut initializers = HashMap::new();
+    for initializer in graph_proto.get_initializer() {
+        let input = initializer.get_name().to_string();
+        let data = initializer.get_float_data();
+        let raw_data = if !data.is_empty() {
+            bytemuck::cast_slice(data)
+        } else {
+            initializer.get_raw_data()
+        };
+
+        initializers.insert(input, raw_data);
+    }
+    initializers
+}
 // TODO: Make dimension optional
 pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     let mut dim_value = vec![];
@@ -82,12 +140,11 @@ pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     tensor
 }
 
-pub fn initializer(name: &str, data: Vec<f32>, dimensions: &[i64]) -> onnx::TensorProto {
+// Remove dimensions
+pub fn initializer(name: &str, data: Vec<f32>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
     initializer.set_name(name.to_string());
     initializer.set_float_data(data);
-    initializer.set_data_type(1);
-    initializer.set_dims(dimensions.to_vec());
     initializer
 }
 
@@ -127,12 +184,14 @@ pub fn node(
 pub fn graph(
     inputs: Vec<onnx::ValueInfoProto>,
     outputs: Vec<onnx::ValueInfoProto>,
+    infos: Vec<onnx::ValueInfoProto>,
     initializers: Vec<onnx::TensorProto>,
     nodes: Vec<onnx::NodeProto>,
 ) -> onnx::GraphProto {
     let mut graph = onnx::GraphProto::new();
     graph.set_node(protobuf::RepeatedField::from(nodes));
     graph.set_input(protobuf::RepeatedField::from(inputs));
+    graph.set_value_info(protobuf::RepeatedField::from(infos));
     graph.set_output(protobuf::RepeatedField::from(outputs));
     graph.set_initializer(protobuf::RepeatedField::from(initializers));
     graph
@@ -217,7 +276,8 @@ mod tests {
         let conv_model = model(graph(
             vec![tensor("X", &dims)],
             vec![tensor("Y", &[1, 1, 3, 3])],
-            vec![initializer("W", data_w, &[2, c, 3, 3])],
+            vec![tensor("W", &[2, c, 3, 3])],
+            vec![initializer("W", data_w)],
             vec![node(
                 vec!["X", "W"],
                 vec!["Y"],
@@ -229,14 +289,11 @@ mod tests {
 
         // LOGIC
 
-        let mut session = pollster::block_on(crate::Session::from_model(conv_model))
+        let session = pollster::block_on(crate::Session::from_model(conv_model))
             .expect("Session did not create");
 
-        let result = pollster::block_on(crate::run(&mut session, input_data)).unwrap();
+        let result = pollster::block_on(crate::run(&session, input_data)).unwrap();
 
-        assert_eq!(
-            result,
-            [54., 63., 72., 99., 108., 117., 144., 153., 162., 0., 0., 0.]
-        );
+        assert_eq!(result, [54., 63., 72., 99., 108., 117., 144., 153., 162.]);
     }
 }

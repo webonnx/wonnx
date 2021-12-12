@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
-use log::debug;
-use wgpu::{Buffer, Device};
+use wgpu::{Buffer, BufferUsages, Device};
 
 use crate::{
     onnx::{self, NodeProto},
     resource::{self, padding},
-    utils::{self, node, rename_attribute},
+    utils::{get_attribute, node, rename_attribute},
 };
 
 pub fn sequence(
@@ -69,7 +68,7 @@ pub fn sequence(
 
             inner_infos.insert(
                 inputs[1].to_string(),
-                resource::create_buffer_init(device, &w_0, &raw_inputs[1]),
+                resource::create_buffer_init(device, &w_0, &raw_inputs[1], BufferUsages::STORAGE),
             );
 
             let mut b_0 = b_0_data.to_vec();
@@ -78,13 +77,13 @@ pub fn sequence(
 
             inner_infos.insert(
                 inputs[2].to_string(),
-                resource::create_buffer_init(device, &b_0, inputs[2]),
+                resource::create_buffer_init(device, &b_0, inputs[2], BufferUsages::STORAGE),
             );
             let w_2_data = padding(w_2_data, 12, 4);
 
             inner_infos.insert(
                 inputs[5].to_string(),
-                resource::create_buffer_init(device, &w_2_data, inputs[5]),
+                resource::create_buffer_init(device, &w_2_data, inputs[5], BufferUsages::STORAGE),
             );
 
             node(
@@ -101,25 +100,28 @@ pub fn sequence(
             for input in inputs {
                 if let Some(data) = initializers.remove(input) {
                     let data = if input == &inputs[1]
-                        && utils::get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0])
-                            == [3, 3]
-                        && utils::get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0])
-                            == [1, 1, 1, 1]
-                        && utils::get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
+                        && get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0]) == [3, 3]
+                        && get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0]) == [1, 1, 1, 1]
+                        && get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
                     {
                         padding(data, 12, 4)
+                        // data.to_vec()
                     } else {
                         data.to_vec()
                     };
+                    let data = data.to_vec();
 
-                    if !data.is_empty() {
-                        inner_infos.insert(
-                            input.to_string(),
-                            resource::create_buffer_init(device, data.as_slice(), input),
-                        );
-                    } else {
-                        debug!("Not inserting input: {}", input);
-                    };
+                    // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
+
+                    inner_infos.insert(
+                        input.to_string(),
+                        resource::create_buffer_init(
+                            device,
+                            data.as_slice(),
+                            input,
+                            BufferUsages::STORAGE,
+                        ),
+                    );
                 }
             }
 
@@ -135,14 +137,12 @@ pub fn sequence(
             let inputs = nodes[0].get_input();
             for input in inputs {
                 if let Some(data) = initializers.remove(input) {
-                    if !data.is_empty() {
-                        inner_infos.insert(
-                            input.to_string(),
-                            resource::create_buffer_init(device, data, input),
-                        );
-                    } else {
-                        debug!("Not inserting input: {}", input);
-                    };
+                    // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
+
+                    inner_infos.insert(
+                        input.to_string(),
+                        resource::create_buffer_init(device, data, input, BufferUsages::STORAGE),
+                    );
                 }
             }
 

@@ -6,44 +6,37 @@ use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
 async fn run() {
-    let steps = execute_gpu().await.unwrap();
+    let result = execute_gpu().await.unwrap();
 
-    assert_eq!(steps[0..5], [1.0, 1.0, 1.0, 1.0, 1.0]);
-    println!("steps[0..5]: {:#?}", &steps[0..5]);
-    #[cfg(target_arch = "wasm32")]
-    log::info!("steps[0..5]: {:#?}", &steps[0..5]);
-    assert_eq!(steps[0..5], [1.0, 1.0, 1.0, 1.0, 1.0]);
+    assert_eq!(result, [54., 63., 72., 99., 108., 117., 144., 153., 162.]);
 }
 
 // Hardware management
 async fn execute_gpu() -> Result<Vec<f32>> {
     // USER INPUT
-
     let n = 5;
     let c = 1;
     let mut input_data = HashMap::new();
 
-    let data: Vec<f32> = (0..50).map(|x| x as f32).collect();
-    let dims = vec![2, c as i64, n as i64, n as i64];
+    let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
     input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
-
-    let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1.0f32).collect();
-
+    let dims = vec![1, c as i64, n as i64, n as i64];
+    let kernel_n = 3;
+    let m = 1;
+    let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
     let model = model(graph(
         vec![tensor("X", &dims)],
-        vec![tensor("Y", &[2, 2, n, n])],
-        vec![initializer("W", data_w, &[2, c, 3, 3])],
+        vec![tensor("Y", &[1, m, 3, 3])],
+        vec![tensor("W", &[m, c, 3, 3])],
+        vec![initializer("W", data_w)],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
             "conv",
             "Conv",
-            vec![
-                attribute("kernel_shape", vec![3, 3]),
-                attribute("auto_pad", "SAME_UPPER"),
-            ],
+            vec![attribute("kernel_shape", vec![3, 3])],
         )],
     ));
 

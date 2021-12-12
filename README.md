@@ -24,7 +24,13 @@ Wonnx aims for running blazing Fast AI on any device.
 
 - Install Rust
 - Install Vulkan, Metal, or DX12 for the GPU API.
-- Then: 
+- git clone this repo.
+
+```bash
+git clone https://github.com/haixuanTao/wonnx.git
+```
+
+- Then with git lfs installed: 
 
 ```bash
 cargo run --example squeeze --release
