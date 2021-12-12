@@ -20,7 +20,7 @@ async fn run() {
 
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
     let class_labels = get_imagenet_labels();
 
@@ -81,7 +81,7 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
             .join("bald_eagle.jpeg"),
     )
     .unwrap()
-    .resize_exact(224 as u32, 224 as u32, FilterType::Nearest)
+    .resize_exact(224, 224, FilterType::Nearest)
     .to_rgb8();
 
     // Python:

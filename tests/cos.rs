@@ -1,4 +1,3 @@
-use protobuf;
 use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::*;
