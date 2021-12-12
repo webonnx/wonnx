@@ -84,7 +84,7 @@ pub fn load(
                         device,
                         len(output_dims) as _,
                         output.as_str(),
-                        BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::MAP_READ,
+                        BufferUsages::STORAGE | BufferUsages::COPY_SRC,
                     ),
                 );
             } else {

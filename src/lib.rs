@@ -115,10 +115,6 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
 
     // Copy input data
     for (input, data) in input_data {
-        //let n = data.len();
-        //let input_buffer =
-        //    resource::create_buffer_init(device, data, &input, BufferUsages::COPY_SRC);
-        //let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         let buffer = inner_infos.get(&input).unwrap();
         {
             let buffer_slice = buffer.slice(..);
@@ -130,9 +126,6 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
             drop(buffer_write);
             buffer.unmap();
         }
-
-        //encoder.copy_buffer_to_buffer(&input_buffer, 0, buffer, 0, (n * 4) as _);
-        //queue.submit(Some(encoder.finish()));
     }
 
     println!("time: pre_run: {:#?}", time_pre_run.elapsed());

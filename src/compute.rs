@@ -5,8 +5,6 @@ pub fn wrapper(
     queue: &wgpu::Queue,
     builder: &EncoderBuilder,
 ) -> Result<(), wgpu::Error> {
-    // Generating the shader
-
     let (x, y, z) = builder.threads;
     let mut encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
