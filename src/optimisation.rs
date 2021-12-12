@@ -32,7 +32,6 @@ lazy_static! {
         tera.add_raw_template("pool/conv_kernel_1.wgsl", include_str!("../templates/pool/conv_kernel_1.wgsl")).unwrap();
         tera.add_raw_template("pool/conv_kernel_3.wgsl", include_str!("../templates/pool/conv_kernel_3.wgsl")).unwrap();
         tera.add_raw_template("pool/conv.wgsl", include_str!("../templates/pool/conv.wgsl")).unwrap();
-        tera.add_raw_template("base.wgsl", include_str!("../templates/base.wgsl")).unwrap();
         tera.add_raw_template("structs.wgsl", include_str!("../templates/structs.wgsl")).unwrap();
         tera
     };
