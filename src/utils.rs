@@ -81,6 +81,11 @@ pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Vec<i
         dims_info.insert(info.get_name().to_string(), dims);
     }
 
+    for info in graph_proto.get_initializer() {
+        let dims = info.get_dims().to_vec();
+        dims_info.insert(info.get_name().to_string(), dims);
+    }
+
     dims_info
 }
 

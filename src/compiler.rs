@@ -51,14 +51,35 @@ pub fn compile(
     for (i, dims) in input_dims.iter().enumerate() {
         context.insert(format!("i_dims_{}", i), &dims);
     }
+
     for (i, dims) in output_dims.iter().enumerate() {
         context.insert(format!("o_dims_{}", i), &dims);
     }
+
     for (i, len) in input_lengths.iter().enumerate() {
         context.insert(format!("i_len_{}", i), &len);
     }
+
     for (i, len) in output_lengths.iter().enumerate() {
         context.insert(format!("o_len_{}", i), &len);
+    }
+
+    for (i, dims) in input_dims.iter().enumerate() {
+        let mut chunks = vec![];
+        for i in 1..dims.len() {
+            chunks.push(dims[i..].iter().product::<i64>());
+        }
+        chunks.push(1);
+        context.insert(format!("i_chunks_{}", i), &chunks);
+    }
+
+    for (i, dims) in output_dims.iter().enumerate() {
+        let mut chunks = vec![];
+        for i in 1..dims.len() {
+            chunks.push(dims[i..].iter().product::<i64>());
+        }
+        chunks.push(1);
+        context.insert(format!("i_chunks_{}", i), &chunks);
     }
 
     context.insert("input", &inputs);
@@ -354,13 +375,30 @@ pub fn compile(
         "Sum" => {
             unimplemented!()
         }
-        "Transpose" => (
-            "matrix/transpose.wgsl".to_string(),
-            (output_lengths[0] / 4) as _,
-            1,
-            1,
-        ),
-        _ => unimplemented!(),
+        "Transpose" => {
+            let default = (input_lengths[0]..0).collect::<Vec<_>>();
+            let perms = get_attribute("perm", Some(default), node);
+            let permuted_dims = perms
+                .iter()
+                .map(|p| input_dims[0][*p as usize])
+                .collect::<Vec<_>>();
+
+            let mut chunks = vec![];
+            for i in 1..permuted_dims.len() {
+                chunks.push(permuted_dims[i..].iter().product::<i64>());
+            }
+            chunks.push(1);
+
+            context.insert("permuted_chunks", &chunks);
+
+            (
+                "matrix/transpose.wgsl".to_string(),
+                ceil(output_lengths[0], 256) as _,
+                1,
+                1,
+            )
+        }
+        x => panic!("Op {} is not implemented", x),
     };
 
     let shader = tera

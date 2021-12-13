@@ -18,7 +18,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	    var_{{ output[0] }}.data[gidx] = var_{{ input[0] }}.data[gidx];
     } else { 
         if (gidx < {{ i_len_0 + i_len_1 }}u) {
-    	var_{{ output[0] }}.data[gidx] = var_{{ input[1] }}.data[gidx - {{ len_0 }}u];
+    	var_{{ output[0] }}.data[gidx] = var_{{ input[1] }}.data[gidx - {{ i_len_0 }}u];
         }
     }
 }

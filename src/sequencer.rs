@@ -18,6 +18,16 @@ pub fn sequence(
 ) -> (NodeProto, usize) {
     let mut optimisation_length = 1;
     let result = match names {
+        ["Conv", "Exp", "Add", "Log", "Tanh", "Mul", ..] => {
+            optimisation_length = 6;
+            node(
+                nodes[0].get_input().iter().map(|x| x.as_str()).collect(),
+                nodes[6].get_output().iter().map(|x| x.as_str()).collect(),
+                &(nodes[0].get_name().to_string() + nodes[1].get_name()),
+                "ConvRelu",
+                nodes[0].get_attribute().to_vec(),
+            )
+        }
         ["Conv", "Relu", ..] => {
             optimisation_length = 2;
             let inputs = nodes[0].get_input();

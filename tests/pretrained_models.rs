@@ -21,24 +21,7 @@ fn test_relu() {
 }
 
 #[test]
-#[ignore] // TODO: Implement transpose
-fn test_two_transposes() {
-    // USER INPUT
-
-    let mut input_data = HashMap::new();
-    let data = (0..2 * 3 * 4).map(|x| x as f32).collect::<Vec<f32>>();
-    input_data.insert("X".to_string(), data.as_slice());
-
-    let session = pollster::block_on(wonnx::Session::from_path(
-        "examples/data/models/two_transposes.onnx",
-    ))
-    .expect("session did not create");
-    let result = pollster::block_on(session.run(input_data)).unwrap();
-
-    assert_eq!(result["Z"][0..5], [0., 1., 2., 3., 4., 5.]);
-}
-
-#[test]
+#[ignore]
 fn test_mnist() {
     let image = load_image("0.jpg");
     let mut input_data = HashMap::new();
