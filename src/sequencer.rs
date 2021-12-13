@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use wgpu::{Buffer, BufferUsages, Device};
 
 use crate::{
-    onnx::{self, NodeProto},
+    onnx::NodeProto,
     resource::{self, padding},
-    utils::{get_attribute, node, rename_attribute},
+    utils::{get_attribute, node},
 };
 
 pub fn sequence(
@@ -17,83 +17,6 @@ pub fn sequence(
 ) -> (NodeProto, usize) {
     let mut optimisation_length = 1;
     let result = match names {
-        ["Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Concat", "Conv", "Relu", "Conv", "Relu", "Conv", "Relu", "Concat", ..] =>
-        {
-            optimisation_length = 14;
-            let raw_inputs = nodes[0].get_input();
-
-            let mut inputs = nodes[0]
-                .get_input()
-                .iter()
-                .map(|x| x.as_str())
-                .collect::<Vec<&str>>();
-
-            inputs.append(
-                &mut nodes[2].get_input()[1..=2]
-                    .iter()
-                    .map(|x| x.as_str())
-                    .collect::<Vec<&str>>(),
-            );
-
-            inputs.append(
-                &mut nodes[4].get_input()[1..=2]
-                    .iter()
-                    .map(|x| x.as_str())
-                    .collect::<Vec<&str>>(),
-            );
-
-            let mut attributes = nodes[0]
-                .get_attribute()
-                .iter()
-                .map(|x| rename_attribute(x, x.get_name().to_string() + "_0"))
-                .collect::<Vec<onnx::AttributeProto>>();
-
-            attributes.append(
-                &mut nodes[4]
-                    .get_attribute()
-                    .iter()
-                    .map(|x| rename_attribute(x, x.get_name().to_string() + "_2"))
-                    .collect::<Vec<onnx::AttributeProto>>(),
-            );
-
-            let w_0_data = initializers.remove(inputs[1]).unwrap();
-            let b_0_data = initializers.remove(inputs[2]).unwrap();
-            let w_1_data = initializers.remove(inputs[3]).unwrap();
-            let b_1_data = initializers.remove(inputs[4]).unwrap();
-            let w_2_data = initializers.remove(inputs[5]).unwrap();
-            let b_2_data = initializers.remove(inputs[6]).unwrap();
-
-            let mut w_0 = w_0_data.to_vec();
-            w_0.extend(w_1_data);
-
-            inner_infos.insert(
-                inputs[1].to_string(),
-                resource::create_buffer_init(device, &w_0, &raw_inputs[1], BufferUsages::STORAGE),
-            );
-
-            let mut b_0 = b_0_data.to_vec();
-            b_0.extend(b_1_data);
-            b_0.extend(b_2_data);
-
-            inner_infos.insert(
-                inputs[2].to_string(),
-                resource::create_buffer_init(device, &b_0, inputs[2], BufferUsages::STORAGE),
-            );
-            let w_2_data = padding(w_2_data, 12, 4);
-
-            inner_infos.insert(
-                inputs[5].to_string(),
-                resource::create_buffer_init(device, &w_2_data, inputs[5], BufferUsages::STORAGE),
-            );
-
-            node(
-                vec![inputs[0], inputs[1], inputs[2]],
-                nodes[13].get_output().iter().map(|x| x.as_str()).collect(),
-                "SqueezenetConvGroup",
-                "SqueezenetConvGroup",
-                attributes,
-            )
-        }
         ["Conv", "Relu", ..] => {
             optimisation_length = 2;
             let inputs = nodes[0].get_input();

@@ -14,7 +14,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Vec<f32> {
+async fn execute_gpu() -> HashMap<String, Vec<f32>> {
     let n: usize = 224;
     let mut input_data = HashMap::new();
 

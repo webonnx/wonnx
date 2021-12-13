@@ -2,7 +2,7 @@ use crate::{
     compiler::format_node,
     resource,
     sequencer::sequence,
-    utils::{ceil, dimensions_infos, get_dimension, initializers, len},
+    utils::{ceil, dimensions_infos, initializers, len},
     Result,
 };
 
@@ -46,16 +46,6 @@ lazy_static! {
         tera.add_raw_template(
             "endomorphism/map.wgsl",
             include_str!("../templates/endomorphism/map.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "containers/conv.wgsl",
-            include_str!("../templates/containers/Conv.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "containers/squeezenet_conv_group.wgsl",
-            include_str!("../templates/containers/squeezenet_conv_group.wgsl"),
         )
         .unwrap();
         tera.add_raw_template(
@@ -111,24 +101,21 @@ pub fn load(
     let mut initializers = initializers(graph);
     let dims_info = dimensions_infos(graph);
 
-    let base_nodes = graph.get_node();
-
     let mut inner_infos = HashMap::new();
 
-    let input_info = graph.get_input();
-    for input in input_info {
-        let input_dims = get_dimension(input_info, input.get_name()).unwrap();
+    for (input_name, input_dims) in dims_info.iter() {
         inner_infos.insert(
-            input.get_name().to_string(),
+            input_name.clone(),
             resource::buffer(
                 device,
-                len(&input_dims) as _,
-                input.get_name(),
-                BufferUsages::STORAGE | BufferUsages::MAP_WRITE,
+                len(input_dims) as _,
+                input_name,
+                BufferUsages::STORAGE | BufferUsages::COPY_DST,
             ),
         );
     }
 
+    let base_nodes = graph.get_node();
     let n = base_nodes.len();
 
     let mut node_index = 0;
@@ -161,7 +148,7 @@ pub fn load(
                         device,
                         len(output_dims) as _,
                         output.as_str(),
-                        BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+                        BufferUsages::STORAGE | BufferUsages::MAP_READ,
                     ),
                 );
             } else {

@@ -9,6 +9,7 @@ use std::time::Instant;
 // Args Management
 async fn run() {
     let probabilities = execute_gpu().await.unwrap();
+    let (_, probabilities) = probabilities.iter().next().unwrap();
     println!("steps: {:#?}", probabilities);
     println!("steps: {:#?}", probabilities.len());
 
@@ -20,7 +21,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Option<Vec<f32>> {
+async fn execute_gpu() -> Option<HashMap<String, Vec<f32>>> {
     let mut input_data = HashMap::new();
 
     let image = load_image();
