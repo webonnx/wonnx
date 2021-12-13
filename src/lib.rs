@@ -95,73 +95,71 @@ impl Session {
             outputs,
         })
     }
-}
 
-// Run use the element loaded into the session to produce the inference.
-// It copy input data to the buffers.
-// Run the command encoder.
-// Copy the output into an exit buffer that can be deleted.
-pub async fn run(
-    session: &Session,
-    inputs: HashMap<String, &[f32]>,
-) -> Result<HashMap<String, Vec<f32>>> {
-    let device = &session.device;
-    let queue = &session.queue;
-    let builders = &session.builders;
-    let inner_infos = &session.inner_infos;
+    // Run use the element loaded into the session to produce the inference.
+    // It copy input data to the buffers.
+    // Run the command encoder.
+    // Copy the output into an exit buffer that can be deleted.
+    pub async fn run(&self, inputs: HashMap<String, &[f32]>) -> Result<HashMap<String, Vec<f32>>> {
+        let device = &self.device;
+        let queue = &self.queue;
+        let builders = &self.builders;
+        let inner_infos = &self.inner_infos;
+        let outputs = &self.outputs;
 
-    // Copy input data
-    for (input, data) in inputs {
-        queue.write_buffer(
-            inner_infos.get(&input).unwrap_or_else(|| {
-                panic!(
-                    "Invalid input: {}, try to use netron.app to see the correct input name",
-                    input
-                )
-            }),
-            0,
-            bytemuck::cast_slice(&resize(data.to_vec())),
-        )
-    }
-
-    // Run the command encoder generated during the load
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-    for builder in builders {
-        let (x, y, z) = builder.threads;
-
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        cpass.set_pipeline(&builder.pipeline);
-        for (index, bind_group) in builder.bind_groups.iter().enumerate() {
-            cpass.set_bind_group(index as u32, bind_group, &[]);
+        // Copy input data
+        for (input, data) in inputs {
+            queue.write_buffer(
+                inner_infos.get(&input).unwrap_or_else(|| {
+                    panic!(
+                        "Invalid input: {}, try to use netron.app to see the correct input name",
+                        input
+                    )
+                }),
+                0,
+                bytemuck::cast_slice(&resize(data.to_vec())),
+            )
         }
-        cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
+
+        // Run the command encoder generated during the load
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        for builder in builders {
+            let (x, y, z) = builder.threads;
+
+            let mut cpass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&builder.pipeline);
+            for (index, bind_group) in builder.bind_groups.iter().enumerate() {
+                cpass.set_bind_group(index as u32, bind_group, &[]);
+            }
+            cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
+        }
+
+        queue.submit(Some(encoder.finish()));
+
+        let mut results = HashMap::new();
+
+        for output in outputs {
+            // Copy the output data into the staging buffer.
+            let buffer = inner_infos.get(output.as_str()).unwrap();
+
+            let buffer_slice = buffer.slice(..);
+            // TODO: Define behavior for multi output.
+            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+
+            device.poll(wgpu::Maintain::Wait);
+
+            buffer_future.await.expect("failed to run compute on gpu!");
+            // Gets contents of buffer
+            let data = buffer_slice.get_mapped_range();
+            // Since contents are got in bytes, this converts these bytes back to f32
+            results.insert(output.clone(), bytemuck::cast_slice(&data).to_vec());
+            drop(data);
+            buffer.unmap();
+        }
+
+        Ok(results)
     }
-
-    queue.submit(Some(encoder.finish()));
-
-    let mut results = HashMap::new();
-
-    let outputs = &session.outputs;
-    for output in outputs {
-        // Copy the output data into the staging buffer.
-        let buffer = inner_infos.get(output).unwrap();
-
-        let buffer_slice = buffer.slice(..);
-        // TODO: Define behavior for multi output.
-        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-
-        device.poll(wgpu::Maintain::Wait);
-
-        buffer_future.await.expect("failed to run compute on gpu!");
-        // Gets contents of buffer
-        let data = buffer_slice.get_mapped_range();
-        // Since contents are got in bytes, this converts these bytes back to f32
-        results.insert(output.clone(), bytemuck::cast_slice(&data).to_vec());
-        drop(data);
-        buffer.unmap();
-    }
-
-    Ok(results)
 }

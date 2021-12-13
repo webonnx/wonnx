@@ -26,9 +26,9 @@ fn test_cos() {
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(session.run(input_data)).unwrap();
     assert_eq!(result["Y"], [1.0; 16]);
 }

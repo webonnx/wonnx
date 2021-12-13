@@ -277,7 +277,7 @@ mod tests {
         let session = pollster::block_on(crate::Session::from_model(conv_model))
             .expect("Session did not create");
 
-        let result = pollster::block_on(crate::run(&session, input_data)).unwrap();
+        let result = pollster::block_on(session.run(input_data)).unwrap();
 
         assert_eq!(
             result["Y"],

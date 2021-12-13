@@ -26,11 +26,11 @@ async fn execute_gpu() -> Option<HashMap<String, Vec<f32>>> {
 
     let image = load_image();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let mut session = wonnx::Session::from_path("examples/data/models/opt-mnist.onnx")
+    let session = wonnx::Session::from_path("examples/data/models/opt-mnist.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
-    let result = wonnx::run(&mut session, input_data).await.unwrap();
+    let result = session.run(input_data).await.unwrap();
     let time_post_compute = Instant::now();
     println!(
         "time: post_compute: {:#?}",

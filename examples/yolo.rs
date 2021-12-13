@@ -22,11 +22,11 @@ async fn execute_gpu() -> HashMap<String, Vec<f32>> {
     let data: Vec<f32> = (0..n * n * c).map(|x| x as f32).collect();
     input_data.insert("input_1:0".to_string(), data.as_slice());
 
-    let mut session = wonnx::Session::from_path("examples/data/models/opt-yolov4.onnx")
+    let session = wonnx::Session::from_path("examples/data/models/opt-yolov4.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
-    let result = wonnx::run(&mut session, input_data).await.unwrap();
+    let result = session.run(input_data).await.unwrap();
     let time_post_compute = Instant::now();
     println!(
         "time: post_compute: {:#?}",

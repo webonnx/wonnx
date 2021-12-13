@@ -44,12 +44,12 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>> {
     let image = load_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap());
 
-    let mut session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx")
+    let session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
     info!("Start Compute");
-    let result = wonnx::run(&mut session, input_data.clone()).await;
+    let result = session.run(input_data.clone()).await;
     let time_post_compute = Instant::now();
     println!(
         "time: first_prediction: {:#?}",

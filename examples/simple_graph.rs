@@ -43,11 +43,11 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>> {
 
     // LOGIC
 
-    let mut session = wonnx::Session::from_model(model)
+    let session = wonnx::Session::from_model(model)
         .await
         .expect("Session did not create");
 
-    wonnx::run(&mut session, input_data).await
+    session.run(input_data).await
 }
 
 // #[wasm_bindgen_test]

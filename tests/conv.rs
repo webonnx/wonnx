@@ -51,10 +51,10 @@ fn conv_pad() {
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(session.run(input_data)).unwrap();
 
     assert_eq!(
         result["Y"],
@@ -104,11 +104,10 @@ fn conv_without_pad() {
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
-
+    let result = pollster::block_on(session.run(input_data)).unwrap();
     assert_eq!(
         result["Y"],
         [54., 63., 72., 99., 108., 117., 144., 153., 162.]
@@ -179,10 +178,10 @@ fn conv_stride() {
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(session.run(input_data)).unwrap();
 
     assert_eq!(
         result["Y"],
@@ -254,10 +253,10 @@ fn conv_asymetric_stride() {
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(session.run(input_data)).unwrap();
 
     assert_eq!(result["Y"], [21., 33., 99., 117., 189., 207., 171., 183.]);
 }
