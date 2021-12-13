@@ -122,7 +122,9 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
 
 fn get_imagenet_labels() -> Vec<String> {
     // Download the ImageNet class labels, matching SqueezeNet's classes.
-    let labels_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("synset.txt");
+    let labels_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/data/models")
+        .join("synset.txt");
     if !labels_path.exists() {
         let url = "https://s3.amazonaws.com/onnx-model-zoo/synset.txt";
         println!("Downloading {:?} to {:?}...", url, labels_path);

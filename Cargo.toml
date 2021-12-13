@@ -10,11 +10,13 @@ homepage = "https://github.com/haixuanTao/wonnx"
 readme = "README.md"
 exclude = [
     "etc/**/*",
+    ".github/**/**",
+    "coverage/**/**",
     "examples/**/*", 
+    "templates/**/**",
     "tests/**/*",
     "Cargo.lock",
     "target/**/*",
-    "templates/**/**"
 ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
