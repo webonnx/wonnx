@@ -1,4 +1,4 @@
-use crate::utils::{ceil, get_attribute, len};
+use crate::utils::{ceil, get_attribute};
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
@@ -7,34 +7,77 @@ pub fn compile(
     dims_infos: &HashMap<String, Vec<i64>>,
     tera: &Tera,
 ) -> (String, u32, u32, u32) {
-    let inputs = node.get_input();
-    let outputs = node.get_output();
+    // Escape unwanted characters
+    let mut inputs = node.get_input().to_vec();
+    let mut outputs = node.get_output().to_vec();
+
+    let input_dims = inputs
+        .iter()
+        .map(|input| {
+            dims_infos
+                .get(input.as_str())
+                .unwrap_or_else(|| panic!("{} not found", input))
+        })
+        .collect::<Vec<_>>();
+    let output_dims = outputs
+        .iter()
+        .map(|output| {
+            dims_infos
+                .get(output.as_str())
+                .unwrap_or_else(|| panic!("{} not found", output))
+        })
+        .collect::<Vec<_>>();
+    let input_lengths = input_dims
+        .iter()
+        .map(|dims| dims.iter().product())
+        .collect::<Vec<i64>>();
+
+    let output_lengths = output_dims
+        .iter()
+        .map(|dims| dims.iter().product())
+        .collect::<Vec<i64>>();
+
+    inputs = inputs
+        .iter()
+        .map(|input| input.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], ""))
+        .collect::<Vec<_>>();
+
+    outputs = outputs
+        .iter()
+        .map(|output| output.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], ""))
+        .collect::<Vec<_>>();
     let mut context = Context::new();
+
+    for (i, dims) in input_dims.iter().enumerate() {
+        context.insert(format!("i_dims_{}", i), &dims);
+    }
+    for (i, dims) in output_dims.iter().enumerate() {
+        context.insert(format!("o_dims_{}", i), &dims);
+    }
+    for (i, len) in input_lengths.iter().enumerate() {
+        context.insert(format!("i_len_{}", i), &len);
+    }
+    for (i, len) in output_lengths.iter().enumerate() {
+        context.insert(format!("o_len_{}", i), &len);
+    }
 
     context.insert("input", &inputs);
     context.insert("output", &outputs);
     context.insert("op_type", &node.get_op_type().to_lowercase());
 
-    let input_dims = &dims_infos
-        .get(&inputs[0])
-        .unwrap_or_else(|| panic!("{} not found", inputs[0]));
-    let output_dims = &dims_infos
-        .get(&outputs[0])
-        .unwrap_or_else(|| panic!("{} not found", outputs[0]));
-    context.insert("len_output", &len(output_dims));
-
-    let length = crate::utils::len(input_dims);
-
     let (template, x, y, z) = match node.get_op_type() {
         // Map simple function
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
-        | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => {
-            ("endomorphism/map.wgsl".to_string(), (length / 4) as _, 1, 1)
-        }
+        | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => (
+            "endomorphism/map.wgsl".to_string(),
+            (output_lengths[0] / 4) as _,
+            1,
+            1,
+        ),
         // Copy data
         "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Softmax" => (
             "endomorphism/copy.wgsl".to_string(),
-            (length / 16) as _,
+            (output_lengths[0] / 16) as _,
             1,
             1,
         ),
@@ -61,7 +104,7 @@ pub fn compile(
             );
             (
                 "endomorphism/arithmetic.wgsl".to_string(),
-                (length / 4) as _,
+                (output_lengths[0] / 4) as _,
                 1,
                 1,
             )
@@ -85,33 +128,20 @@ pub fn compile(
             context.insert("alpha", &alpha);
             (
                 "endomorphism/activation.wgsl".to_string(),
-                (length / 4) as _,
+                (output_lengths[0] / 4) as _,
                 1,
                 1,
             )
         }
-        "Concat" => {
-            context.insert(
-                "len_0",
-                &(input_dims[0] * input_dims[1] * input_dims[2] * input_dims[3]),
-            );
-            let inputs_1 = &dims_infos
-                .get(&inputs[0])
-                .unwrap_or_else(|| panic!("{} not found", inputs[1]));
-            context.insert(
-                "len_1",
-                &(inputs_1[0] * inputs_1[1] * inputs_1[2] * inputs_1[3]),
-            );
-            (
-                "matrix/concat.wgsl".to_string(),
-                ceil(output_dims.iter().product::<i64>(), 256) as u32,
-                1,
-                1,
-            )
-        }
+        "Concat" => (
+            "matrix/concat.wgsl".to_string(),
+            ceil(output_lengths[0], 256) as u32,
+            1,
+            1,
+        ),
         "MaxPool" | "AveragePool" => {
             // TODO: Conv only support NxCxHxW for the moment.
-            debug_assert!(input_dims.len() == 4usize);
+            debug_assert!(input_dims[0].len() == 4usize);
 
             let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node);
             let dilations = get_attribute("dilations", Some(vec![1, 1]), node);
@@ -151,6 +181,9 @@ pub fn compile(
                 }
                 _ => unimplemented!(),
             };
+
+            let input_dims = input_dims[0];
+            let output_dims = output_dims[0];
 
             context.insert(
                 "M_x_H_x_W",
@@ -182,17 +215,14 @@ pub fn compile(
             // GLSL shader for convolution computation
             (
                 "pool/aggregate.wgsl".to_string(),
-                ceil(
-                    output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3],
-                    1024,
-                ) as _,
+                ceil(output_lengths[0], 1024) as _,
                 1,
                 1,
             )
         }
         "Conv" | "ConvRelu" => {
             // TODO: Conv only support NxCxHxW for the moment.
-            debug_assert!(input_dims.len() == 4usize);
+            debug_assert!(input_dims[0].len() == 4usize);
 
             let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node);
             let dilations = get_attribute("dilations", Some(vec![1, 1]), node);
@@ -232,6 +262,10 @@ pub fn compile(
                 }
                 _ => unimplemented!(),
             };
+
+            let input_dims = input_dims[0];
+            let output_dims = output_dims[0];
+
             context.insert("output_dims", &output_dims);
             context.insert("input_dims", &input_dims);
 
@@ -271,10 +305,7 @@ pub fn compile(
             {
                 (
                     "pool/conv_kernel_1.wgsl".to_string(),
-                    ceil(
-                        output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3],
-                        1024,
-                    ) as _,
+                    ceil(output_lengths[0], 1024) as _,
                     1,
                     1,
                 )
@@ -285,130 +316,35 @@ pub fn compile(
             {
                 (
                     "pool/conv_kernel_3.wgsl".to_string(),
-                    ceil(
-                        output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3],
-                        1024,
-                    ) as _,
+                    ceil(output_lengths[0], 1024) as _,
                     1,
                     1,
                 )
             } else {
                 (
                     "pool/conv.wgsl".to_string(),
-                    ceil(
-                        output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3],
-                        256,
-                    ) as _,
+                    ceil(output_lengths[0], 256) as _,
                     1,
                     1,
                 )
             }
         }
-        "SqueezenetConvGroup" => {
-            debug_assert!(
-                input_dims.len() == 4usize,
-                "This group only support 4 dimensions."
-            );
-
-            let dilations_0 = get_attribute("dilations_0", Some(vec![1, 1]), node);
-            let kernel_shape_0 = get_attribute::<Vec<i64>>("kernel_shape_0", None, node);
-            let strides_0 = get_attribute("strides_0", Some(vec![1, 1]), node);
-            let _pads_0 = get_attribute("pads_0", Some(vec![0, 0, 0, 0]), node);
-
-            let dilations_1 = get_attribute("dilations_1", Some(vec![1, 1]), node);
-            let kernel_shape_1 = get_attribute::<Vec<i64>>("kernel_shape_1", None, node);
-            let strides_1 = get_attribute("strides_1", Some(vec![1, 1]), node);
-            let _pads_1 = get_attribute("pads_1", Some(vec![0, 0, 0, 0]), node);
-
-            let dilations_2 = get_attribute("dilations_2", Some(vec![1, 1]), node);
-            let kernel_shape_2 = get_attribute::<Vec<i64>>("kernel_shape_2", None, node);
-            let strides_2 = get_attribute("strides_2", Some(vec![1, 1]), node);
-            let _pads_2 = get_attribute("pads_2", Some(vec![0, 0, 0, 0]), node);
-
-            debug_assert!(
-                dilations_0 == [1, 1],
-                "This group configuration is not yet implemented"
-            );
-            debug_assert!(
-                dilations_1 == [1, 1],
-                "This group configuration is not yet implemented"
-            );
-            debug_assert!(
-                dilations_2 == [1, 1],
-                "This group configuration is not yet implemented"
-            );
-
-            debug_assert!(
-                strides_0 == [1, 1],
-                "This group configuration is not yet implemented"
-            );
-            debug_assert!(
-                strides_1 == [1, 1],
-                "This group configuration is not yet implemented"
-            );
-            debug_assert!(
-                strides_2 == [1, 1],
-                "This group configuration is not yet implemented"
-            );
-
-            debug_assert!(
-                kernel_shape_0 == [1, 1],
-                "This group configuration is not yet implemented"
-            );
-            debug_assert!(
-                kernel_shape_1 == [1, 1],
-                "This group configuration is not yet implemented"
-            );
-            debug_assert!(
-                kernel_shape_2 == [3, 3],
-                "This group configuration is not yet implemented"
-            );
-
-            context.insert("output_dims", &output_dims);
-            context.insert("input_dims", &input_dims);
-
-            context.insert(
-                "M_x_H_x_W",
-                &(output_dims[1] * output_dims[2] * output_dims[3]),
-            );
-            context.insert("H_x_W", &(output_dims[2] * output_dims[3]));
-            context.insert(
-                "original_C_x_H_x_W",
-                &(input_dims[1] * input_dims[2] * input_dims[3]),
-            );
-            context.insert("original_H_x_W", &(input_dims[2] * input_dims[3]));
-            context.insert("original_width", &input_dims[3]);
-            context.insert("width", &output_dims[3]);
-            context.insert("original_height", &input_dims[2]);
-            context.insert("channel", &input_dims[1]);
-
-            // GLSL shader for convolution computation
-
-            (
-                "containers/SqueezenetConvGroup.wgsl".to_string(),
-                (output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3] / 4) as _,
-                1,
-                1,
-            )
-        }
         "Gemm" | "MatMul" => {
             let alpha = get_attribute("alpha", Some(1.0), node);
             let beta = get_attribute("beta", Some(1.0), node);
-
-            let left_columns = &input_dims[1];
-            let right_columns = &dims_infos.get(&inputs[1]).unwrap()[1];
-
-            context.insert("left_columns", &left_columns);
-
-            context.insert("right_columns", &right_columns);
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
-            if input_dims[0] == 1 {
-                let threads = output_dims[1];
+            let left_columns = &input_dims[0][1];
+            let right_columns = &input_dims[1][1];
+            context.insert("left_columns", left_columns);
+            context.insert("right_columns", right_columns);
+
+            if input_dims[0][0] == 1 {
+                let threads = output_dims[0][1];
                 ("matrix/gemm_1.wgsl".to_string(), threads as _, 1, 1)
             } else {
-                let threads = (&input_dims[0] / 4) * right_columns / 4;
+                let threads = (&input_dims[0][0] / 4) * right_columns / 4;
                 ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
             }
         }
@@ -418,15 +354,12 @@ pub fn compile(
         "Sum" => {
             unimplemented!()
         }
-        "Transpose" => {
-            let len_0 = input_dims[0];
-            let len_1 = input_dims[1] / 4;
-
-            // TODO: add perm: let perm = get_attribute("perm", None, node).get_ints();
-            context.insert("len_1", &len_1);
-            context.insert("len_0", &len_0);
-            ("matrix/transpose.wgsl".to_string(), (length / 4) as _, 1, 1)
-        }
+        "Transpose" => (
+            "matrix/transpose.wgsl".to_string(),
+            (output_lengths[0] / 4) as _,
+            1,
+            1,
+        ),
         _ => unimplemented!(),
     };
 

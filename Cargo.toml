@@ -34,12 +34,9 @@ tera = "1.15.0"
 lazy_static = "1.4.0"
 
 [dev-dependencies]
-# approx = "0.5.0"
 image = "0.23.14"
 ndarray = "0.15.4"
 ureq = "2.3.1"
-# wgpu-profiler = "0.7.0"
-# onnxruntime = { path = "/home/peter/Documents/CONTRIB/onnxruntime-rs/onnxruntime", features = ["cuda"]}
 
 [workspace]
 resolver = "2"
@@ -179,4 +176,4 @@ web-sys = { version = "0.3.55", features = [
     "Window",
 ]}
 parking_lot = { version = "0.11", features = ["wasm-bindgen"] }
-console_log = "0.1.2"
+console_log = "0.2.0"

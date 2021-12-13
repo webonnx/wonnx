@@ -14,10 +14,10 @@ var<storage, write> var_{{ output[0] }}: Array;
 [[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
     let gidx = global_id.x;
-    if (gidx < {{ len_0 }}u) {
+    if (gidx < {{ i_len_0 }}u) {
 	    var_{{ output[0] }}.data[gidx] = var_{{ input[0] }}.data[gidx];
     } else { 
-        if (gidx < {{ len_0 + len_1 }}u) {
+        if (gidx < {{ i_len_0 + i_len_1 }}u) {
     	var_{{ output[0] }}.data[gidx] = var_{{ input[1] }}.data[gidx - {{ len_0 }}u];
         }
     }
