@@ -1,5 +1,5 @@
 use crate::{
-    compiler::format_node,
+    compiler::compile,
     resource,
     sequencer::sequence,
     utils::{ceil, dimensions_infos, initializers, len},
@@ -11,8 +11,6 @@ use std::{borrow::Cow, collections::HashMap};
 use log::debug;
 use tera::Tera;
 use wgpu::BufferUsages;
-
-const MAX_OPTIMIZATION_LEN: usize = 7;
 
 pub struct EncoderBuilder {
     pub pipeline: wgpu::ComputePipeline,
@@ -98,7 +96,7 @@ pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
 ) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>)> {
-    let mut initializers = initializers(graph);
+    let initializers = initializers(graph);
     let dims_info = dimensions_infos(graph);
 
     let mut inner_infos = HashMap::new();
@@ -125,18 +123,19 @@ pub fn load(
     let output_info = &graph.get_output().to_vec();
 
     while node_index < n {
-        let nodes = &base_nodes[node_index..(usize::min(node_index + MAX_OPTIMIZATION_LEN, n))];
+        let nodes = &base_nodes[node_index..];
         let names = nodes
             .iter()
             .map(|node| node.get_op_type())
-            .collect::<Vec<&str>>();
+            .collect::<Vec<_>>();
+
         let (current_node, optimisation_length) =
-            sequence(&names, nodes, device, &mut initializers, &mut inner_infos);
-        let (shader, x, y, z) = format_node(&current_node, &dims_info, &TEMPLATES);
+            sequence(&names, nodes, device, &initializers, &mut inner_infos);
+        let (shader, x, y, z) = compile(&current_node, &dims_info, &TEMPLATES);
         debug!("shader: {}", shader);
 
         // Initalialising Output
-        let output = &nodes[optimisation_length - 1].get_output()[0];
+        let output = &current_node.get_output()[0];
         if let Some(output_dims) = dims_info.get(output) {
             if output_info
                 .iter()
@@ -167,18 +166,9 @@ pub fn load(
         }
 
         let mut binding_counter: u32 = 0;
-
-        let inputs = current_node.get_input();
-        let inputs = if ["Reshape", "Clip", "Squeeze"].contains(&current_node.get_op_type()) {
-            inputs.get(0..1).unwrap()
-        } else {
-            inputs
-        };
-
-        // Generating the shader
         let mut entries = vec![];
 
-        for tensor in inputs {
+        for tensor in current_node.get_input() {
             entries.push(wgpu::BindGroupEntry {
                 binding: binding_counter,
                 resource: inner_infos

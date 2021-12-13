@@ -1,4 +1,3 @@
-pub mod compute;
 use std::error;
 pub mod compiler;
 pub mod onnx;
@@ -13,7 +12,6 @@ extern crate lazy_static;
 use optimisation::EncoderBuilder;
 use protobuf::{self, Message};
 use std::collections::HashMap;
-use std::time::Instant;
 
 use crate::resource::resize;
 // Change the alias to `Box<error::Error>`.
@@ -107,7 +105,6 @@ pub async fn run(
     session: &Session,
     inputs: HashMap<String, &[f32]>,
 ) -> Result<HashMap<String, Vec<f32>>> {
-    let time_run = Instant::now();
     let device = &session.device;
     let queue = &session.queue;
     let builders = &session.builders;
@@ -128,12 +125,21 @@ pub async fn run(
     }
 
     // Run the command encoder generated during the load
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
     for builder in builders {
-        compute::wrapper(device, queue, builder).unwrap();
+        let (x, y, z) = builder.threads;
+
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+        cpass.set_pipeline(&builder.pipeline);
+        for (index, bind_group) in builder.bind_groups.iter().enumerate() {
+            cpass.set_bind_group(index as u32, bind_group, &[]);
+        }
+        cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
     }
 
-    println!("time: run: {:#?}", time_run.elapsed());
-    let time_post_run = Instant::now();
+    queue.submit(Some(encoder.finish()));
 
     let mut results = HashMap::new();
 
@@ -152,11 +158,10 @@ pub async fn run(
         // Gets contents of buffer
         let data = buffer_slice.get_mapped_range();
         // Since contents are got in bytes, this converts these bytes back to f32
-        let result = bytemuck::cast_slice(&data).to_vec();
+        results.insert(output.clone(), bytemuck::cast_slice(&data).to_vec());
         drop(data);
         buffer.unmap();
-        results.insert(output.clone(), result);
     }
-    println!("time: post_run: {:#?}", time_post_run.elapsed());
+
     Ok(results)
 }

@@ -2,7 +2,7 @@ use crate::utils::{ceil, get_attribute, len};
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
-pub fn format_node(
+pub fn compile(
     node: &crate::onnx::NodeProto,
     dims_infos: &HashMap<String, Vec<i64>>,
     tera: &Tera,
