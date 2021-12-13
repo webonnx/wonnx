@@ -13,10 +13,12 @@ exclude = [
     ".github/**/**",
     "coverage/**/**",
     "examples/**/*", 
+    "target/**/*",
     "templates/**/**",
     "tests/**/*",
     "Cargo.lock",
-    "target/**/*",
+    "CODE_OF_CONDUCT.md",
+    "README.md"
 ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
