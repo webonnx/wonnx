@@ -12,9 +12,9 @@ Wonnx aims for running blazing Fast AI on any device.
 
    API   |    Windows                    |  Linux & Android   |    macOS & iOS     |
   -----  | ----------------------------- | ------------------ | ------------------ |
-  Vulkan | :white_check_mark:            | :white_check_mark: |                    |
-  Metal  |                               |                    | :white_check_mark: |
-  DX12   | :white_check_mark: (W10 only) |                    |                    |
+  Vulkan | ✅                            | ✅                 |                    |
+  Metal  |                               |                    | ✅                 |
+  DX12   | ✅                 (W10 only) |                    |                    |
   DX11   | :construction:                |                    |                    |
   GLES3  |                               | :ok:               |                    |
 
@@ -84,7 +84,13 @@ export RUSTFLAGS=--cfg=web_sys_unstable_apis
 wasm-pack test --node
 ```
 
-## Implementated Operator(from [ONNX IR](https://github.com/onnx/onnx/blob/master/docs/Operators.md?plain=1)) 
+## Tested Model
+
+- Squeezenet
+- MNIST
+
+
+## Supported Operators (ref [ONNX IR](https://github.com/onnx/onnx/blob/master/docs/Operators.md?plain=1)) 
 
 |**Operator**|**Since version**|**Implemented**|
 |-|-|-|

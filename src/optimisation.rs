@@ -49,13 +49,8 @@ lazy_static! {
         )
         .unwrap();
         tera.add_raw_template(
-            "containers/conv.wgsl",
-            include_str!("../templates/containers/Conv.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "containers/squeezenet_conv_group.wgsl",
-            include_str!("../templates/containers/squeezenet_conv_group.wgsl"),
+            "sequences/SqueezeConcat.wgsl",
+            include_str!("../templates/sequences/SqueezeConcat.wgsl"),
         )
         .unwrap();
         tera.add_raw_template(
@@ -124,7 +119,7 @@ pub fn load(
                 device,
                 len(&input_dims) as _,
                 input.get_name(),
-                BufferUsages::STORAGE | BufferUsages::MAP_WRITE,
+                BufferUsages::STORAGE | BufferUsages::COPY_DST,
             ),
         );
     }

@@ -2,6 +2,8 @@ use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use ndarray::s;
 use std::collections::HashMap;
 use std::path::Path;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::*;
 
 #[test]
 fn test_relu() {

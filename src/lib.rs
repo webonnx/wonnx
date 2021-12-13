@@ -41,26 +41,18 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 // +----------------+
 //         v
 // +----------------+
-// |Session         |
-// +----------------+
+// |Session         |                        Optimisation on       Node -> WGSL Shader
+// +----------------+                        Mutiple node
+//         v
+// +----------------+   +----------------+   +----------------+   +----------------+
+// |load (once)     | > |Load params     | > |Sequencer       | > |Compiler        |
+// +----------------+   +----------------+   +----------------+   +----------------+
 //         v
 // +----------------+
-// |load (once)     |
+// |run             |  (Can be run multiple time)
 // +----------------+
-//         v
-// +----------------+
-// |run             |
-// +----------------+
-//         v
-// +----------------+
-// |dispatch        |
-// +----------------+
-//         v
-// +----------------+
-// |Output          |
-// +----------------+
-///
-///
+//
+//
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -119,16 +111,8 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     // Copy input data
     for (input, data) in input_data {
         let buffer = inner_infos.get(&input).unwrap();
-        {
-            let buffer_slice = buffer.slice(..);
-            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Write);
-            device.poll(wgpu::Maintain::Wait);
-            buffer_future.await.unwrap();
-            let mut buffer_write = buffer_slice.get_mapped_range_mut();
-            buffer_write.copy_from_slice(bytemuck::cast_slice(&resize(data.to_vec())));
-            drop(buffer_write);
-            buffer.unmap();
-        }
+
+        queue.write_buffer(buffer, 0, bytemuck::cast_slice(&resize(data.to_vec())))
     }
 
     println!("time: pre_run: {:#?}", time_pre_run.elapsed());

@@ -13,7 +13,8 @@ exclude = [
     "examples/**/*", 
     "tests/**/*",
     "Cargo.lock",
-    "target/**/*"
+    "target/**/*",
+    "templates/**/**"
 ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -47,6 +48,7 @@ console_error_panic_hook = "0.1.6"
 getrandom = { version = "0.2", features = ["js"] }
 wasm-bindgen = "0.2.78" # remember to change version in wiki as well
 wasm-bindgen-futures = "0.4.23"
+wasm-bindgen-test = "0.3.28"
 js-sys = "0.3.50"
 web-sys = { version = "0.3.55", features = [
     "Document",
