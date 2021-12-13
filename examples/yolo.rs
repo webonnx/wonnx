@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 // Args Management
 async fn run() {
-    let steps = &execute_gpu().await[0];
+    let steps = execute_gpu().await;
     println!("steps: {:#?}", steps);
     // println!("steps[1..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
@@ -14,7 +14,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Vec<Vec<f32>> {
+async fn execute_gpu() -> HashMap<String, Vec<f32>> {
     let n: usize = 224;
     let mut input_data = HashMap::new();
 

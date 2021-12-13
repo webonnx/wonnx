@@ -14,7 +14,6 @@ use optimisation::EncoderBuilder;
 use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::time::Instant;
-use utils::{get_dimension, len};
 use wgpu::BufferUsages;
 
 use crate::resource::resize;
@@ -49,7 +48,7 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 // +----------------+   +----------------+   +----------------+   +----------------+
 //         v
 // +----------------+
-// |run             |  (Can be run multiple time)
+// |run             |  (Can be run multiple times)
 // +----------------+
 //
 //
@@ -59,7 +58,7 @@ pub struct Session {
     pub inner_infos: HashMap<String, wgpu::Buffer>,
     pub builders: Vec<EncoderBuilder>,
     pub outputs: Vec<String>,
-    pub output_dims: HashMap<String, Vec<i64>>,
+    pub output_dims: HashMap<String, i64>,
 }
 
 impl Session {
@@ -87,7 +86,6 @@ impl Session {
             .iter()
             .map(|x| x.get_name().to_string())
             .collect();
-        let output_info = graph.get_output();
         let mut output_dims = HashMap::new();
         for info in graph.get_output() {
             let dims = info
@@ -97,7 +95,8 @@ impl Session {
                 .get_dim()
                 .iter()
                 .map(|x| x.get_dim_value())
-                .collect::<Vec<i64>>();
+                .product::<i64>()
+                * std::mem::size_of::<f32>() as i64;
             output_dims.insert(info.get_name().to_string(), dims);
         }
 
@@ -120,7 +119,10 @@ impl Session {
 // It copy input data to the buffers.
 // Run the command encoder.
 // Copy the output into an exit buffer that can be deleted.
-pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Result<Vec<Vec<f32>>> {
+pub async fn run(
+    session: &Session,
+    inputs: HashMap<String, &[f32]>,
+) -> Result<HashMap<String, Vec<f32>>> {
     let time_run = Instant::now();
     let device = &session.device;
     let queue = &session.queue;
@@ -128,7 +130,7 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
     let inner_infos = &session.inner_infos;
 
     // Copy input data
-    for (input, data) in input_data {
+    for (input, data) in inputs {
         queue.write_buffer(
             inner_infos.get(&input).unwrap_or_else(|| {
                 panic!(
@@ -148,7 +150,8 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
 
     println!("time: run: {:#?}", time_run.elapsed());
     let time_post_run = Instant::now();
-    let mut results = vec![];
+
+    let mut results = HashMap::new();
 
     let outputs = &session.outputs;
     let output_dims = &session.output_dims;
@@ -156,7 +159,7 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
         // Copy the output data into the exit buffer.
         let staging_buffer = resource::buffer(
             device,
-            len(output_dims.get(output).unwrap()) as _,
+            *output_dims.get(output).unwrap() as _,
             &(String::from("staging_") + output),
             BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         );
@@ -168,7 +171,7 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
             0,
             &staging_buffer,
             0,
-            (len(output_dims.get(output).unwrap()) * 4) as _,
+            *output_dims.get(output).unwrap() as _,
         );
         queue.submit(Some(encoder.finish()));
 
@@ -186,7 +189,7 @@ pub async fn run(session: &Session, input_data: HashMap<String, &[f32]>) -> Resu
         // Since contents are got in bytes, this converts these bytes back to f32
         let result = bytemuck::cast_slice(&data).to_vec();
         drop(data);
-        results.push(result);
+        results.insert(output.clone(), result);
     }
     println!("time: post_run: {:#?}", time_post_run.elapsed());
     Ok(results)

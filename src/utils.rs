@@ -295,7 +295,7 @@ mod tests {
         let result = pollster::block_on(crate::run(&session, input_data)).unwrap();
 
         assert_eq!(
-            result[0],
+            result["Y"],
             [54., 63., 72., 99., 108., 117., 144., 153., 162.]
         );
     }
