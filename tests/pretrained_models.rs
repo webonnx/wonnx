@@ -17,7 +17,7 @@ fn test_relu() {
     .expect("session did not create");
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
-    assert_eq!(result["Y"], &[0.0, 1.0, 0.0, 0.0]);
+    assert_eq!(result["y"], &[0.0, 1.0, 0.0, 0.0]);
 }
 
 #[test]

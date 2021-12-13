@@ -14,7 +14,6 @@ use optimisation::EncoderBuilder;
 use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::time::Instant;
-use wgpu::BufferUsages;
 
 use crate::resource::resize;
 // Change the alias to `Box<error::Error>`.
@@ -58,7 +57,6 @@ pub struct Session {
     pub inner_infos: HashMap<String, wgpu::Buffer>,
     pub builders: Vec<EncoderBuilder>,
     pub outputs: Vec<String>,
-    pub output_dims: HashMap<String, i64>,
 }
 
 impl Session {
@@ -84,21 +82,8 @@ impl Session {
         let outputs = graph
             .get_output()
             .iter()
-            .map(|x| x.get_name().to_string())
+            .map(|info| (info.get_name().to_string()))
             .collect();
-        let mut output_dims = HashMap::new();
-        for info in graph.get_output() {
-            let dims = info
-                .get_field_type()
-                .get_tensor_type()
-                .get_shape()
-                .get_dim()
-                .iter()
-                .map(|x| x.get_dim_value())
-                .product::<i64>()
-                * std::mem::size_of::<f32>() as i64;
-            output_dims.insert(info.get_name().to_string(), dims);
-        }
 
         // The data is loaded after the first submit
         let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -110,7 +95,6 @@ impl Session {
             inner_infos,
             builders,
             outputs,
-            output_dims,
         })
     }
 }
@@ -154,34 +138,15 @@ pub async fn run(
     let mut results = HashMap::new();
 
     let outputs = &session.outputs;
-    let output_dims = &session.output_dims;
     for output in outputs {
-        // Copy the output data into the exit buffer.
-        let staging_buffer = resource::buffer(
-            device,
-            *output_dims.get(output).unwrap() as _,
-            &(String::from("staging_") + output),
-            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-        );
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        // Copy the output data into the staging buffer.
         let buffer = inner_infos.get(output).unwrap();
-        encoder.copy_buffer_to_buffer(
-            buffer,
-            0,
-            &staging_buffer,
-            0,
-            *output_dims.get(output).unwrap() as _,
-        );
-        queue.submit(Some(encoder.finish()));
 
-        let buffer_slice = staging_buffer.slice(..);
+        let buffer_slice = buffer.slice(..);
         // TODO: Define behavior for multi output.
         let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
 
         device.poll(wgpu::Maintain::Wait);
-
-        // OUTPUT
 
         buffer_future.await.expect("failed to run compute on gpu!");
         // Gets contents of buffer
@@ -189,6 +154,7 @@ pub async fn run(
         // Since contents are got in bytes, this converts these bytes back to f32
         let result = bytemuck::cast_slice(&data).to_vec();
         drop(data);
+        buffer.unmap();
         results.insert(output.clone(), result);
     }
     println!("time: post_run: {:#?}", time_post_run.elapsed());
