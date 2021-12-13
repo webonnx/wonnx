@@ -42,21 +42,6 @@ pub fn rename_attribute(
     attr
 }
 
-pub fn get_dimension(value_info: &[onnx::ValueInfoProto], input_name: &str) -> Option<Vec<i64>> {
-    value_info
-        .iter()
-        .find(|x| x.get_name() == input_name)
-        .map(|info| {
-            info.get_field_type()
-                .get_tensor_type()
-                .get_shape()
-                .get_dim()
-                .iter()
-                .map(|x| x.get_dim_value())
-                .collect()
-        })
-}
-
 pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Vec<i64>> {
     let mut dims_info = HashMap::new();
 
