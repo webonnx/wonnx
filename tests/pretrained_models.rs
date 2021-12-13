@@ -17,7 +17,7 @@ fn test_relu() {
     .expect("session did not create");
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
-    assert_eq!(result, [0.0, 1.0, 0.0, 0.0]);
+    assert_eq!(result[0], &[0.0, 1.0, 0.0, 0.0]);
 }
 
 #[test]
@@ -35,7 +35,7 @@ fn test_two_transposes() {
     .expect("session did not create");
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
-    assert_eq!(result[0..5], [0., 1., 2., 3., 4., 5.]);
+    assert_eq!(result[0][0..5], [0., 1., 2., 3., 4., 5.]);
 }
 
 #[test]
@@ -48,8 +48,7 @@ fn test_mnist() {
     ))
     .expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data))
-        .unwrap()
+    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()[0]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -65,8 +64,7 @@ fn test_mnist() {
     let image = load_image("3.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(wonnx::run(&mut session, input_data))
-        .unwrap()
+    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()[0]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -82,8 +80,7 @@ fn test_mnist() {
     let image = load_image("5.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(wonnx::run(&mut session, input_data))
-        .unwrap()
+    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()[0]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -99,8 +96,7 @@ fn test_mnist() {
     let image = load_image("7.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(wonnx::run(&mut session, input_data))
-        .unwrap()
+    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()[0]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {

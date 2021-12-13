@@ -6,13 +6,13 @@ use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
 async fn run() {
-    let result = execute_gpu().await.unwrap();
+    let result = &execute_gpu().await.unwrap()[0];
 
-    assert_eq!(result, [54., 63., 72., 99., 108., 117., 144., 153., 162.]);
+    assert_eq!(result, &[54., 63., 72., 99., 108., 117., 144., 153., 162.]);
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<Vec<f32>> {
+async fn execute_gpu() -> Result<Vec<Vec<f32>>> {
     // USER INPUT
     let n = 5;
     let c = 1;

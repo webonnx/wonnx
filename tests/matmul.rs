@@ -82,7 +82,7 @@ fn execute_gpu() {
     let mut session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = &pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()[0];
     let time_finished_creation = Instant::now();
     println!(
         "time: finished_creation_session: {:#?}",
@@ -191,7 +191,7 @@ fn _single_dimension_matrix_multiplication() {
     let mut session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let _result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let _result = &pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()[0];
 
     let time_finished_creation = Instant::now();
     println!(

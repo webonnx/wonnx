@@ -57,7 +57,7 @@ fn conv_pad() {
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
     assert_eq!(
-        result,
+        result[0],
         [
             12.0, 21.0, 27.0, 33.0, 24.0, 33.0, 54.0, 63.0, 72.0, 51.0, 63.0, 99.0, 108.0, 117.0,
             81.0, 93.0, 144.0, 153.0, 162.0, 111.0, 72.0, 111.0, 117.0, 123.0, 84.0, 12.0, 21.0,
@@ -109,7 +109,10 @@ fn conv_without_pad() {
 
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
-    assert_eq!(result, [54., 63., 72., 99., 108., 117., 144., 153., 162.]);
+    assert_eq!(
+        result[0],
+        [54., 63., 72., 99., 108., 117., 144., 153., 162.]
+    );
 }
 
 #[test]
@@ -182,7 +185,7 @@ fn conv_stride() {
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
     assert_eq!(
-        result,
+        result[0],
         [12., 27., 24., 63., 108., 81., 123., 198., 141., 112., 177., 124.]
     );
 }
@@ -256,7 +259,7 @@ fn conv_asymetric_stride() {
 
     let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
 
-    assert_eq!(result, [21., 33., 99., 117., 189., 207., 171., 183.]);
+    assert_eq!(result[0], [21., 33., 99., 117., 189., 207., 171., 183.]);
 }
 
 fn _conv_kernel_3() {

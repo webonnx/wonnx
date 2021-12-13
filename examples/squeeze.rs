@@ -16,7 +16,7 @@ use std::{
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 // Args Management
 async fn run() {
-    let probabilities = execute_gpu().await.unwrap();
+    let probabilities = &execute_gpu().await.unwrap()[0];
 
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
 
@@ -37,7 +37,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<Vec<f32>> {
+async fn execute_gpu() -> Result<Vec<Vec<f32>>> {
     let mut input_data = HashMap::new();
     let image = load_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap());
