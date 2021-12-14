@@ -8,7 +8,6 @@ use crate::{
 
 use std::{borrow::Cow, collections::HashMap};
 
-use log::debug;
 use tera::Tera;
 use wgpu::BufferUsages;
 
@@ -88,6 +87,16 @@ lazy_static! {
         .unwrap();
         tera.add_raw_template("structs.wgsl", include_str!("../templates/structs.wgsl"))
             .unwrap();
+        tera.add_raw_template(
+            "snippets/activation_vec.wgsl",
+            include_str!("../templates/snippets/activation_vec.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "snippets/activation_scalar.wgsl",
+            include_str!("../templates/snippets/activation_scalar.wgsl"),
+        )
+        .unwrap();
         tera
     };
 }
@@ -132,7 +141,7 @@ pub fn load(
         let (current_node, optimisation_length) =
             sequence(&names, nodes, device, &initializers, &mut inner_infos);
         let (shader, x, y, z) = compile(&current_node, &dims_info, &TEMPLATES);
-        debug!("shader: {}", shader);
+        info!("shader: {}", shader);
 
         // Initalialising Output
         let output = &current_node.get_output()[0];

@@ -1,10 +1,10 @@
 {%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> var_{{ inputs[0] }}: Array;
+var<storage, read> {{ inputs[0] }}: Array;
 
 [[group(0), binding(1)]]
-var<storage, write> var_{{ outputs[0] }}: Array;
+var<storage, write> {{ outputs[0] }}: Array;
 
 
 [[stage(compute), workgroup_size(256, 1, 1)]]
@@ -31,6 +31,6 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         {%- endif -%}
         {%- endfor -%};
 
-        var_{{ outputs[0] }}.data[index] = var_{{ inputs[0] }}.data[gidx];
+        {{ outputs[0] }}.data[index] = {{ inputs[0] }}.data[gidx];
     }
 }

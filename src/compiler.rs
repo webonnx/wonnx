@@ -37,14 +37,23 @@ pub fn compile(
         .map(|dims| dims.iter().product())
         .collect::<Vec<i64>>();
 
+    // Escaping special characters as well as adding `var_`
+    // in the beginning of the variable name to avoid collisions
+    // with wgsl syntax.
     inputs = inputs
         .iter()
-        .map(|input| input.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], ""))
+        .map(|input| {
+            let input = input.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "");
+            String::from("var_") + &input
+        })
         .collect::<Vec<_>>();
 
     outputs = outputs
         .iter()
-        .map(|output| output.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], ""))
+        .map(|output| {
+            let output = output.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "");
+            String::from("var_") + &output
+        })
         .collect::<Vec<_>>();
 
     let mut input_chunks = vec![];
@@ -152,7 +161,12 @@ pub fn compile(
             1,
             1,
         ),
-        "MaxPool" | "AveragePool" => {
+        op @ "MaxPool"
+        | op @ "AveragePool"
+        | op @ "Conv"
+        | op @ "ConvRelu"
+        | op @ "ConvLeakyRelu"
+        | op @ "ConvMish" => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims[0].len() == 4usize);
 
@@ -212,111 +226,53 @@ pub fn compile(
             context.insert("pad", &pads);
             context.insert("dilation", &dilations);
 
-            if node.get_op_type() == "ConvRelu" {
-                context.insert("conv_relu", &true);
-            }
             // GLSL shader for convolution computation
-            (
-                "pool/aggregate.wgsl".to_string(),
-                ceil(output_lengths[0], 1024) as _,
-                1,
-                1,
-            )
-        }
-        "Conv" | "ConvRelu" => {
-            // TODO: Conv only support NxCxHxW for the moment.
-            debug_assert!(input_dims[0].len() == 4usize);
-
-            let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node);
-            let dilations = get_attribute("dilations", Some(vec![1, 1]), node);
-            let kernel_shape = get_attribute::<Vec<i64>>("kernel_shape", None, node);
-            let strides = get_attribute("strides", Some(vec![1, 1]), node);
-            let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node);
-
-            let pads = match auto_pad.as_str() {
-                "NOTSET" => pads.to_vec(),
-                "SAME_UPPER" => {
-                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
-                    let slack_0_div_2 = slack_0 / 2;
-                    let slack_rest_0 = slack_0 % 2;
-                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
-                    let slack_1_div_2 = slack_1 / 2;
-                    let slack_rest_1 = slack_1 % 2;
-                    vec![
-                        slack_0_div_2,
-                        slack_1_div_2,
-                        slack_0_div_2 + slack_rest_0,
-                        slack_1_div_2 + slack_rest_1,
-                    ]
-                }
-                "SAME_LOWER" => {
-                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
-                    let slack_0_div_2 = slack_0 / 2;
-                    let slack_rest_0 = slack_0 % 2;
-                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
-                    let slack_1_div_2 = slack_1 / 2;
-                    let slack_rest_1 = slack_1 % 2;
-                    vec![
-                        slack_0_div_2 + slack_rest_0,
-                        slack_1_div_2 + slack_rest_1,
-                        slack_0_div_2,
-                        slack_1_div_2,
-                    ]
-                }
-                _ => unimplemented!(),
-            };
-
-            let input_dims = input_dims[0];
-            let output_dims = output_dims[0];
-
-            context.insert("original_width", &input_dims[3]);
-            context.insert("width", &output_dims[3]);
-            context.insert("original_height", &input_dims[2]);
-            context.insert("channel", &input_dims[1]);
-            context.insert("stride", &strides);
-            context.insert("kernel_shape", &kernel_shape);
-            context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
-            context.insert(
-                "kernel_channel_len",
-                &(kernel_shape[0] * kernel_shape[1] * input_dims[1]),
-            );
-            context.insert("pad", &pads);
-            context.insert("dilation", &dilations);
-
-            if node.get_op_type() == "ConvRelu" {
-                context.insert("conv_relu", &true);
-            }
-            // GLSL shader for convolution computation
-            if (strides == [1, 1])
-                && (kernel_shape == [1, 1])
-                && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
-                && (input_dims[1] % 16 == 0)
-                && (output_dims[1] % 4 == 0)
-            {
-                (
-                    "pool/conv_kernel_1.wgsl".to_string(),
+            match op {
+                "MaxPool" | "AveragePool" => (
+                    "pool/aggregate.wgsl".to_string(),
                     ceil(output_lengths[0], 1024) as _,
                     1,
                     1,
-                )
-            } else if (strides == [1, 1])
-                && (kernel_shape == [3, 3])
-                && (dilations == [1, 1])
-                && (output_dims[1] % 4 == 0)
-            {
-                (
-                    "pool/conv_kernel_3.wgsl".to_string(),
-                    ceil(output_lengths[0], 1024) as _,
-                    1,
-                    1,
-                )
-            } else {
-                (
-                    "pool/conv.wgsl".to_string(),
-                    ceil(output_lengths[0], 256) as _,
-                    1,
-                    1,
-                )
+                ),
+                "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish" => {
+                    // Alpha is the Leaky Relu attribute
+                    let alpha = get_attribute("alpha", Some(0.01), node);
+                    context.insert("alpha", &alpha);
+
+                    // GLSL shader for convolution computation
+                    if (strides == [1, 1])
+                        && (kernel_shape == [1, 1])
+                        && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
+                        && (input_dims[1] % 16 == 0)
+                        && (output_dims[1] % 4 == 0)
+                    {
+                        (
+                            "pool/conv_kernel_1.wgsl".to_string(),
+                            ceil(output_lengths[0], 1024) as _,
+                            1,
+                            1,
+                        )
+                    } else if (strides == [1, 1])
+                        && (kernel_shape == [3, 3])
+                        && (dilations == [1, 1])
+                        && (output_dims[1] % 4 == 0)
+                    {
+                        (
+                            "pool/conv_kernel_3.wgsl".to_string(),
+                            ceil(output_lengths[0], 1024) as _,
+                            1,
+                            1,
+                        )
+                    } else {
+                        (
+                            "pool/conv.wgsl".to_string(),
+                            ceil(output_lengths[0], 256) as _,
+                            1,
+                            1,
+                        )
+                    }
+                }
+                _ => panic!("Invalid Opset"),
             }
         }
         "Gemm" | "MatMul" => {

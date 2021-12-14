@@ -24,11 +24,11 @@ pub fn sequence(
                 nodes[0].get_input().iter().map(|x| x.as_str()).collect(),
                 nodes[6].get_output().iter().map(|x| x.as_str()).collect(),
                 &(nodes[0].get_name().to_string() + nodes[1].get_name()),
-                "ConvRelu",
+                "ConvMish",
                 nodes[0].get_attribute().to_vec(),
             )
         }
-        ["Conv", "Relu", ..] => {
+        ["Conv", "Relu", ..] | ["Conv", "LeakyRelu", ..] => {
             optimisation_length = 2;
             let inputs = nodes[0].get_input();
             for input in inputs {
@@ -59,12 +59,17 @@ pub fn sequence(
                 }
             }
 
+            let mut attributes = nodes[0].get_attribute().to_vec();
+            for attribute in nodes[1].get_attribute() {
+                attributes.push(attribute.clone());
+            }
+
             node(
                 nodes[0].get_input().iter().map(|x| x.as_str()).collect(),
                 nodes[1].get_output().iter().map(|x| x.as_str()).collect(),
                 &(nodes[0].get_name().to_string() + nodes[1].get_name()),
                 "ConvRelu",
-                nodes[0].get_attribute().to_vec(),
+                attributes,
             )
         }
         ["Reshape", ..] | ["Clip", ..] | ["Squeeze", ..] => {
