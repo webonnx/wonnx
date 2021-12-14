@@ -6,6 +6,7 @@ var<storage, read> {{ inputs[0] }}: Array;
 [[group(0), binding(1)]]
 var<storage, write> {{ outputs[0] }}: Array;
 
+// aggregate.wgsl
 [[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
@@ -50,9 +51,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		
             
 
-{%- if op_type is matching("AveragePool") -%}
+{% if op_type is matching("AveragePool") -%}
         result = result / {{ kernel_len }}.;
-{%- endif -%}
+{%- endif %}
 
         let base_index = batch * {{ o_chunks[0][0] }}u + m * {{ o_chunks[0][1] * 4 }}u + y * {{ width }}u + x;
         for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {

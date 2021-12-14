@@ -8,6 +8,7 @@ use crate::{
 
 use std::{borrow::Cow, collections::HashMap};
 
+use log::info;
 use tera::Tera;
 use wgpu::BufferUsages;
 

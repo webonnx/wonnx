@@ -15,8 +15,9 @@ var<storage, write> {{ outputs[0] }}: Array;
 {%- else -%}
 [[group(0), binding(2)]]
 var<storage, write> {{ outputs[0] }}: Array;
-{%- endif -%}  
+{%- endif %}  
 
+// conv_kernel_1.wgsl
 [[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         let gidx = global_id.x;
@@ -61,14 +62,14 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                 }
 	}
 
-        {%- if inputs | length == 3 -%}
+        {% if inputs | length == 3 -%}
         result = result + {{ inputs[2] }}.data[m];
-        {%- endif -%}
+        {%- endif %}
 
 {% set activation_input = "result" %}
 {% set activation_output = "result" %}
 {% set activation_type = op_type | replace(from="Conv", to="") %}
-{%- include "snippets/activation_vec.wgsl" -%}
+{%- include "snippets/activation_vec.wgsl" %}
 
         let base_index = batch * {{ o_chunks[0][0] }}u + m * {{ o_chunks[0][1] * 4 }}u + xy;
         for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {

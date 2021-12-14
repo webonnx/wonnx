@@ -155,12 +155,21 @@ pub fn compile(
                 1,
             )
         }
-        "Concat" => (
-            "matrix/concat.wgsl".to_string(),
-            ceil(output_lengths[0], 256) as u32,
-            1,
-            1,
-        ),
+        "Concat" => {
+            let mut input_cumulative_len = vec![];
+            let mut sum = 0;
+            for len in input_lengths.iter() {
+                sum = sum + len;
+                input_cumulative_len.push(sum);
+            }
+            context.insert("cum_len", &input_cumulative_len);
+            (
+                "matrix/concat.wgsl".to_string(),
+                ceil(output_lengths[0], 256) as u32,
+                1,
+                1,
+            )
+        }
         op @ "MaxPool"
         | op @ "AveragePool"
         | op @ "Conv"

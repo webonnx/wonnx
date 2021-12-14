@@ -21,7 +21,7 @@ var<storage, write> {{ outputs[0] }}: Array;
 {%- else -%}
 [[group(0), binding(2)]]
 var<storage, write> {{ outputs[0] }}: Array;
-{%- endif -%}  
+{%- endif %}  
 
 // conv_kernel_3.wgsl
 [[stage(compute), workgroup_size(256, 1, 1)]]
@@ -85,9 +85,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
         }       
 	
-        {%- if inputs | length == 3 -%}
+        {% if inputs | length == 3 -%}
         result = result + {{ inputs[2] }}.data[m];
-        {%- endif -%}
+        {%- endif %}
 
 {% set activation_input = "result" %}
 {% set activation_output = "result" %}
