@@ -3,7 +3,6 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::utils::{attribute, graph, model, node, tensor};
 // Indicates a f32 overflow in an intermediate Collatz value
-use std::time::Instant;
 
 #[test]
 fn test_matmul_square_matrix() {

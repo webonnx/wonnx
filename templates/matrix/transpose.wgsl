@@ -1,33 +1,33 @@
-{% include "structs.wgsl" %}
+{%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> var_{{ input[0] }}: Array;
+var<storage, read> var_{{ inputs[0] }}: Array;
 
 [[group(0), binding(1)]]
-var<storage, write> var_{{ output[0] }}: Array;
+var<storage, write> var_{{ outputs[0] }}: Array;
 
 
 [[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
     let gidx = global_id.x;
 
-    if (gidx < {{ o_len_0 }}u) {
+    if (gidx < {{ o_lens[0] }}u) {
 
         var rest = gidx;
-        {% for chunks in i_chunks_0 %}
-        {% if loop.last %}
+        {%- for chunks in i_chunks_0 -%}
+        {%- if loop.last -%}
         let d_{{ loop.index0 }} = rest; 
-        {% else %}
+        {%- else -%}
         let d_{{ loop.index0 }} = rest / {{ chunks }}u; 
         rest = gidx % {{ chunks }}u; 
-        {% endif %}{% endfor %}
+        {%- endif -%}{%- endfor -%}
 
-        let index = {% for perm in permuted_chunks %}{% if loop.first %}
+        let index = {%- for perm in permuted_chunks -%}{%- if loop.first -%}
         d_{{ loop.index0 }} * {{ perm }}u
-        {% else %}
+        {%- else -%}
         + d_{{ loop.index0 }} * {{ perm }}u
-        {% endif %}{% endfor %};
+        {%- endif -%}{%- endfor -%};
 
-        var_{{ output[0] }}.data[index] = var_{{ input[0] }}.data[gidx];
+        var_{{ outputs[0] }}.data[index] = var_{{ inputs[0] }}.data[gidx];
     }
 }

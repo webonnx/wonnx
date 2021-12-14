@@ -46,23 +46,10 @@ pub fn compile(
         .iter()
         .map(|output| output.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], ""))
         .collect::<Vec<_>>();
+
     let mut context = Context::new();
-
-    for (i, dims) in input_dims.iter().enumerate() {
-        context.insert(format!("i_dims_{}", i), &dims);
-    }
-
-    for (i, dims) in output_dims.iter().enumerate() {
-        context.insert(format!("o_dims_{}", i), &dims);
-    }
-
-    for (i, len) in input_lengths.iter().enumerate() {
-        context.insert(format!("i_len_{}", i), &len);
-    }
-
-    for (i, len) in output_lengths.iter().enumerate() {
-        context.insert(format!("o_len_{}", i), &len);
-    }
+    context.insert(format!("i_dims"), &output_dims);
+    context.insert(format!("o_dims"), &output_dims);
 
     for (i, dims) in input_dims.iter().enumerate() {
         let mut chunks = vec![];
@@ -82,23 +69,25 @@ pub fn compile(
         context.insert(format!("i_chunks_{}", i), &chunks);
     }
 
-    context.insert("input", &inputs);
-    context.insert("output", &outputs);
-    context.insert("op_type", &node.get_op_type().to_lowercase());
+    context.insert(format!("i_lens"), &input_lengths);
+    context.insert(format!("o_lens"), &output_lengths);
+    context.insert("inputs", &inputs);
+    context.insert("outputs", &outputs);
+    context.insert("op_type", &node.get_op_type());
 
     let (template, x, y, z) = match node.get_op_type() {
         // Map simple function
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
         | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => (
             "endomorphism/map.wgsl".to_string(),
-            (output_lengths[0] / 4) as _,
+            ceil(output_lengths[0], 4) as _,
             1,
             1,
         ),
         // Copy data
         "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Softmax" => (
             "endomorphism/copy.wgsl".to_string(),
-            (output_lengths[0] / 16) as _,
+            ceil(output_lengths[0], 16) as _,
             1,
             1,
         ),
@@ -125,7 +114,7 @@ pub fn compile(
             );
             (
                 "endomorphism/arithmetic.wgsl".to_string(),
-                (output_lengths[0] / 4) as _,
+                ceil(output_lengths[0], 4) as _,
                 1,
                 1,
             )
@@ -144,12 +133,12 @@ pub fn compile(
             //       1,
             //   )
         }
-        "Celu" | "Elu" => {
+        "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu" => {
             let alpha = get_attribute("alpha", Some(1.0), node);
             context.insert("alpha", &alpha);
             (
                 "endomorphism/activation.wgsl".to_string(),
-                (output_lengths[0] / 4) as _,
+                ceil(output_lengths[0], 4) as _,
                 1,
                 1,
             )
@@ -365,12 +354,9 @@ pub fn compile(
                 let threads = output_dims[0][1];
                 ("matrix/gemm_1.wgsl".to_string(), threads as _, 1, 1)
             } else {
-                let threads = (&input_dims[0][0] / 4) * right_columns / 4;
+                let threads = input_dims[0][0] * input_dims[1][1] / 16;
                 ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
             }
-        }
-        "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" => {
-            ("endomorphism/activation.wgsl".to_string(), 1, 1, 1)
         }
         "Sum" => {
             unimplemented!()

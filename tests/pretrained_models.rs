@@ -21,7 +21,6 @@ fn test_relu() {
 }
 
 #[test]
-#[ignore]
 fn test_mnist() {
     let image = load_image("0.jpg");
     let mut input_data = HashMap::new();

@@ -96,12 +96,14 @@ To implement an operator all you have to do is:
 3. Add any variable you want to use in the WGSL shader using `context`.
 4. Write a new WGSL template in the `templates` folder.
 > Available types are in `structs.wgsl` but you can also generate new ones within your templates.
-5. Respect the binding layout that each entry is incremented by 1 starting from 0, with input first and output last. If the number of binding is above 4. Increment the binding group.
+5. Respect the binding layout that each entry is incremented by 1 starting from 0, with input first and output last. If the number of binding is above 4. Increment the binding group. You can change the input within `sequencer.rs`
 6. Write the logic.
 
 There is default variables in the context: 
-- `{{ i_len_0 }}` the length of the input 0. This also work for output: `{{ o_len_0 }}` and other input `{{ i_len_1 }}`
+- `{{ inputs[0] }}`
+- `{{ i_lens[0] }}` the length of the input 0. This also work for output: `{{ o_lens[0] }}` and other input `{{ i_lens[1] }}`
 - `{{ i_dims_0 }}` an array of the dimensions of input 0.
+- `{{ op_type }}` the op type as some op_type like activation are using the same template.
 
 7. Test it using the utils function and place it in the tests folder. The test can look as follows:
 ```Rust
@@ -141,6 +143,7 @@ fn test_matmul_square_matrix() {
 ```
 > Check out tera documentation for other templating operation: https://tera.netlify.app/docs/
 
+8. If at any point you want to do optimisation of several node you can do it within `sequencer.rs`.
 
 ## Supported Operators (ref [ONNX IR](https://github.com/onnx/onnx/blob/master/docs/Operators.md?plain=1)) 
 
