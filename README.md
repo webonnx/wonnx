@@ -1,4 +1,4 @@
-<center><img src="header.png" alt="WONNX" width="500"/></center>
+<center><img src="header.png" alt="WONNX" width="700"/></center>
 
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/haixuantao/wonnx/CI)
 ![Crates.io (latest)](https://img.shields.io/crates/dv/wonnx)
@@ -41,7 +41,7 @@ cargo run --example squeeze --release
 
 ```bash
 # pip install -U pip && pip install onnx-simplifier
-python -m onnxsim mnist-8.onnx  opt-mnist.onnx
+python -m onnxsim mnist-8.onnx opt-mnist.onnx
 ```
 
 - Then you can run it following the example in the examples folder:
@@ -53,40 +53,57 @@ cargo run --example mnist --release
 ## To use
 
 ```rust
-async fn execute_gpu() -> Vec<f32> {
-    // USER INPUT
-
-    let n: usize = 512 * 512 * 128;
+fn main() -> HashMap<String, Vec<f32>> {
     let mut input_data = HashMap::new();
-    let data = vec![-1.0f32; n];
-    input_data.insert("x", data.as_slice());
+    let image = load_squeezenet_image(); // Load image
+    input_data.insert("data".to_string(), image.as_slice().unwrap());
 
-    let mut session = wonnx::Session::from_path("examples/data/models/single_relu.onnx")
-        .await
-        .unwrap();
+    let session = pollster::block_on(wonnx::Session::from_path(
+        "examples/data/models/opt-squeeze.onnx",
+    ))
+    .expect("session did not create");
+    let result = pollster::block_on(session.run(input_data)).unwrap();
+    let result = result["squeezenet0_flatten0_reshape0"];
+    let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
 
-    wonnx::run(&mut session, input_data).await.unwrap()
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+
+    assert_eq!(probabilities[0].0, 22);
 }
 ```
 
 > Examples are available in the `examples` folder
- 
-## Test 
 
-```bash
-cargo test
-```
-
-## Test WASM (not yet implemented)
-```bash
-export RUSTFLAGS=--cfg=web_sys_unstable_apis
-wasm-pack test --node
-```
 
 ## Tested Model
 
 - Squeezenet
 - MNIST
+
+
+## Contribution: On implementing a new Operator
+
+Contribution are very much welcomed even without large experience in DL, WGSL, or Rust. I hope that, this project can be a sandbox for all of us to learn more about those technologies beyond the scope of this project.
+
+To implement an operator all you have to do is:
+1. Add a new matching pattern in `compiler.rs`
+2. Retrieve its attributes values using the `get_attribute` function:
+```
+    let alpha = get_attribute("alpha", Some(1.0), node);
+    // or without default value
+    let alpha = get_attribute::<f32>("alpha", None, node);
+```
+3. Add any variable you want to use in the WGSL shader to the context.
+4. Write a new WGSL template in the `templates` folder.
+> Available type are in the `structs.wgsl` but you can also generate new ones within your templates.
+5. Respect the binding layout that each entry is incremented by 1 starting from 0, with input first and output last. If the number of binding is above 4. Increment the binding group.
+6. Write the logic.
+
+There is default variables in the context: 
+- `{{ i_len_0 }}` the length of the input 0. This also work for output: `{{ o_len_0 }}` and other input `{{ i_len_1 }}`
+- `{{ i_dims_0 }}` an array of the dimensions of input 0.
+
+> Check out tera documentation for other templating operation: https://tera.netlify.app/docs/
 
 
 ## Supported Operators (ref [ONNX IR](https://github.com/onnx/onnx/blob/master/docs/Operators.md?plain=1)) 
@@ -189,4 +206,78 @@ wasm-pack test --node
 |<a href="#RNN">RNN</a>|<a href="Changelog.md#RNN-14">14</a>, <a href="Changelog.md#RNN-7">7</a>, <a href="Changelog.md#RNN-1">1</a>|
 |<a href="#RandomNormal">RandomNormal</a>|<a href="Changelog.md#RandomNormal-1">1</a>|
 |<a href="#RandomNormalLike">RandomNormalLike</a>|<a href="Changelog.md#RandomNormalLike-1">1</a>|
-|<a href="#RandomUniform">Rand
+|<a href="#RandomUniform">RandomUniform</a>|<a href="Changelog.md#RandomUniform-1">1</a>|
+|<a href="#RandomUniformLike">RandomUniformLike</a>|<a href="Changelog.md#RandomUniformLike-1">1</a>|
+|<a href="#Reciprocal">Reciprocal</a>|<a href="Changelog.md#Reciprocal-13">13</a>, <a href="Changelog.md#Reciprocal-6">6</a>, <a href="Changelog.md#Reciprocal-1">1</a>|
+|<a href="#ReduceL1">ReduceL1</a>|<a href="Changelog.md#ReduceL1-13">13</a>, <a href="Changelog.md#ReduceL1-11">11</a>, <a href="Changelog.md#ReduceL1-1">1</a>|
+|<a href="#ReduceL2">ReduceL2</a>|<a href="Changelog.md#ReduceL2-13">13</a>, <a href="Changelog.md#ReduceL2-11">11</a>, <a href="Changelog.md#ReduceL2-1">1</a>|
+|<a href="#ReduceLogSum">ReduceLogSum</a>|<a href="Changelog.md#ReduceLogSum-13">13</a>, <a href="Changelog.md#ReduceLogSum-11">11</a>, <a href="Changelog.md#ReduceLogSum-1">1</a>|
+|<a href="#ReduceLogSumExp">ReduceLogSumExp</a>|<a href="Changelog.md#ReduceLogSumExp-13">13</a>, <a href="Changelog.md#ReduceLogSumExp-11">11</a>, <a href="Changelog.md#ReduceLogSumExp-1">1</a>|
+|<a href="#ReduceMax">ReduceMax</a>|<a href="Changelog.md#ReduceMax-13">13</a>, <a href="Changelog.md#ReduceMax-12">12</a>, <a href="Changelog.md#ReduceMax-11">11</a>, <a href="Changelog.md#ReduceMax-1">1</a>|
+|<a href="#ReduceMean">ReduceMean</a>|<a href="Changelog.md#ReduceMean-13">13</a>, <a href="Changelog.md#ReduceMean-11">11</a>, <a href="Changelog.md#ReduceMean-1">1</a>|
+|<a href="#ReduceMin">ReduceMin</a>|<a href="Changelog.md#ReduceMin-13">13</a>, <a href="Changelog.md#ReduceMin-12">12</a>, <a href="Changelog.md#ReduceMin-11">11</a>, <a href="Changelog.md#ReduceMin-1">1</a>|
+|<a href="#ReduceProd">ReduceProd</a>|<a href="Changelog.md#ReduceProd-13">13</a>, <a href="Changelog.md#ReduceProd-11">11</a>, <a href="Changelog.md#ReduceProd-1">1</a>|
+|<a href="#ReduceSum">ReduceSum</a>|<a href="Changelog.md#ReduceSum-13">13</a>, <a href="Changelog.md#ReduceSum-11">11</a>, <a href="Changelog.md#ReduceSum-1">1</a>|
+|<a href="#ReduceSumSquare">ReduceSumSquare</a>|<a href="Changelog.md#ReduceSumSquare-13">13</a>, <a href="Changelog.md#ReduceSumSquare-11">11</a>, <a href="Changelog.md#ReduceSumSquare-1">1</a>|
+|<a href="#Relu">Relu</a>|<a href="Changelog.md#Relu-14">14</a>, <a href="Changelog.md#Relu-13">13</a>, <a href="Changelog.md#Relu-6">6</a>, <a href="Changelog.md#Relu-1">1</a>|✅|
+|<a href="#Reshape">Reshape</a>|<a href="Changelog.md#Reshape-14">14</a>, <a href="Changelog.md#Reshape-13">13</a>, <a href="Changelog.md#Reshape-5">5</a>, <a href="Changelog.md#Reshape-1">1</a>|✅|
+|<a href="#Resize">Resize</a>|<a href="Changelog.md#Resize-13">13</a>, <a href="Changelog.md#Resize-11">11</a>, <a href="Changelog.md#Resize-10">10</a>|✅|
+|<a href="#ReverseSequence">ReverseSequence</a>|<a href="Changelog.md#ReverseSequence-10">10</a>|
+|<a href="#RoiAlign">RoiAlign</a>|<a href="Changelog.md#RoiAlign-16">16</a>, <a href="Changelog.md#RoiAlign-10">10</a>|
+|<a href="#Round">Round</a>|<a href="Changelog.md#Round-11">11</a>|
+|<a href="#Scan">Scan</a>|<a href="Changelog.md#Scan-11">11</a>, <a href="Changelog.md#Scan-9">9</a>, <a href="Changelog.md#Scan-8">8</a>|
+|<a href="#Scatter">Scatter</a> (deprecated)|<a href="Changelog.md#Scatter-11">11</a>, <a href="Changelog.md#Scatter-9">9</a>|
+|<a href="#ScatterElements">ScatterElements</a>|<a href="Changelog.md#ScatterElements-16">16</a>, <a href="Changelog.md#ScatterElements-13">13</a>, <a href="Changelog.md#ScatterElements-11">11</a>|
+|<a href="#ScatterND">ScatterND</a>|<a href="Changelog.md#ScatterND-16">16</a>, <a href="Changelog.md#ScatterND-13">13</a>, <a href="Changelog.md#ScatterND-11">11</a>|
+|<a href="#Selu">Selu</a>|<a href="Changelog.md#Selu-6">6</a>, <a href="Changelog.md#Selu-1">1</a>|
+|<a href="#SequenceAt">SequenceAt</a>|<a href="Changelog.md#SequenceAt-11">11</a>|
+|<a href="#SequenceConstruct">SequenceConstruct</a>|<a href="Changelog.md#SequenceConstruct-11">11</a>|
+|<a href="#SequenceEmpty">SequenceEmpty</a>|<a href="Changelog.md#SequenceEmpty-11">11</a>|
+|<a href="#SequenceErase">SequenceErase</a>|<a href="Changelog.md#SequenceErase-11">11</a>|
+|<a href="#SequenceInsert">SequenceInsert</a>|<a href="Changelog.md#SequenceInsert-11">11</a>|
+|<a href="#SequenceLength">SequenceLength</a>|<a href="Changelog.md#SequenceLength-11">11</a>|
+|<a href="#Shape">Shape</a>|<a href="Changelog.md#Shape-15">15</a>, <a href="Changelog.md#Shape-13">13</a>, <a href="Changelog.md#Shape-1">1</a>|
+|<a href="#Shrink">Shrink</a>|<a href="Changelog.md#Shrink-9">9</a>|
+|<a href="#Sigmoid">Sigmoid</a>|<a href="Changelog.md#Sigmoid-13">13</a>, <a href="Changelog.md#Sigmoid-6">6</a>, <a href="Changelog.md#Sigmoid-1">1</a>|✅|
+|<a href="#Sign">Sign</a>|<a href="Changelog.md#Sign-13">13</a>, <a href="Changelog.md#Sign-9">9</a>|
+|<a href="#Sin">Sin</a>|<a href="Changelog.md#Sin-7">7</a>|✅|
+|<a href="#Sinh">Sinh</a>|<a href="Changelog.md#Sinh-9">9</a>|✅|
+|<a href="#Size">Size</a>|<a href="Changelog.md#Size-13">13</a>, <a href="Changelog.md#Size-1">1</a>|
+|<a href="#Slice">Slice</a>|<a href="Changelog.md#Slice-13">13</a>, <a href="Changelog.md#Slice-11">11</a>, <a href="Changelog.md#Slice-10">10</a>, <a href="Changelog.md#Slice-1">1</a>|
+|<a href="#Softplus">Softplus</a>|<a href="Changelog.md#Softplus-1">1</a>|✅|
+|<a href="#Softsign">Softsign</a>|<a href="Changelog.md#Softsign-1">1</a>|✅|
+|<a href="#SpaceToDepth">SpaceToDepth</a>|<a href="Changelog.md#SpaceToDepth-13">13</a>, <a href="Changelog.md#SpaceToDepth-1">1</a>|
+|<a href="#Split">Split</a>|<a href="Changelog.md#Split-13">13</a>, <a href="Changelog.md#Split-11">11</a>, <a href="Changelog.md#Split-2">2</a>, <a href="Changelog.md#Split-1">1</a>|
+|<a href="#SplitToSequence">SplitToSequence</a>|<a href="Changelog.md#SplitToSequence-11">11</a>|
+|<a href="#Sqrt">Sqrt</a>|<a href="Changelog.md#Sqrt-13">13</a>, <a href="Changelog.md#Sqrt-6">6</a>, <a href="Changelog.md#Sqrt-1">1</a>|✅|
+|<a href="#Squeeze">Squeeze</a>|<a href="Changelog.md#Squeeze-13">13</a>, <a href="Changelog.md#Squeeze-11">11</a>, <a href="Changelog.md#Squeeze-1">1</a>|✅|
+|<a href="#StringNormalizer">StringNormalizer</a>|<a href="Changelog.md#StringNormalizer-10">10</a>|
+|<a href="#Sub">Sub</a>|<a href="Changelog.md#Sub-14">14</a>, <a href="Changelog.md#Sub-13">13</a>, <a href="Changelog.md#Sub-7">7</a>, <a href="Changelog.md#Sub-6">6</a>, <a href="Changelog.md#Sub-1">1</a>|✅|
+|<a href="#Sum">Sum</a>|<a href="Changelog.md#Sum-13">13</a>, <a href="Changelog.md#Sum-8">8</a>, <a href="Changelog.md#Sum-6">6</a>, <a href="Changelog.md#Sum-1">1</a>|
+|<a href="#Tan">Tan</a>|<a href="Changelog.md#Tan-7">7</a>|✅|
+|<a href="#Tanh">Tanh</a>|<a href="Changelog.md#Tanh-13">13</a>, <a href="Changelog.md#Tanh-6">6</a>, <a href="Changelog.md#Tanh-1">1</a>|✅|
+|<a href="#TfIdfVectorizer">TfIdfVectorizer</a>|<a href="Changelog.md#TfIdfVectorizer-9">9</a>|
+|<a href="#ThresholdedRelu">ThresholdedRelu</a>|<a href="Changelog.md#ThresholdedRelu-10">10</a>|
+|<a href="#Tile">Tile</a>|<a href="Changelog.md#Tile-13">13</a>, <a href="Changelog.md#Tile-6">6</a>, <a href="Changelog.md#Tile-1">1</a>|
+|<a href="#TopK">TopK</a>|<a href="Changelog.md#TopK-11">11</a>, <a href="Changelog.md#TopK-10">10</a>, <a href="Changelog.md#TopK-1">1</a>|
+|<a href="#Transpose">Transpose</a>|<a href="Changelog.md#Transpose-13">13</a>, <a href="Changelog.md#Transpose-1">1</a>|✅|
+|<a href="#Trilu">Trilu</a>|<a href="Changelog.md#Trilu-14">14</a>|
+|<a href="#Unique">Unique</a>|<a href="Changelog.md#Unique-11">11</a>|
+|<a href="#Unsqueeze">Unsqueeze</a>|<a href="Changelog.md#Unsqueeze-13">13</a>, <a href="Changelog.md#Unsqueeze-11">11</a>, <a href="Changelog.md#Unsqueeze-1">1</a>|
+|<a href="#Upsample">Upsample</a> (deprecated)|<a href="Changelog.md#Upsample-10">10</a>, <a href="Changelog.md#Upsample-9">9</a>, <a href="Changelog.md#Upsample-7">7</a>|
+|<a href="#Where">Where</a>|<a href="Changelog.md#Where-16">16</a>, <a href="Changelog.md#Where-9">9</a>|
+|<a href="#Xor">Xor</a>|<a href="Changelog.md#Xor-7">7</a>, <a href="Changelog.md#Xor-1">1</a>|
+|**Function**|**Since version**|
+|<a href="#Bernoulli">Bernoulli</a>|<a href="Changelog.md#Bernoulli-15">15</a>|
+|<a href="#CastLike">CastLike</a>|<a href="Changelog.md#CastLike-15">15</a>|
+|<a href="#Celu">Celu</a>|<a href="Changelog.md#Celu-12">12</a>|✅|
+|<a href="#DynamicQuantizeLinear">DynamicQuantizeLinear</a>|<a href="Changelog.md#DynamicQuantizeLinear-11">11</a>|
+|<a href="#GreaterOrEqual">GreaterOrEqual</a>|<a href="Changelog.md#GreaterOrEqual-12">12</a>|✅|
+|<a href="#HardSwish">HardSwish</a>|<a href="Changelog.md#HardSwish-14">14</a>|
+|<a href="#LessOrEqual">LessOrEqual</a>|<a href="Changelog.md#LessOrEqual-12">12</a>|✅|
+|<a href="#LogSoftmax">LogSoftmax</a>|<a href="Changelog.md#LogSoftmax-13">13</a>, <a href="Changelog.md#LogSoftmax-11">11</a>, <a href="Changelog.md#LogSoftmax-1">1</a>|
+|<a href="#MeanVarianceNormalization">MeanVarianceNormalization</a>|<a href="Changelog.md#MeanVarianceNormalization-13">13</a>, <a href="Changelog.md#MeanVarianceNormalization-9">9</a>|
+|<a href="#NegativeLogLikelihoodLoss">NegativeLogLikelihoodLoss</a>|<a href="Changelog.md#NegativeLogLikelihoodLoss-13">13</a>, <a href="Changelog.md#NegativeLogLikelihoodLoss-12">12</a>|
+|<a href="#Range">Range</a>|<a href="Changelog.md#Range-11">11</a>|
+|<a href="#Softmax">Softmax</a>|<a href="Changelog.md#Softmax-13">13</a>, <a href="Changelog.md#Softmax-11">11</a>, <a href="Changelog.md#Softmax-1">1</a>|✅|
+|<a href="#SoftmaxCrossEntropyLoss">SoftmaxCrossEntropyLoss</a>|<a href="Changelog.md#SoftmaxCrossEntropyLoss-13">13</a>, <a href="Changelog.md#SoftmaxCrossEntropyLoss-12">12</a>|
