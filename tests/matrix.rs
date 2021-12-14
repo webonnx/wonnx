@@ -6,7 +6,7 @@ use wonnx::utils::{attribute, graph, model, node, tensor};
 use std::time::Instant;
 
 #[test]
-fn execute_gpu() {
+fn test_matmul_square_matrix() {
     // USER INPUT
 
     let n = 16;
@@ -38,22 +38,10 @@ fn execute_gpu() {
         vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
     ));
 
-    // LOGIC
-    let time_session = Instant::now();
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(input_data)).unwrap();
-    let time_finished_creation = Instant::now();
-    println!(
-        "time: finished_creation_session: {:#?}",
-        time_finished_creation - time_session
-    );
-    let time_finished_computation = Instant::now();
-    println!(
-        "time: finished_computation: {:#?}",
-        time_finished_computation - time_finished_creation
-    );
 
     assert_eq!(result["C"].as_slice(), sum.as_slice().unwrap());
 }

@@ -35,7 +35,7 @@ git clone https://github.com/haixuanTao/wonnx.git
 cargo run --example squeeze --release
 ```
 
-## To run a model from scratch
+## Running a model from scratch
 
 - To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
 
@@ -50,7 +50,7 @@ python -m onnxsim mnist-8.onnx opt-mnist.onnx
 cargo run --example mnist --release
 ```
 
-## To use
+## Usage in rust
 
 ```rust
 fn main() -> HashMap<String, Vec<f32>> {
@@ -83,19 +83,19 @@ fn main() -> HashMap<String, Vec<f32>> {
 
 ## Contribution: On implementing a new Operator
 
-Contribution are very much welcomed even without large experience in DL, WGSL, or Rust. I hope that, this project can be a sandbox for all of us to learn more about those technologies beyond the scope of this project.
+Contribution are very much welcomed even without large experience in DL, WGSL, or Rust. I hope that, this project can be a sandbox for all of us to learn more about those technologies beyond this project initial scope.
 
 To implement an operator all you have to do is:
 1. Add a new matching pattern in `compiler.rs`
 2. Retrieve its attributes values using the `get_attribute` function:
-```
+```Rust
     let alpha = get_attribute("alpha", Some(1.0), node);
     // or without default value
     let alpha = get_attribute::<f32>("alpha", None, node);
 ```
-3. Add any variable you want to use in the WGSL shader to the context.
+3. Add any variable you want to use in the WGSL shader using `context`.
 4. Write a new WGSL template in the `templates` folder.
-> Available type are in the `structs.wgsl` but you can also generate new ones within your templates.
+> Available types are in `structs.wgsl` but you can also generate new ones within your templates.
 5. Respect the binding layout that each entry is incremented by 1 starting from 0, with input first and output last. If the number of binding is above 4. Increment the binding group.
 6. Write the logic.
 
@@ -103,6 +103,42 @@ There is default variables in the context:
 - `{{ i_len_0 }}` the length of the input 0. This also work for output: `{{ o_len_0 }}` and other input `{{ i_len_1 }}`
 - `{{ i_dims_0 }}` an array of the dimensions of input 0.
 
+7. Test it using the utils function and place it in the tests folder. The test can look as follows:
+```Rust
+#[test]
+fn test_matmul_square_matrix() {
+    // USER INPUT
+
+    let n = 16;
+    let mut input_data = HashMap::new();
+
+    let data_a = ndarray::Array2::eye(n);
+    let mut data_b = ndarray::Array2::<f32>::zeros((n, n));
+    data_b[[0, 0]] = 0.2;
+    data_b[[0, 1]] = 0.5;
+
+    let sum = data_a.dot(&data_b);
+
+    input_data.insert("A".to_string(), data_a.as_slice().unwrap());
+    input_data.insert("B".to_string(), data_b.as_slice().unwrap());
+
+    let n = n as i64;
+    let model = model(graph(
+        vec![tensor("A", &[n, n]), tensor("B", &[n, n])],
+        vec![tensor("C", &[n, n])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    let result = pollster::block_on(session.run(input_data)).unwrap();
+
+    assert_eq!(result["C"].as_slice(), sum.as_slice().unwrap());
+}
+```
 > Check out tera documentation for other templating operation: https://tera.netlify.app/docs/
 
 
