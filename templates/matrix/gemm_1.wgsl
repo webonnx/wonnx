@@ -26,18 +26,18 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
     var tmpsum = 0.0;
     var product = 0.0;
 
-    for(var k: u32 = 0u; k < {{ left_columns / 4 | int }}u; k = k + 1u) {
+    for(var k: u32 = 0u; k < {{ i_dims[0][1] / 4 | int }}u; k = k + 1u) {
 
         let index_left = k; 
-        let index_right = k * {{ right_columns * 4 }}u + gidx; 
+        let index_right = k * {{ i_dims[1][1] * 4 }}u + gidx; 
 
         let vec_left = var_{{ inputs[0] }}.data[index_left];
 
         let vec_right = vec4<f32>(
                               var_{{ inputs[1] }}.data[index_right], 
-                              var_{{ inputs[1] }}.data[index_right + {{ right_columns }}u],
-                              var_{{ inputs[1] }}.data[index_right + {{ 2 * right_columns }}u],
-                              var_{{ inputs[1] }}.data[index_right + {{ 3 * right_columns }}u],
+                              var_{{ inputs[1] }}.data[index_right + {{ i_dims[1][1] }}u],
+                              var_{{ inputs[1] }}.data[index_right + {{ 2 * i_dims[1][1] }}u],
+                              var_{{ inputs[1] }}.data[index_right + {{ 3 * i_dims[1][1] }}u],
                           );
 	
         product = dot(vec_left, vec_right);

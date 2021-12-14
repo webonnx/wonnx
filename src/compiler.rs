@@ -47,32 +47,35 @@ pub fn compile(
         .map(|output| output.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], ""))
         .collect::<Vec<_>>();
 
+    let mut input_chunks = vec![];
+    for dims in input_dims.iter() {
+        let mut chunk = vec![];
+        for i in 1..dims.len() {
+            chunk.push(dims[i..].iter().product::<i64>());
+        }
+        chunk.push(1);
+        input_chunks.push(chunk);
+    }
+
+    let mut output_chunks = vec![];
+    for dims in output_dims.iter() {
+        let mut chunk = vec![];
+        for i in 1..dims.len() {
+            chunk.push(dims[i..].iter().product::<i64>());
+        }
+        chunk.push(1);
+        output_chunks.push(chunk);
+    }
+
     let mut context = Context::new();
-    context.insert(format!("i_dims"), &output_dims);
-    context.insert(format!("o_dims"), &output_dims);
-
-    for (i, dims) in input_dims.iter().enumerate() {
-        let mut chunks = vec![];
-        for i in 1..dims.len() {
-            chunks.push(dims[i..].iter().product::<i64>());
-        }
-        chunks.push(1);
-        context.insert(format!("i_chunks_{}", i), &chunks);
-    }
-
-    for (i, dims) in output_dims.iter().enumerate() {
-        let mut chunks = vec![];
-        for i in 1..dims.len() {
-            chunks.push(dims[i..].iter().product::<i64>());
-        }
-        chunks.push(1);
-        context.insert(format!("i_chunks_{}", i), &chunks);
-    }
-
-    context.insert(format!("i_lens"), &input_lengths);
-    context.insert(format!("o_lens"), &output_lengths);
     context.insert("inputs", &inputs);
     context.insert("outputs", &outputs);
+    context.insert("i_lens", &input_lengths);
+    context.insert("o_lens", &output_lengths);
+    context.insert("i_dims", &input_dims);
+    context.insert("o_dims", &output_dims);
+    context.insert("i_chunks", &input_chunks);
+    context.insert("o_chunks", &output_chunks);
     context.insert("op_type", &node.get_op_type());
 
     let (template, x, y, z) = match node.get_op_type() {
@@ -195,16 +198,6 @@ pub fn compile(
             let input_dims = input_dims[0];
             let output_dims = output_dims[0];
 
-            context.insert(
-                "M_x_H_x_W",
-                &(output_dims[1] * output_dims[2] * output_dims[3]),
-            );
-            context.insert("H_x_W", &(output_dims[2] * output_dims[3]));
-            context.insert(
-                "original_C_x_H_x_W",
-                &(input_dims[1] * input_dims[2] * input_dims[3]),
-            );
-            context.insert("original_H_x_W", &(input_dims[2] * input_dims[3]));
             context.insert("original_width", &input_dims[3]);
             context.insert("width", &output_dims[3]);
             context.insert("original_height", &input_dims[2]);
@@ -276,19 +269,6 @@ pub fn compile(
             let input_dims = input_dims[0];
             let output_dims = output_dims[0];
 
-            context.insert("output_dims", &output_dims);
-            context.insert("input_dims", &input_dims);
-
-            context.insert(
-                "M_x_H_x_W",
-                &(output_dims[1] * output_dims[2] * output_dims[3]),
-            );
-            context.insert("H_x_W", &(output_dims[2] * output_dims[3]));
-            context.insert(
-                "original_C_x_H_x_W",
-                &(input_dims[1] * input_dims[2] * input_dims[3]),
-            );
-            context.insert("original_H_x_W", &(input_dims[2] * input_dims[3]));
             context.insert("original_width", &input_dims[3]);
             context.insert("width", &output_dims[3]);
             context.insert("original_height", &input_dims[2]);
@@ -345,11 +325,6 @@ pub fn compile(
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
-            let left_columns = &input_dims[0][1];
-            let right_columns = &input_dims[1][1];
-            context.insert("left_columns", left_columns);
-            context.insert("right_columns", right_columns);
-
             if input_dims[0][0] == 1 {
                 let threads = output_dims[0][1];
                 ("matrix/gemm_1.wgsl".to_string(), threads as _, 1, 1)
@@ -366,7 +341,7 @@ pub fn compile(
             let perms = get_attribute("perm", Some(default), node);
             let permuted_dims = perms
                 .iter()
-                .map(|p| input_dims[0][*p as usize])
+                .map(|p| output_dims[0][*p as usize])
                 .collect::<Vec<_>>();
 
             let mut chunks = vec![];
@@ -384,7 +359,10 @@ pub fn compile(
                 1,
             )
         }
-        x => panic!("Op {} is not implemented", x),
+        op => panic!(
+            "Op {} is not implemented yet! Check the README if you want to implement it 👷‍♂️👷‍♀️",
+            op
+        ),
     };
 
     let shader = tera
