@@ -82,3 +82,35 @@ fn test_two_transposes() {
 
     assert_eq!(result["Z"], data);
 }
+
+#[test]
+fn test_split() {
+    // USER INPUT
+
+    let mut input_data = HashMap::new();
+    let data = (0..2 * 6).map(|x| x as f32).collect::<Vec<f32>>();
+    input_data.insert("X".to_string(), data.as_slice());
+
+    let model = model(graph(
+        vec![tensor("X", &[2, 6])],
+        vec![tensor("Y", &[2, 3]), tensor("W", &[2, 3])],
+        vec![],
+        vec![],
+        vec![node(
+            vec!["X"],
+            vec!["Y", "W"],
+            "Split",
+            "Split",
+            vec![attribute("axis", 1)],
+        )],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
+    let result = pollster::block_on(session.run(input_data)).unwrap();
+
+    let test_y = vec![1., 2., 3., 7., 8., 9.];
+    assert_eq!(result["Y"], test_y);
+    let test_w = vec![4., 5., 6., 10., 11., 12.];
+    assert_eq!(result["W"], test_w);
+}

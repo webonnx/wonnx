@@ -209,6 +209,14 @@ impl From<f32> for onnx::AttributeProto {
     }
 }
 
+impl From<i64> for onnx::AttributeProto {
+    fn from(value: i64) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_i(value);
+        attributes
+    }
+}
+
 impl From<String> for onnx::AttributeProto {
     fn from(value: String) -> Self {
         let mut attributes = crate::onnx::AttributeProto::new();
@@ -234,6 +242,12 @@ impl From<onnx::AttributeProto> for Vec<i64> {
 impl From<onnx::AttributeProto> for f32 {
     fn from(value: onnx::AttributeProto) -> Self {
         value.get_f()
+    }
+}
+
+impl From<onnx::AttributeProto> for i64 {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_i()
     }
 }
 

@@ -62,6 +62,16 @@ lazy_static! {
         )
         .unwrap();
         tera.add_raw_template(
+            "matrix/resize.wgsl",
+            include_str!("../templates/matrix/resize.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "matrix/split.wgsl",
+            include_str!("../templates/matrix/split.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
             "matrix/transpose.wgsl",
             include_str!("../templates/matrix/transpose.wgsl"),
         )
@@ -142,39 +152,39 @@ pub fn load(
         let (current_node, optimisation_length) =
             sequence(&names, nodes, device, &initializers, &mut inner_infos);
         let (shader, x, y, z) = compile(&current_node, &dims_info, &TEMPLATES);
-        info!("shader: {}", shader);
+        println!("shader: {}", shader);
 
         // Initalialising Output
-        let output = &current_node.get_output()[0];
-        if let Some(output_dims) = dims_info.get(output) {
-            if output_info
-                .iter()
-                .any(|el| el.get_name() == output.as_str())
-            {
-                inner_infos.insert(
-                    output.clone(),
-                    resource::buffer(
-                        device,
-                        len(output_dims) as _,
-                        output.as_str(),
-                        BufferUsages::STORAGE | BufferUsages::MAP_READ,
-                    ),
-                );
+        for output in current_node.get_output().iter() {
+            if let Some(output_dims) = dims_info.get(output) {
+                if output_info
+                    .iter()
+                    .any(|el| el.get_name() == output.as_str())
+                {
+                    inner_infos.insert(
+                        output.clone(),
+                        resource::buffer(
+                            device,
+                            len(output_dims) as _,
+                            output.as_str(),
+                            BufferUsages::STORAGE | BufferUsages::MAP_READ,
+                        ),
+                    );
+                } else {
+                    inner_infos.insert(
+                        output.clone(),
+                        resource::buffer(
+                            device,
+                            len(output_dims) as _,
+                            output.as_str(),
+                            BufferUsages::STORAGE,
+                        ),
+                    );
+                }
             } else {
-                inner_infos.insert(
-                    output.clone(),
-                    resource::buffer(
-                        device,
-                        len(output_dims) as _,
-                        output.as_str(),
-                        BufferUsages::STORAGE,
-                    ),
-                );
+                panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
             }
-        } else {
-            panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
         }
-
         let mut binding_counter: u32 = 0;
         let mut entries = vec![];
 

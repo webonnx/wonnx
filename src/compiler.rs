@@ -159,7 +159,7 @@ pub fn compile(
             let mut input_cumulative_len = vec![];
             let mut sum = 0;
             for len in input_lengths.iter() {
-                sum = sum + len;
+                sum += len;
                 input_cumulative_len.push(sum);
             }
             context.insert("cum_len", &input_cumulative_len);
@@ -298,8 +298,49 @@ pub fn compile(
                 ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
             }
         }
+        "Resize" => {
+            let mut axis = get_attribute("axis", Some(0), node);
+            if axis < 0 {
+                axis = input_dims[0].len() as i64 + axis
+            }
+
+            let split_chunk = input_dims[0][axis as usize] as usize / outputs.len();
+            let default_split = (0..outputs.len()).map(|x| (x * split_chunk) as _).collect();
+
+            let split = get_attribute::<Vec<i64>>("split", Some(default_split), node);
+            context.insert("split", &split);
+
+            (
+                "matrix/resize.wgsl".to_string(),
+                ceil(output_lengths[0], 256) as u32,
+                1,
+                1,
+            )
+        }
         "Sum" => {
             unimplemented!()
+        }
+        "Split" => {
+            let mut axis = get_attribute("axis", Some(0), node);
+            if axis < 0 {
+                axis = input_dims[0].len() as i64 + axis
+            }
+            context.insert("axis", &axis);
+
+            let split_chunk = input_dims[0][axis as usize] as usize / outputs.len();
+            let default_split = (1..outputs.len() + 1)
+                .map(|x| (x * split_chunk) as _)
+                .collect();
+
+            let split = get_attribute::<Vec<i64>>("split", Some(default_split), node);
+            context.insert("split", &split);
+
+            (
+                "matrix/split.wgsl".to_string(),
+                ceil(output_lengths[0], 256) as u32,
+                1,
+                1,
+            )
         }
         "Transpose" => {
             let default = (input_lengths[0]..0).collect::<Vec<_>>();

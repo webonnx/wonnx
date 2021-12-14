@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
+use bytemuck::cast_slice;
 use protobuf::RepeatedField;
 use wgpu::{Buffer, BufferUsages, Device};
 
 use crate::{
     onnx::NodeProto,
     resource::{self, padding},
-    utils::{get_attribute, node},
+    utils::{attribute, get_attribute, node},
 };
 
 pub fn sequence(
@@ -17,11 +18,13 @@ pub fn sequence(
     inner_infos: &mut HashMap<String, Buffer>,
 ) -> (NodeProto, usize) {
     let mut optimisation_length = 1;
+    let inputs = nodes[0].get_input();
+
     let result = match names {
         ["Conv", "Exp", "Add", "Log", "Tanh", "Mul", ..] => {
             optimisation_length = 6;
             node(
-                nodes[0].get_input().iter().map(|x| x.as_str()).collect(),
+                inputs.iter().map(|x| x.as_str()).collect(),
                 nodes[6].get_output().iter().map(|x| x.as_str()).collect(),
                 &(nodes[0].get_name().to_string() + nodes[1].get_name()),
                 "ConvMish",
@@ -30,7 +33,6 @@ pub fn sequence(
         }
         ["Conv", "Relu", ..] | ["Conv", "LeakyRelu", ..] => {
             optimisation_length = 2;
-            let inputs = nodes[0].get_input();
             for input in inputs {
                 if let Some(data) = initializers.get(input) {
                     let data = if input == &inputs[1]
@@ -65,7 +67,7 @@ pub fn sequence(
             }
 
             node(
-                nodes[0].get_input().iter().map(|x| x.as_str()).collect(),
+                inputs.iter().map(|x| x.as_str()).collect(),
                 nodes[1].get_output().iter().map(|x| x.as_str()).collect(),
                 &(nodes[0].get_name().to_string() + nodes[1].get_name()),
                 "ConvRelu",
@@ -74,7 +76,8 @@ pub fn sequence(
         }
         ["Reshape", ..] | ["Clip", ..] | ["Squeeze", ..] => {
             // Remove non binding related input for those Op
-            let input = &nodes[0].get_input()[0];
+            let mut inputs = inputs.iter();
+            let input = inputs.next().unwrap();
             if let Some(data) = initializers.get(input) {
                 inner_infos.insert(
                     input.to_string(),
@@ -82,12 +85,19 @@ pub fn sequence(
                 );
             }
 
+            let mut attributes = vec![];
+            for input in inputs {
+                if input == "split" {
+                    let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
+                    attributes.push(attribute(input, value));
+                }
+            }
+
             let mut node = nodes[0].clone();
             node.set_input(RepeatedField::from(vec![input.clone()]));
             node
         }
         [..] => {
-            let inputs = nodes[0].get_input();
             for input in inputs {
                 if let Some(data) = initializers.get(input) {
                     // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
