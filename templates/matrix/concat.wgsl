@@ -22,7 +22,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
     }
 {% else %}
 	if ((gidx >= {{ cum_len | nth(n=loop.index0 -1) }}u) && (gidx < {{ cum_len | nth(n=loop.index0)}}u)) {
-	    {{ outputs[0] }}.data[gidx] = {{ input }}.data[gidx];
+	    {{ outputs[0] }}.data[gidx] = {{ input }}.data[gidx - {{ cum_len | nth(n=loop.index0 -1) }}u];
     }
 {% endif %}
 {% endfor %}

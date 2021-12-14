@@ -15,21 +15,21 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
         var rest = gidx;
         {%- for chunks in i_chunks[0] -%}
-        {%- if loop.last -%}
+        {% if loop.last %}
         let d_{{ loop.index0 }} = rest; 
-        {%- else -%}
+        {% else %}
         let d_{{ loop.index0 }} = rest / {{ chunks }}u; 
         rest = gidx % {{ chunks }}u; 
-        {%- endif -%}
+        {% endif %}
         {%- endfor -%}
 
         let index = {%- for perm in permuted_chunks -%}
-        {%- if loop.first -%}
+        {% if loop.first %}
         d_{{ loop.index0 }} * {{ perm }}u
-        {%- else -%}
+        {% else %}
         + d_{{ loop.index0 }} * {{ perm }}u
-        {%- endif -%}
-        {%- endfor -%};
+        {% endif %}
+        {%- endfor %};
 
         {{ outputs[0] }}.data[index] = {{ inputs[0] }}.data[gidx];
     }

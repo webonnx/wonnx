@@ -193,7 +193,7 @@ pub fn load(
 
         for tensor in current_node.get_output() {
             entries.push(wgpu::BindGroupEntry {
-                binding: binding_counter,
+                binding: binding_counter % 4,
                 resource: inner_infos
                     .get(tensor.as_str())
                     .unwrap_or_else(|| {
