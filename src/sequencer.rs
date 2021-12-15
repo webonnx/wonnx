@@ -119,6 +119,48 @@ pub fn sequence(
 
             node
         }
+        op @ (["Mul", ..] | ["Add", ..]) => {
+            let mut ending_input = vec![];
+            let mut attributes = vec![];
+            for input in inputs {
+                if let Some(data) = initializers.get(input) {
+                    // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
+
+                    match (data.len(), op) {
+                        (4.., _) => {
+                            inner_infos.insert(
+                                input.to_string(),
+                                resource::create_buffer_init(
+                                    device,
+                                    data,
+                                    input,
+                                    BufferUsages::STORAGE,
+                                ),
+                            );
+                            ending_input.push(input.clone());
+                        }
+                        (1, ["Mul", ..]) => {
+                            let coeff: Vec<f32> = bytemuck::cast_slice(data).to_vec();
+                            attributes.push(attribute("coefficient", coeff[0]));
+                        }
+                        (3, ["Add", ..]) => {
+                            if data == &[0, 0, 0] {
+                                attributes.push(attribute("coefficient", 0));
+                            } else {
+                                unimplemented!()
+                            }
+                        }
+                        _ => {
+                            unimplemented!()
+                        }
+                    }
+                }
+            }
+
+            let mut node = nodes[0].clone();
+            node.set_input(RepeatedField::from(ending_input));
+            node
+        }
         [..] => {
             for input in inputs {
                 if let Some(data) = initializers.get(input) {

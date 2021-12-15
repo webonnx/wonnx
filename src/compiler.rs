@@ -106,6 +106,8 @@ pub fn compile(
         // Arithmetic operation
         "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
         | "Mod" | "Mul" | "Or" | "Sub" => {
+            let coefficient = get_attribute("coefficient", Some(1.0), node);
+            context.insert("coefficient", &coefficient);
             context.insert(
                 "op_type",
                 match node.get_op_type() {
