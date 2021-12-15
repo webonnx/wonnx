@@ -126,7 +126,7 @@ pub fn compile(
             );
             (
                 "endomorphism/arithmetic.wgsl".to_string(),
-                ceil(output_lengths[0], 4) as _,
+                ceil(output_lengths[0], 1024) as _,
                 1,
                 1,
             )
@@ -377,7 +377,7 @@ pub fn compile(
         "Split" => {
             let mut axis = get_attribute("axis", Some(0), node);
             if axis < 0 {
-                axis = input_dims[0].len() as i64 + axis
+                axis += input_dims[0].len() as i64
             }
             context.insert("axis", &axis);
 
@@ -429,5 +429,11 @@ pub fn compile(
         .render(&template, &context)
         .expect("failed to render shader");
 
+    debug_assert!(
+        x < 16352,
+        "Node {} exceeds max compute by {}",
+        node.get_name(),
+        x - 16352
+    );
     (shader, x, y, z)
 }

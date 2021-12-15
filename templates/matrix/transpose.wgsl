@@ -24,11 +24,10 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         {%- endfor -%}
 
         let index = {%- for perm in permuted_chunks -%}
-        {% if loop.first %}
-        d_{{ loop.index0 }} * {{ perm }}u
-        {% else %}
-        + d_{{ loop.index0 }} * {{ perm }}u
+        {% if not loop.first %}
+        +
         {% endif %}
+        d_{{ loop.index0 }} * {{ perm }}u
         {%- endfor %};
 
         {{ outputs[0] }}.data[index] = {{ inputs[0] }}.data[gidx];

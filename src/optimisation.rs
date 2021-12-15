@@ -216,17 +216,17 @@ pub fn load(
 
         let mut bind_groups = vec![];
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
+            label: Some(current_node.get_name()),
             layout: None,
             module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: None,
+                label: Some(current_node.get_name()),
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
             }),
             entry_point: "main",
         });
         for index in 0..ceil(binding_counter.into(), 4) as usize {
             bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
+                label: Some(current_node.get_name()),
                 layout: &pipeline.get_bind_group_layout(index as u32),
                 entries: &entries[index * 4..usize::min(binding_counter as _, (index + 1) * 4)],
             }));
