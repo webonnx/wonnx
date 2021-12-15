@@ -201,6 +201,14 @@ impl From<Vec<i64>> for onnx::AttributeProto {
     }
 }
 
+impl From<Vec<f32>> for onnx::AttributeProto {
+    fn from(value: Vec<f32>) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_floats(value);
+        attributes
+    }
+}
+
 impl From<f32> for onnx::AttributeProto {
     fn from(value: f32) -> Self {
         let mut attributes = crate::onnx::AttributeProto::new();
@@ -236,6 +244,12 @@ impl From<&str> for onnx::AttributeProto {
 impl From<onnx::AttributeProto> for Vec<i64> {
     fn from(value: onnx::AttributeProto) -> Self {
         value.get_ints().to_vec()
+    }
+}
+
+impl From<onnx::AttributeProto> for Vec<f32> {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_floats().to_vec()
     }
 }
 

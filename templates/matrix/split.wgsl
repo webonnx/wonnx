@@ -11,7 +11,7 @@ var<storage, read> {{ inputs[0] }}: Array;
 var<storage, write> {{ output }}: Array;
 {% endfor %}
 
-// concat.wgsl
+// split.wgsl
 [[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
     let gidx = global_id.x;
@@ -31,11 +31,32 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 {% for output in outputs %}
 {%- if loop.first %}
     if (d_{{ axis }} < {{ split | first }}u) {
-	    {{ output }}.data[gidx] = {{ inputs[0] }}.data[gidx];
+
+        let index = {%- for chunk in o_chunks | first -%}
+        {%- if not loop.first %}
+        +
+        {%- endif -%}
+        d_{{ loop.index0 }} * {{ chunk }}u
+        {%- endfor -%};
+
+	    {{ output }}.data[index] = {{ inputs[0] }}.data[gidx];
     }
 {%- else %}
-	if ((d_{{ axis }} >= {{ split | nth(n=loop.index0 -1) }}u) && (d_{{ axis }} < {{ split | nth(n=loop.index0)}}u)) {
-	    {{ output }}.data[gidx - {{ split | nth(n=loop.index0 -1) * i_chunks[0] | nth(n=axis) }}u] = {{ inputs[0] }}.data[gidx];
+{% set split_output = split | nth(n=loop.index0 -1) %}
+	if ((d_{{ axis }} >= {{ split_output }}u) && (d_{{ axis }} < {{ split | nth(n=loop.index0)}}u)) {
+
+        let index = {%- for chunk in o_chunks | nth(n=loop.index0) -%}
+        {%- if not loop.first %}
+        +
+        {%- endif -%}
+        {%- if loop.index0 == axis %}
+        (d_{{ loop.index0 }} - {{ split_output }}u) * {{ chunk }}u
+        {% else %}
+        d_{{ loop.index0 }} * {{ chunk }}u
+        {%- endif -%}
+        {%- endfor -%};
+
+	    {{ output }}.data[index] = {{ inputs[0] }}.data[gidx];
     }
 {% endif %}
 {% endfor %}

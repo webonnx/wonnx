@@ -1,7 +1,7 @@
 // use approx::assert_relative_eq;
 use std::collections::HashMap;
 // use wasm_bindgen_test::*;
-use wonnx::utils::{attribute, graph, model, node, tensor};
+use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
 // Indicates a f32 overflow in an intermediate Collatz value
 
 #[test]
@@ -88,7 +88,7 @@ fn test_split() {
     // USER INPUT
 
     let mut input_data = HashMap::new();
-    let data = (0..2 * 6).map(|x| x as f32).collect::<Vec<f32>>();
+    let data = (1..=2 * 6).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice());
 
     let model = model(graph(
@@ -113,4 +113,62 @@ fn test_split() {
     assert_eq!(result["Y"], test_y);
     let test_w = vec![4., 5., 6., 10., 11., 12.];
     assert_eq!(result["W"], test_w);
+}
+
+#[test]
+fn test_resize() {
+    // USER INPUT
+
+    let mut input_data = HashMap::new();
+    let data = (1..=2 * 4).map(|x| x as f32).collect::<Vec<f32>>();
+    input_data.insert("X".to_string(), data.as_slice());
+
+    let downsampling_model = model(graph(
+        vec![tensor("X", &[1, 1, 2, 4])],
+        vec![tensor("Y", &[1, 1, 1, 2])],
+        vec![],
+        vec![initializer("scales", vec![1., 1., 0.6, 0.6])],
+        vec![node(
+            vec!["X", "scales"],
+            vec!["Y"],
+            "Resize",
+            "Resize",
+            vec![attribute("nearest_mode", "floor")],
+        )],
+    ));
+
+    let session = pollster::block_on(wonnx::Session::from_model(downsampling_model))
+        .expect("session did not create");
+    let result = pollster::block_on(session.run(input_data)).unwrap();
+
+    let test_y = vec![1., 3., 0., 0.];
+    assert_eq!(result["Y"], test_y);
+
+    let mut input_data = HashMap::new();
+    let data = (1..=4).map(|x| x as f32).collect::<Vec<f32>>();
+    input_data.insert("X".to_string(), data.as_slice());
+
+    let upsampling_model = model(graph(
+        vec![tensor("X", &[1, 1, 2, 2])],
+        vec![tensor("Y", &[1, 1, 4, 6])],
+        vec![],
+        vec![initializer("scales", vec![1., 1., 2., 3.])],
+        vec![node(
+            vec!["X", "scales"],
+            vec!["Y"],
+            "Resize",
+            "Resize",
+            vec![attribute("nearest_mode", "floor")],
+        )],
+    ));
+
+    let session = pollster::block_on(wonnx::Session::from_model(upsampling_model))
+        .expect("session did not create");
+    let result = pollster::block_on(session.run(input_data)).unwrap();
+
+    let test_y = vec![
+        1., 1., 1., 2., 2., 2., 1., 1., 1., 2., 2., 2., 3., 3., 3., 4., 4., 4., 3., 3., 3., 4., 4.,
+        4.,
+    ];
+    assert_eq!(result["Y"], test_y);
 }

@@ -170,12 +170,7 @@ pub fn compile(
                 1,
             )
         }
-        op @ "MaxPool"
-        | op @ "AveragePool"
-        | op @ "Conv"
-        | op @ "ConvRelu"
-        | op @ "ConvLeakyRelu"
-        | op @ "ConvMish" => {
+        op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish") => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims[0].len() == 4usize);
 
@@ -299,16 +294,75 @@ pub fn compile(
             }
         }
         "Resize" => {
-            let mut axis = get_attribute("axis", Some(0), node);
-            if axis < 0 {
-                axis = input_dims[0].len() as i64 + axis
+            let coordinate_transformation_mode = get_attribute(
+                "coordinate_transformation_mode",
+                Some("half_pixel".to_string()),
+                node,
+            );
+            context.insert(
+                "coordinate_transformation_mode",
+                &coordinate_transformation_mode,
+            );
+
+            match coordinate_transformation_mode.as_str() {
+                "half_pixel" => {}
+                "pytorch_half_pixel" => {}
+                "align_corners" => {}
+                "asymmetric" => {}
+                "tf_crop_and_resize" => {
+                    let roi = get_attribute::<Vec<i64>>("roi", None, node);
+                    let extrapolation_value = get_attribute("extrapolation_value", Some(0.0), node);
+                    context.insert("roi", &roi);
+                    context.insert("extrapolation_value", &extrapolation_value);
+                }
+                _ => {
+                    unimplemented!("This resize coordinate transformation is not implemented.")
+                }
             }
 
-            let split_chunk = input_dims[0][axis as usize] as usize / outputs.len();
-            let default_split = (0..outputs.len()).map(|x| (x * split_chunk) as _).collect();
+            let scales = get_attribute::<Vec<f32>>("scales", Some(vec![]), node);
+            let scale_prints = if scales.is_empty() {
+                let sizes = get_attribute::<Vec<i64>>("sizes", Some(vec![]), node);
+                sizes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| {
+                        let tmp = *x as f32 / input_dims[0][i] as f32;
+                        format!("{:.2}", tmp)
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                scales.iter().map(|x| format!("{:.2}", x)).collect()
+            };
 
-            let split = get_attribute::<Vec<i64>>("split", Some(default_split), node);
-            context.insert("split", &split);
+            let mode = get_attribute("mode", Some("nearest".to_string()), node);
+            context.insert("mode", &mode);
+            context.insert("scales", &scale_prints);
+
+            match mode.as_str() {
+                "nearest" => {
+                    let nearest_mode =
+                        get_attribute("nearest_mode", Some("round_prefer_floor".to_string()), node);
+                    match nearest_mode.as_str() {
+                        "floor" => {}
+                        _ => unimplemented!(),
+                    }
+                }
+                "linear" => {
+                    unimplemented!("Is not implemented yet");
+                }
+                "cubic" => {
+                    let cubic_coeff_a = get_attribute("cubic_coeff_a", Some(-0.75), node);
+                    context.insert("cubic_coeff_a", &cubic_coeff_a);
+                    unimplemented!("Is not implemented yet");
+                }
+                _ => {
+                    unimplemented!("This resize mode is not implemented.")
+                }
+            };
+
+            let exclude_outside = get_attribute("exclude_outside", Some(0), node);
+            context.insert("exclude_outside", &exclude_outside);
 
             (
                 "matrix/resize.wgsl".to_string(),
@@ -328,7 +382,7 @@ pub fn compile(
             context.insert("axis", &axis);
 
             let split_chunk = input_dims[0][axis as usize] as usize / outputs.len();
-            let default_split = (1..outputs.len() + 1)
+            let default_split = (1..=outputs.len())
                 .map(|x| (x * split_chunk) as _)
                 .collect();
 
@@ -366,7 +420,7 @@ pub fn compile(
             )
         }
         op => panic!(
-            "Op {} is not implemented yet! Check the README if you want to implement it 👷‍♂️👷‍♀️",
+            "Op {} is not implemented yet! Check the README if you want to implement it",
             op
         ),
     };

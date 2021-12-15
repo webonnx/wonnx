@@ -152,7 +152,7 @@ pub fn load(
         let (current_node, optimisation_length) =
             sequence(&names, nodes, device, &initializers, &mut inner_infos);
         let (shader, x, y, z) = compile(&current_node, &dims_info, &TEMPLATES);
-        println!("shader: {}", shader);
+        info!("shader: {}", shader);
 
         // Initalialising Output
         for output in current_node.get_output().iter() {

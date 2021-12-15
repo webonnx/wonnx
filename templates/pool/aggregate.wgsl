@@ -39,11 +39,11 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                                 {{ inputs[0] }}.data[tmp_index + {{ 2 * i_chunks[0][1] }}u],
                                 {{ inputs[0] }}.data[tmp_index + {{ 3 * i_chunks[0][1] }}u],
                         );
-{%- if op_type is matching("MaxPool") -%}
+{%- if op_type == "MaxPool" -%}
 
 			result = max(result, vector);
 
-{%- elif op_type is matching("AveragePool") -%}
+{%- elif op_type == "AveragePool" -%}
 			result = result + vector;
 {%- endif -%}
                         }
@@ -51,7 +51,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		
             
 
-{% if op_type is matching("AveragePool") -%}
+{% if op_type == "AveragePool" -%}
         result = result / {{ kernel_len }}.;
 {%- endif %}
 

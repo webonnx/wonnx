@@ -74,9 +74,12 @@ pub fn sequence(
                 attributes,
             )
         }
-        ["Reshape", ..] | ["Clip", ..] | ["Squeeze", ..] => {
+        op
+        @ (["Reshape", ..] | ["Clip", ..] | ["Squeeze", ..] | ["Split", ..] | ["Resize", ..]) => {
             // Remove non binding related input for those Op
             let mut inputs = inputs.iter();
+
+            // Remove the first input.
             let input = inputs.next().unwrap();
             if let Some(data) = initializers.get(input) {
                 inner_infos.insert(
@@ -85,16 +88,35 @@ pub fn sequence(
                 );
             }
 
-            let mut attributes = vec![];
+            let mut node = nodes[0].clone();
+            node.set_input(RepeatedField::from(vec![input.clone()]));
+            // Transform some intput into attributes for optimisation.
+            let mut attributes = node.take_attribute();
+
             for input in inputs {
-                if input == "split" {
-                    let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
-                    attributes.push(attribute(input, value));
+                match (op, input.as_str()) {
+                    (["Split", ..], "split") => {
+                        let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
+                        attributes.push(attribute(input, value));
+                    }
+                    (["Resize", ..], "roi") => {
+                        let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
+                        attributes.push(attribute(input, value));
+                    }
+                    (["Resize", ..], "scales") => {
+                        let value: Vec<f32> = cast_slice(initializers.get(input).unwrap()).to_vec();
+                        attributes.push(attribute(input, value));
+                    }
+                    (["Resize", ..], "sizes") => {
+                        let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
+                        attributes.push(attribute(input, value));
+                    }
+                    _ => (),
                 }
             }
 
-            let mut node = nodes[0].clone();
-            node.set_input(RepeatedField::from(vec![input.clone()]));
+            node.set_attribute(attributes);
+
             node
         }
         [..] => {
