@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 // Args Management
 async fn run() {
-    let result = execute_gpu().await;
+    let _result = execute_gpu().await;
     //  println!("steps: {:#?}", &result);
     // println!("steps[1..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
