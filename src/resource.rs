@@ -49,7 +49,7 @@ pub fn buffer(device: &wgpu::Device, size: u64, name: &str, usage: BufferUsages)
 pub fn resize<T: Clone + bytemuck::Pod>(mut array: Vec<T>) -> Vec<T> {
     let size = array.len();
     if size < 4 && size != 0 {
-        array.resize(size + 4 - size % 4, array[0]);
+        array.resize(size + 4 - size % 4, T::zeroed());
     }
 
     array

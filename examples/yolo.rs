@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::time::Instant;
 // Args Management
 async fn run() {
-    let steps = execute_gpu().await;
-    println!("steps: {:#?}", steps);
+    let _result = execute_gpu().await;
+    //  println!("steps: {:#?}", &result);
     // println!("steps[1..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
     // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
@@ -15,23 +15,24 @@ async fn run() {
 
 // Hardware management
 async fn execute_gpu() -> HashMap<String, Vec<f32>> {
-    let n: usize = 224;
+    let n = 416;
+    let c = 3;
     let mut input_data = HashMap::new();
 
-    let data: Vec<f32> = (0..n * n).map(|x| x as f32).collect();
-    input_data.insert("data".to_string(), data.as_slice());
+    let data: Vec<f32> = (0..n * n * c).map(|x| x as f32).collect();
+    input_data.insert("image".to_string(), data.as_slice());
 
-    let mut session = wonnx::Session::from_path("examples/data/models/vgg19-7.onnx")
+    let session = wonnx::Session::from_path("examples/data/models/opt-tinyyolov2-8.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
-    let a = wonnx::run(&mut session, input_data).await.unwrap();
+    let result = session.run(input_data).await.unwrap();
     let time_post_compute = Instant::now();
     println!(
         "time: post_compute: {:#?}",
         time_post_compute - time_pre_compute
     );
-    a
+    result
 }
 
 fn main() {

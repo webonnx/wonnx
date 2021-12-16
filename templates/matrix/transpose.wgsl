@@ -1,28 +1,35 @@
-{% include "structs.wgsl" %}
+{%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> var_{{ input[0] }}: ArrayVector;
+var<storage, read> {{ inputs[0] }}: Array;
 
 [[group(0), binding(1)]]
-var<storage, write> var_{{ output[0] }}: ArrayVector;
+var<storage, write> {{ outputs[0] }}: Array;
 
 
-[[stage(compute), workgroup_size(1)]]
+[[stage(compute), workgroup_size(256, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
-        let y = global_id.x % {{ len_1 * 4 }}u;
-        let x = global_id.x / {{ len_1 * 4 }}u;
-        let index = x * {{ len_1 * 4 }}u + y; 
-        
-        let tmp_mat = transpose(mat4x4<f32>(var_{{ input[0] }}.data[index], 
-                            var_{{ input[0] }}.data[index + {{ len_1 }}u],
-                            var_{{ input[0] }}.data[index + {{ 2 * len_1 }}u],
-                            var_{{ input[0] }}.data[index + {{ 3 * len_1 }}u],
-                        ));
+    let gidx = global_id.x;
 
-        let index = y * {{ len_0 }}u + x;
+    if (gidx < {{ i_lens[0] }}u) {
 
-        var_{{ output[0] }}.data[index] = tmp_mat[0u];
-        var_{{ output[0] }}.data[index + {{ len_0 / 4 | int }}u] = tmp_mat[1u];
-        var_{{ output[0] }}.data[index + {{ 2 * len_0 / 4 | int }}u] = tmp_mat[2u];
-        var_{{ output[0] }}.data[index + {{ 3 * len_0 / 4 | int }}u] = tmp_mat[3u];
+        var rest = gidx;
+        {%- for chunks in i_chunks[0] -%}
+        {% if loop.last %}
+        let d_{{ loop.index0 }} = rest; 
+        {% else %}
+        let d_{{ loop.index0 }} = rest / {{ chunks }}u; 
+        rest = gidx % {{ chunks }}u; 
+        {% endif %}
+        {%- endfor -%}
+
+        let index = {%- for perm in permuted_chunks -%}
+        {% if not loop.first %}
+        +
+        {% endif %}
+        d_{{ loop.index0 }} * {{ perm }}u
+        {%- endfor %};
+
+        {{ outputs[0] }}.data[index] = {{ inputs[0] }}.data[gidx];
+    }
 }

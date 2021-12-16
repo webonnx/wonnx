@@ -1,5 +1,5 @@
 use crate::{
-    compiler::format_node,
+    compiler::compile,
     resource,
     sequencer::sequence,
     utils::{ceil, dimensions_infos, initializers, len},
@@ -8,11 +8,9 @@ use crate::{
 
 use std::{borrow::Cow, collections::HashMap};
 
-use log::debug;
+use log::info;
 use tera::Tera;
 use wgpu::BufferUsages;
-
-const MAX_OPTIMIZATION_LEN: usize = 7;
 
 pub struct EncoderBuilder {
     pub pipeline: wgpu::ComputePipeline,
@@ -64,6 +62,16 @@ lazy_static! {
         )
         .unwrap();
         tera.add_raw_template(
+            "matrix/resize.wgsl",
+            include_str!("../templates/matrix/resize.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "matrix/split.wgsl",
+            include_str!("../templates/matrix/split.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
             "matrix/transpose.wgsl",
             include_str!("../templates/matrix/transpose.wgsl"),
         )
@@ -90,6 +98,16 @@ lazy_static! {
         .unwrap();
         tera.add_raw_template("structs.wgsl", include_str!("../templates/structs.wgsl"))
             .unwrap();
+        tera.add_raw_template(
+            "snippets/activation_vec.wgsl",
+            include_str!("../templates/snippets/activation_vec.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "snippets/activation_scalar.wgsl",
+            include_str!("../templates/snippets/activation_scalar.wgsl"),
+        )
+        .unwrap();
         tera
     };
 }
@@ -98,7 +116,7 @@ pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
 ) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>)> {
-    let mut initializers = initializers(graph);
+    let initializers = initializers(graph);
     let dims_info = dimensions_infos(graph);
 
     let mut inner_infos = HashMap::new();
@@ -125,60 +143,52 @@ pub fn load(
     let output_info = &graph.get_output().to_vec();
 
     while node_index < n {
-        let nodes = &base_nodes[node_index..(usize::min(node_index + MAX_OPTIMIZATION_LEN, n))];
+        let nodes = &base_nodes[node_index..];
         let names = nodes
             .iter()
             .map(|node| node.get_op_type())
-            .collect::<Vec<&str>>();
+            .collect::<Vec<_>>();
+
         let (current_node, optimisation_length) =
-            sequence(&names, nodes, device, &mut initializers, &mut inner_infos);
-        let (shader, x, y, z) = format_node(&current_node, &dims_info, &TEMPLATES);
-        debug!("shader: {}", shader);
+            sequence(&names, nodes, device, &initializers, &mut inner_infos);
+        let (shader, x, y, z) = compile(&current_node, &dims_info, &TEMPLATES);
+        info!("shader: {}", shader);
 
         // Initalialising Output
-        let output = &nodes[optimisation_length - 1].get_output()[0];
-        if let Some(output_dims) = dims_info.get(output) {
-            if output_info
-                .iter()
-                .any(|el| el.get_name() == output.as_str())
-            {
-                inner_infos.insert(
-                    output.clone(),
-                    resource::buffer(
-                        device,
-                        len(output_dims) as _,
-                        output.as_str(),
-                        BufferUsages::STORAGE | BufferUsages::MAP_READ,
-                    ),
-                );
+        for output in current_node.get_output().iter() {
+            if let Some(output_dims) = dims_info.get(output) {
+                if output_info
+                    .iter()
+                    .any(|el| el.get_name() == output.as_str())
+                {
+                    inner_infos.insert(
+                        output.clone(),
+                        resource::buffer(
+                            device,
+                            len(output_dims) as _,
+                            output.as_str(),
+                            BufferUsages::STORAGE | BufferUsages::MAP_READ,
+                        ),
+                    );
+                } else {
+                    inner_infos.insert(
+                        output.clone(),
+                        resource::buffer(
+                            device,
+                            len(output_dims) as _,
+                            output.as_str(),
+                            BufferUsages::STORAGE,
+                        ),
+                    );
+                }
             } else {
-                inner_infos.insert(
-                    output.clone(),
-                    resource::buffer(
-                        device,
-                        len(output_dims) as _,
-                        output.as_str(),
-                        BufferUsages::STORAGE,
-                    ),
-                );
+                panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
             }
-        } else {
-            panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
         }
-
         let mut binding_counter: u32 = 0;
-
-        let inputs = current_node.get_input();
-        let inputs = if ["Reshape", "Clip", "Squeeze"].contains(&current_node.get_op_type()) {
-            inputs.get(0..1).unwrap()
-        } else {
-            inputs
-        };
-
-        // Generating the shader
         let mut entries = vec![];
 
-        for tensor in inputs {
+        for tensor in current_node.get_input() {
             entries.push(wgpu::BindGroupEntry {
                 binding: binding_counter,
                 resource: inner_infos
@@ -193,7 +203,7 @@ pub fn load(
 
         for tensor in current_node.get_output() {
             entries.push(wgpu::BindGroupEntry {
-                binding: binding_counter,
+                binding: binding_counter % 4,
                 resource: inner_infos
                     .get(tensor.as_str())
                     .unwrap_or_else(|| {
@@ -206,17 +216,17 @@ pub fn load(
 
         let mut bind_groups = vec![];
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
+            label: Some(current_node.get_name()),
             layout: None,
             module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: None,
+                label: Some(current_node.get_name()),
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
             }),
             entry_point: "main",
         });
         for index in 0..ceil(binding_counter.into(), 4) as usize {
             bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
+                label: Some(current_node.get_name()),
                 layout: &pipeline.get_bind_group_layout(index as u32),
                 entries: &entries[index * 4..usize::min(binding_counter as _, (index + 1) * 4)],
             }));

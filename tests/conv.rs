@@ -51,10 +51,10 @@ fn conv_pad() {
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(session.run(input_data)).unwrap();
 
     assert_eq!(
         result["Y"],
@@ -104,11 +104,10 @@ fn conv_without_pad() {
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
-
+    let result = pollster::block_on(session.run(input_data)).unwrap();
     assert_eq!(
         result["Y"],
         [54., 63., 72., 99., 108., 117., 144., 153., 162.]
@@ -127,62 +126,41 @@ fn conv_stride() {
 
     // ONNX INPUTS
 
-    let input = tensor("X", &[1, c, 7, 5]);
-
-    let output = tensor("Y", &[1, 1, 4, 3]);
-
     let kernel_n = 3;
     let m = 1;
     let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
-    let mut initializer_w = crate::onnx::TensorProto::new();
-    initializer_w.set_name("W".to_string());
-    initializer_w.set_float_data(data_w);
-    initializer_w.set_data_type(1);
-    initializer_w.set_dims(vec![m as i64, c as i64, kernel_n as i64, kernel_n as i64]);
 
-    let mut kernel_shape = crate::onnx::AttributeProto::new();
-    kernel_shape.set_name("kernel_shape".to_string());
-    kernel_shape.set_ints(vec![kernel_n as i64, kernel_n as i64]);
-
-    let mut pads = crate::onnx::AttributeProto::new();
-    pads.set_name("pads".to_string());
-    pads.set_ints(vec![1, 1, 1, 1]);
-
-    let mut strides = crate::onnx::AttributeProto::new();
-    strides.set_name("strides".to_string());
-    strides.set_ints(vec![2, 2]);
     //    let mut auto_pad = crate::onnx::AttributeProto::new();
     //    auto_pad.set_name("auto_pad".to_string());
     //    auto_pad.set_s("SAME_UPPER".to_string().into_bytes());
 
-    let mut node = crate::onnx::NodeProto::new();
-    node.set_op_type("Conv".to_string());
-    node.set_name("conv".to_string());
-    node.set_input(protobuf::RepeatedField::from(vec![
-        "X".to_string(),
-        "W".to_string(),
-    ]));
-    node.set_output(protobuf::RepeatedField::from(vec!["Y".to_string()]));
-    node.set_attribute(protobuf::RepeatedField::from(vec![
-        kernel_shape,
-        pads,
-        strides,
-    ]));
-
-    let mut graph = wonnx::onnx::GraphProto::new();
-    graph.set_node(protobuf::RepeatedField::from(vec![node]));
-    graph.set_input(protobuf::RepeatedField::from(vec![input]));
-    graph.set_output(protobuf::RepeatedField::from(vec![output]));
-    graph.set_initializer(protobuf::RepeatedField::from(vec![initializer_w]));
-    let mut model = crate::onnx::ModelProto::new();
-    model.set_graph(graph);
+    let model = model(graph(
+        vec![tensor("X", &[1, c, 7, 5])],
+        vec![tensor("Y", &[1, 1, 4, 3])],
+        vec![tensor(
+            "W",
+            &[m as i64, c as i64, kernel_n as i64, kernel_n as i64],
+        )],
+        vec![initializer("W", data_w)],
+        vec![node(
+            vec!["X", "W"],
+            vec!["Y"],
+            "conv",
+            "Conv",
+            vec![
+                attribute("strides", vec![2, 2]),
+                attribute("pads", vec![1, 1, 1, 1]),
+                attribute("kernel_shape", vec![kernel_n, kernel_n]),
+            ],
+        )],
+    ));
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(session.run(input_data)).unwrap();
 
     assert_eq!(
         result["Y"],
@@ -201,63 +179,37 @@ fn conv_asymetric_stride() {
     input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
-
-    let input = tensor("X", &[1, c, 7, 5]);
-
-    let output = tensor("Y", &[1, 1, 4, 2]);
-
     let kernel_n = 3;
     let m = 1;
     let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
-    let mut initializer_w = crate::onnx::TensorProto::new();
-    initializer_w.set_name("W".to_string());
-    initializer_w.set_float_data(data_w);
-    initializer_w.set_data_type(1);
-    initializer_w.set_dims(vec![m as i64, c as i64, kernel_n as i64, kernel_n as i64]);
 
-    let mut kernel_shape = crate::onnx::AttributeProto::new();
-    kernel_shape.set_name("kernel_shape".to_string());
-    kernel_shape.set_ints(vec![kernel_n as i64, kernel_n as i64]);
-
-    let mut pads = crate::onnx::AttributeProto::new();
-    pads.set_name("pads".to_string());
-    pads.set_ints(vec![1, 0, 1, 0]);
-
-    let mut strides = crate::onnx::AttributeProto::new();
-    strides.set_name("strides".to_string());
-    strides.set_ints(vec![2, 2]);
-    //    let mut auto_pad = crate::onnx::AttributeProto::new();
-    //    auto_pad.set_name("auto_pad".to_string());
-    //    auto_pad.set_s("SAME_UPPER".to_string().into_bytes());
-
-    let mut node = crate::onnx::NodeProto::new();
-    node.set_op_type("Conv".to_string());
-    node.set_name("conv".to_string());
-    node.set_input(protobuf::RepeatedField::from(vec![
-        "X".to_string(),
-        "W".to_string(),
-    ]));
-    node.set_output(protobuf::RepeatedField::from(vec!["Y".to_string()]));
-    node.set_attribute(protobuf::RepeatedField::from(vec![
-        kernel_shape,
-        pads,
-        strides,
-    ]));
-
-    let mut graph = wonnx::onnx::GraphProto::new();
-    graph.set_node(protobuf::RepeatedField::from(vec![node]));
-    graph.set_input(protobuf::RepeatedField::from(vec![input]));
-    graph.set_output(protobuf::RepeatedField::from(vec![output]));
-    graph.set_initializer(protobuf::RepeatedField::from(vec![initializer_w]));
-    let mut model = crate::onnx::ModelProto::new();
-    model.set_graph(graph);
+    let model = model(graph(
+        vec![tensor("X", &[1, c, 7, 5])],
+        vec![tensor("Y", &[1, 1, 4, 2])],
+        vec![tensor(
+            "W",
+            &[m as i64, c as i64, kernel_n as i64, kernel_n as i64],
+        )],
+        vec![initializer("W", data_w)],
+        vec![node(
+            vec!["X", "W"],
+            vec!["Y"],
+            "conv",
+            "Conv",
+            vec![
+                attribute("strides", vec![2, 2]),
+                attribute("pads", vec![1, 0, 1, 0]),
+                attribute("kernel_shape", vec![kernel_n, kernel_n]),
+            ],
+        )],
+    ));
 
     // LOGIC
 
-    let mut session =
+    let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(session.run(input_data)).unwrap();
 
     assert_eq!(result["Y"], [21., 33., 99., 117., 189., 207., 171., 183.]);
 }

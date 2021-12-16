@@ -11,31 +11,13 @@ fn test_relu() {
     let data = vec![-1.0f32, 1.0];
     input_data.insert("x".to_string(), data.as_slice());
 
-    let mut session = pollster::block_on(wonnx::Session::from_path(
+    let session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/single_relu.onnx",
     ))
     .expect("session did not create");
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
+    let result = pollster::block_on(session.run(input_data)).unwrap();
 
     assert_eq!(result["y"], &[0.0, 1.0, 0.0, 0.0]);
-}
-
-#[test]
-#[ignore] // TODO: Implement transpose
-fn test_two_transposes() {
-    // USER INPUT
-
-    let mut input_data = HashMap::new();
-    let data = (0..2 * 3 * 4).map(|x| x as f32).collect::<Vec<f32>>();
-    input_data.insert("X".to_string(), data.as_slice());
-
-    let mut session = pollster::block_on(wonnx::Session::from_path(
-        "examples/data/models/two_transposes.onnx",
-    ))
-    .expect("session did not create");
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap();
-
-    assert_eq!(result["Z"][0..5], [0., 1., 2., 3., 4., 5.]);
 }
 
 #[test]
@@ -43,13 +25,12 @@ fn test_mnist() {
     let image = load_image("0.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let mut session = pollster::block_on(wonnx::Session::from_path(
+    let session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/opt-mnist.onnx",
     ))
     .expect("Session did not create");
 
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()
-        ["Plus214_Output_0"]
+    let result = pollster::block_on(session.run(input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -65,8 +46,7 @@ fn test_mnist() {
     let image = load_image("3.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()
-        ["Plus214_Output_0"]
+    let result = pollster::block_on(session.run(input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -82,8 +62,7 @@ fn test_mnist() {
     let image = load_image("5.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()
-        ["Plus214_Output_0"]
+    let result = pollster::block_on(session.run(input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -99,8 +78,7 @@ fn test_mnist() {
     let image = load_image("7.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()
-        ["Plus214_Output_0"]
+    let result = pollster::block_on(session.run(input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -121,12 +99,12 @@ fn test_squeeze() {
     let image = load_squeezenet_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap());
 
-    let mut session = pollster::block_on(wonnx::Session::from_path(
+    let session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/opt-squeeze.onnx",
     ))
     .expect("session did not create");
-    let result = &pollster::block_on(wonnx::run(&mut session, input_data)).unwrap()
-        ["squeezenet0_flatten0_reshape0"];
+    let result =
+        &pollster::block_on(session.run(input_data)).unwrap()["squeezenet0_flatten0_reshape0"];
     let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
 
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());

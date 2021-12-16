@@ -81,6 +81,11 @@ pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Vec<i
         dims_info.insert(info.get_name().to_string(), dims);
     }
 
+    for info in graph_proto.get_initializer() {
+        let dims = info.get_dims().to_vec();
+        dims_info.insert(info.get_name().to_string(), dims);
+    }
+
     dims_info
 }
 
@@ -196,10 +201,26 @@ impl From<Vec<i64>> for onnx::AttributeProto {
     }
 }
 
+impl From<Vec<f32>> for onnx::AttributeProto {
+    fn from(value: Vec<f32>) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_floats(value);
+        attributes
+    }
+}
+
 impl From<f32> for onnx::AttributeProto {
     fn from(value: f32) -> Self {
         let mut attributes = crate::onnx::AttributeProto::new();
         attributes.set_f(value);
+        attributes
+    }
+}
+
+impl From<i64> for onnx::AttributeProto {
+    fn from(value: i64) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_i(value);
         attributes
     }
 }
@@ -226,9 +247,21 @@ impl From<onnx::AttributeProto> for Vec<i64> {
     }
 }
 
+impl From<onnx::AttributeProto> for Vec<f32> {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_floats().to_vec()
+    }
+}
+
 impl From<onnx::AttributeProto> for f32 {
     fn from(value: onnx::AttributeProto) -> Self {
         value.get_f()
+    }
+}
+
+impl From<onnx::AttributeProto> for i64 {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_i()
     }
 }
 
@@ -277,7 +310,7 @@ mod tests {
         let session = pollster::block_on(crate::Session::from_model(conv_model))
             .expect("Session did not create");
 
-        let result = pollster::block_on(crate::run(&session, input_data)).unwrap();
+        let result = pollster::block_on(session.run(input_data)).unwrap();
 
         assert_eq!(
             result["Y"],

@@ -44,12 +44,12 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>> {
     let image = load_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap());
 
-    let mut session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx")
+    let session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx")
         .await
         .unwrap();
     let time_pre_compute = Instant::now();
     info!("Start Compute");
-    let result = wonnx::run(&mut session, input_data.clone()).await;
+    let result = session.run(input_data.clone()).await;
     let time_post_compute = Instant::now();
     println!(
         "time: first_prediction: {:#?}",
@@ -122,7 +122,9 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
 
 fn get_imagenet_labels() -> Vec<String> {
     // Download the ImageNet class labels, matching SqueezeNet's classes.
-    let labels_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("synset.txt");
+    let labels_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/data/models")
+        .join("synset.txt");
     if !labels_path.exists() {
         let url = "https://s3.amazonaws.com/onnx-model-zoo/synset.txt";
         println!("Downloading {:?} to {:?}...", url, labels_path);
