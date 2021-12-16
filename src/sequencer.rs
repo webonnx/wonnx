@@ -37,7 +37,10 @@ pub fn sequence(
                 if let Some(data) = initializers.get(input) {
                     let data = if input == &inputs[1]
                         && get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0]) == [3, 3]
-                        && get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0]) == [1, 1, 1, 1]
+                        && (get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0])
+                            == [1, 1, 1, 1]
+                            || get_attribute("auto_pad", Some("SAME_UPPER".to_string()), &nodes[0])
+                                == "SAME_UPPER")
                         && get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
                     {
                         padding(data, 12, 4)
@@ -124,10 +127,19 @@ pub fn sequence(
             let mut attributes = vec![];
             for input in inputs {
                 if let Some(data) = initializers.get(input) {
-                    // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
-
                     match (data.len(), op) {
-                        (4.., _) => {
+                        (4, ["Mul", ..]) => {
+                            let coeff: Vec<f32> = bytemuck::cast_slice(data).to_vec();
+                            attributes.push(attribute("coefficient", coeff[0]));
+                        }
+                        (12, ["Add", ..]) => {
+                            if data == &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] {
+                                attributes.push(attribute("coefficient", 0));
+                            } else {
+                                unimplemented!()
+                            }
+                        }
+                        _ => {
                             inner_infos.insert(
                                 input.to_string(),
                                 resource::create_buffer_init(
@@ -137,23 +149,10 @@ pub fn sequence(
                                     BufferUsages::STORAGE,
                                 ),
                             );
-                            ending_input.push(input.clone());
-                        }
-                        (1, ["Mul", ..]) => {
-                            let coeff: Vec<f32> = bytemuck::cast_slice(data).to_vec();
-                            attributes.push(attribute("coefficient", coeff[0]));
-                        }
-                        (3, ["Add", ..]) => {
-                            if data == &[0, 0, 0] {
-                                attributes.push(attribute("coefficient", 0));
-                            } else {
-                                unimplemented!()
-                            }
-                        }
-                        _ => {
-                            unimplemented!()
                         }
                     }
+                } else {
+                    ending_input.push(input.clone());
                 }
             }
 

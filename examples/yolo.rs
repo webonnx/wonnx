@@ -6,7 +6,7 @@ use std::time::Instant;
 // Args Management
 async fn run() {
     let result = execute_gpu().await;
-    println!("steps: {:#?}", &result["Identity_2:0"][0..5]);
+    //  println!("steps: {:#?}", &result);
     // println!("steps[1..5]: {:#?}", &steps[0..5]);
     #[cfg(target_arch = "wasm32")]
     // log::info!("steps[0..5]: {:#?}", &steps[0..5]);
@@ -20,7 +20,7 @@ async fn execute_gpu() -> HashMap<String, Vec<f32>> {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..n * n * c).map(|x| x as f32).collect();
-    input_data.insert("input_1:0".to_string(), data.as_slice());
+    input_data.insert("image".to_string(), data.as_slice());
 
     let session = wonnx::Session::from_path("examples/data/models/opt-tinyyolov2-8.onnx")
         .await
