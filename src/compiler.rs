@@ -2,6 +2,13 @@ use crate::utils::{ceil, get_attribute};
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
+// Escaping special characters as well as adding `var_` in the beginning of the variable name to avoid collisions with wgsl syntax.
+// FIXME: this has the potential to cause collisions (i.e. "a/b" and "a.b" will both translate to "ab" and hence cannot be used simultaneously)
+fn to_wgsl_variable_name(input_or_output_name: &str) -> String {
+    String::from("var_")
+        + &input_or_output_name.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "")
+}
+
 pub fn compile(
     node: &crate::onnx::NodeProto,
     dims_infos: &HashMap<String, Vec<i64>>,
@@ -37,23 +44,15 @@ pub fn compile(
         .map(|dims| dims.iter().product())
         .collect::<Vec<i64>>();
 
-    // Escaping special characters as well as adding `var_`
-    // in the beginning of the variable name to avoid collisions
-    // with wgsl syntax.
+    // Generate variable names from the input names (which may contain special characters we don't want)
     inputs = inputs
         .iter()
-        .map(|input| {
-            let input = input.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "");
-            String::from("var_") + &input
-        })
+        .map(|input| to_wgsl_variable_name(input))
         .collect::<Vec<_>>();
 
     outputs = outputs
         .iter()
-        .map(|output| {
-            let output = output.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "");
-            String::from("var_") + &output
-        })
+        .map(|output| to_wgsl_variable_name(output))
         .collect::<Vec<_>>();
 
     let mut input_chunks = vec![];
