@@ -9,11 +9,16 @@ fn to_wgsl_variable_name(input_or_output_name: &str) -> String {
         + &input_or_output_name.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "")
 }
 
+pub struct CompiledNode {
+    pub shader: String,
+    pub threads: (u32, u32, u32),
+}
+
 pub fn compile(
     node: &crate::onnx::NodeProto,
     dims_infos: &HashMap<String, Vec<i64>>,
     tera: &Tera,
-) -> (String, u32, u32, u32) {
+) -> CompiledNode {
     // Escape unwanted characters
     let mut inputs = node.get_input().to_vec();
     let mut outputs = node.get_output().to_vec();
@@ -436,5 +441,8 @@ pub fn compile(
         node.get_name(),
         x - 16352
     );
-    (shader, x, y, z)
+    CompiledNode {
+        shader,
+        threads: (x, y, z),
+    }
 }
