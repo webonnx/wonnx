@@ -16,7 +16,7 @@ pub fn compile(
         .map(|input| {
             dims_infos
                 .get(input.as_str())
-                .unwrap_or_else(|| panic!("{} not found", input))
+                .unwrap_or_else(|| panic!("Dimensions information not found for input '{}' of node '{}'. You may want to run onnx-simplifier on the model first.", input, node.get_name()))
         })
         .collect::<Vec<_>>();
     let output_dims = outputs
@@ -24,7 +24,7 @@ pub fn compile(
         .map(|output| {
             dims_infos
                 .get(output.as_str())
-                .unwrap_or_else(|| panic!("{} not found", output))
+                .unwrap_or_else(|| panic!("Dimensions information not found for output '{}' of mode '{}'. You may want to run onnx-simplifier on the model first.", output, node.get_name()))
         })
         .collect::<Vec<_>>();
     let input_lengths = input_dims
