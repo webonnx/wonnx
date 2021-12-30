@@ -101,12 +101,13 @@ pub fn compile(
             1,
         ),
         // Copy data
-        "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Softmax" => (
+        "Reshape" | "Dropout" | "Flatten" | "Squeeze" => (
             "endomorphism/copy.wgsl".to_string(),
             ceil(output_lengths[0], 16) as _,
             1,
             1,
         ),
+        "Softmax" => ("endomorphism/softmax.wgsl".to_string(), 1, 1, 1),
         // Arithmetic operation
         "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
         | "Mod" | "Mul" | "Or" | "Sub" => {
