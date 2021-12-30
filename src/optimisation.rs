@@ -42,6 +42,11 @@ lazy_static! {
         )
         .unwrap();
         tera.add_raw_template(
+            "endomorphism/softmax.wgsl",
+            include_str!("../templates/endomorphism/softmax.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
             "endomorphism/map.wgsl",
             include_str!("../templates/endomorphism/map.wgsl"),
         )
