@@ -1,11 +1,20 @@
 use crate::onnx;
+use crate::onnx::ValueInfoProto;
 use std::collections::HashMap;
 use std::convert::From;
 use std::convert::Into;
 use std::str::from_utf8;
 
+/* Minimum size of a buffer you can create with wgpu. Creating buffers smaller than this leads to panic "Validation
+* error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
+const MINIMUM_BUFFER_SIZE: i64 = 64;
+
 pub fn len(dims: &[i64]) -> i64 {
     dims.iter().product::<i64>()
+}
+
+pub fn buffer_len(dims: &[i64]) -> i64 {
+    len(dims).max(MINIMUM_BUFFER_SIZE)
 }
 
 pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
@@ -42,42 +51,33 @@ pub fn rename_attribute(
     attr
 }
 
+impl ValueInfoProto {
+    pub fn get_shape(&self) -> Vec<i64> {
+        self.get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>()
+    }
+}
+
 pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Vec<i64>> {
     let mut dims_info = HashMap::new();
 
     for info in graph_proto.get_input() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
+        let dims = info.get_shape();
         dims_info.insert(info.get_name().to_string(), dims);
     }
 
     for info in graph_proto.get_output() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
+        let dims = info.get_shape();
         dims_info.insert(info.get_name().to_string(), dims);
     }
 
     for info in graph_proto.get_value_info() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
+        let dims = info.get_shape();
         dims_info.insert(info.get_name().to_string(), dims);
     }
 

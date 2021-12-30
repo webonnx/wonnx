@@ -141,7 +141,7 @@ fn test_resize() {
         .expect("session did not create");
     let result = pollster::block_on(session.run(input_data)).unwrap();
 
-    let test_y = vec![1., 3., 0., 0.];
+    let test_y = vec![1., 3.];
     assert_eq!(result["Y"], test_y);
 
     let mut input_data = HashMap::new();
