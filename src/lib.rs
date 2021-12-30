@@ -9,9 +9,11 @@ pub mod utils;
 #[macro_use]
 extern crate lazy_static;
 
+use onnx::ValueInfoProto;
 use optimisation::EncoderBuilder;
 use protobuf::{self, Message};
 use std::collections::HashMap;
+use utils::len;
 
 use crate::resource::resize;
 // Change the alias to `Box<error::Error>`.
@@ -54,7 +56,7 @@ pub struct Session {
     pub queue: wgpu::Queue,
     pub inner_infos: HashMap<String, wgpu::Buffer>,
     pub builders: Vec<EncoderBuilder>,
-    pub outputs: Vec<String>,
+    pub outputs: Vec<ValueInfoProto>,
 }
 
 impl Session {
@@ -77,11 +79,7 @@ impl Session {
         let (inner_infos, builders) = optimisation::load(model.get_graph(), &device).unwrap();
 
         let graph = model.get_graph();
-        let outputs = graph
-            .get_output()
-            .iter()
-            .map(|info| (info.get_name().to_string()))
-            .collect();
+        let outputs = graph.get_output().to_vec();
 
         // The data is loaded after the first submit
         let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -142,8 +140,10 @@ impl Session {
         let mut results = HashMap::new();
 
         for output in outputs {
+            let output_name = output.get_name();
+
             // Copy the output data into the staging buffer.
-            let buffer = inner_infos.get(output.as_str()).unwrap();
+            let buffer = inner_infos.get(output_name).unwrap();
 
             let buffer_slice = buffer.slice(..);
             // TODO: Define behavior for multi output.
@@ -155,7 +155,15 @@ impl Session {
             // Gets contents of buffer
             let data = buffer_slice.get_mapped_range();
             // Since contents are got in bytes, this converts these bytes back to f32
-            results.insert(output.clone(), bytemuck::cast_slice(&data).to_vec());
+
+            // The actual buffer may be bigger than what we should return, because buffers have a minimum size in wgpu
+            // Fetch the size we should expect so we can chop the buffer to the correct size
+            let output_buffer_size = len(&output.get_shape()) as usize;
+
+            results.insert(
+                output_name.to_string(),
+                bytemuck::cast_slice(&data)[..output_buffer_size].to_vec(),
+            );
             drop(data);
             buffer.unmap();
         }

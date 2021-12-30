@@ -2,7 +2,7 @@ use crate::{
     compiler::compile,
     resource,
     sequencer::sequence,
-    utils::{ceil, dimensions_infos, initializers, len},
+    utils::{buffer_len, ceil, dimensions_infos, initializers},
     Result,
 };
 
@@ -126,7 +126,7 @@ pub fn load(
             input_name.clone(),
             resource::buffer(
                 device,
-                len(input_dims) as _,
+                buffer_len(input_dims) as _,
                 input_name,
                 BufferUsages::STORAGE | BufferUsages::COPY_DST,
             ),
@@ -165,7 +165,7 @@ pub fn load(
                         output.clone(),
                         resource::buffer(
                             device,
-                            len(output_dims) as _,
+                            buffer_len(output_dims) as _,
                             output.as_str(),
                             BufferUsages::STORAGE | BufferUsages::MAP_READ,
                         ),
@@ -175,7 +175,7 @@ pub fn load(
                         output.clone(),
                         resource::buffer(
                             device,
-                            len(output_dims) as _,
+                            buffer_len(output_dims) as _,
                             output.as_str(),
                             BufferUsages::STORAGE,
                         ),
