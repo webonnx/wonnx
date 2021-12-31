@@ -15,6 +15,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	{% if op_type == "Softmax" %}
 
 	var max_element: f32 = -9999999.9;
+	// WGSL doesn't have a way to write -Infinity (https://github.com/gpuweb/gpuweb/issues/1769)
+	// Therefore we use log(0.0) instead which returns -Infinity
+	var max_element: f32 = log(0.0);
 	for(var k: u32 = 0u; k < {{ i_lens[0] }}u; k = k + 1u) {
 		let element = {{ inputs[0] }}.data[gidx + k];
 		max_element = max(max_element, element);
