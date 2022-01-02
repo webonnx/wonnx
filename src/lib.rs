@@ -21,10 +21,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum WonnxError {
-    #[error("error compiling model")]
+    #[error("error compiling model: {0}")]
     CompileError(#[from] CompileError),
 
-    #[error("error executing the model")]
+    #[error("error executing the model: {0}")]
     SessionError(#[from] SessionError),
 }
 
@@ -70,10 +70,10 @@ pub struct Session {
 
 #[derive(Error, Debug)]
 pub enum SessionError {
-    #[error("could not deserialize model")]
+    #[error("could not deserialize model: {0}")]
     ModelDeserializationError(#[from] ProtobufError),
 
-    #[error("an error occurred reading the model file")]
+    #[error("an error occurred reading the model file: {0}")]
     ModelReadingError(#[from] std::io::Error),
 
     #[error(
@@ -86,7 +86,7 @@ pub enum SessionError {
     )]
     InvalidOutput(String),
 
-    #[error("optimization failed")]
+    #[error("optimization failed: {0}")]
     OptimizationFailed(#[from] OptimizationError),
 }
 

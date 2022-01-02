@@ -13,7 +13,7 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub enum SequenceError {
-    #[error("a required attribute was not found")]
+    #[error("a required attribute was not found: {0}")]
     AttributeNotFound(#[from] AttributeNotFoundError),
 
     #[error("{0} is not implemented yet")]

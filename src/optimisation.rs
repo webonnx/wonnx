@@ -122,7 +122,7 @@ const MAX_BINDINGS_PER_GROUP: usize = 4;
 
 #[derive(Error, Debug)]
 pub enum OptimizationError {
-    #[error("compilation failed")]
+    #[error("compilation failed: {0}")]
     CompilationFailed(#[from] CompileError),
 
     #[error("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")]
@@ -131,7 +131,7 @@ pub enum OptimizationError {
     #[error("tensor metadata missing: '{0}'")]
     TensorMetadataMissing(String),
 
-    #[error("sequencing failed")]
+    #[error("sequencing failed: {0}")]
     SequencingFailed(#[from] SequenceError),
 }
 
