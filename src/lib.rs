@@ -10,7 +10,7 @@ extern crate lazy_static;
 
 use compiler::CompileError;
 use onnx::ValueInfoProto;
-use optimisation::EncoderBuilder;
+use optimisation::{EncoderBuilder, OptimizationError};
 use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::result::Result;
@@ -80,6 +80,14 @@ pub enum SessionError {
         "invalid input name '{0}'; inspect the file with e.g. Netron to find the correct name"
     )]
     InvalidInput(String),
+
+    #[error(
+        "invalid output name '{0}'; inspect the file with e.g. Netron to find the correct name"
+    )]
+    InvalidOutput(String),
+
+    #[error("optimization failed")]
+    OptimizationFailed(#[from] OptimizationError),
 }
 
 impl Session {
@@ -96,7 +104,7 @@ impl Session {
 
         let (device, queue) = promise.await;
 
-        let (inner_infos, builders) = optimisation::load(model.get_graph(), &device).unwrap();
+        let (inner_infos, builders) = optimisation::load(model.get_graph(), &device)?;
 
         let graph = model.get_graph();
         let outputs = graph.get_output().to_vec();
@@ -163,7 +171,9 @@ impl Session {
             let output_name = output.get_name();
 
             // Copy the output data into the staging buffer.
-            let buffer = inner_infos.get(output_name).unwrap();
+            let buffer = inner_infos
+                .get(output_name)
+                .ok_or_else(|| SessionError::InvalidOutput(output_name.to_string()))?;
 
             let buffer_slice = buffer.slice(..);
             // TODO: Define behavior for multi output.
