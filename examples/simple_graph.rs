@@ -1,19 +1,21 @@
 use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 // Indicates a f32 overflow in an intermediate Collatz value
-use std::error;
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
-type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
+use wonnx::{
+    utils::{attribute, graph, initializer, model, node, tensor},
+    SessionError, WonnxError,
+};
 
-async fn run() {
-    let result = &execute_gpu().await.unwrap();
+async fn run() -> Result<(), WonnxError> {
+    let result = &execute_gpu().await?;
     let (_, result) = result.iter().next().unwrap();
 
     assert_eq!(result, &[54., 63., 72., 99., 108., 117., 144., 153., 162.]);
+    Ok(())
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>> {
+async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, SessionError> {
     // USER INPUT
     let n = 5;
     let c = 1;
@@ -55,7 +57,7 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {
         env_logger::init();
-        pollster::block_on(run());
+        pollster::block_on(run()).unwrap();
     }
     #[cfg(target_arch = "wasm32")]
     {

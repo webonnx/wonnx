@@ -1,6 +1,7 @@
-use crate::utils::{ceil, get_attribute};
+use crate::utils::{ceil, get_attribute, AttributeNotFoundError};
 use std::collections::HashMap;
 use tera::{Context, Tera};
+use thiserror::Error;
 
 // Escaping special characters as well as adding `var_` in the beginning of the variable name to avoid collisions with wgsl syntax.
 // FIXME: this has the potential to cause collisions (i.e. "a/b" and "a.b" will both translate to "ab" and hence cannot be used simultaneously)
@@ -14,31 +15,52 @@ pub struct CompiledNode {
     pub threads: (u32, u32, u32),
 }
 
+#[derive(Error, Debug)]
+pub enum CompileError {
+    #[error("dimensions information missing for input/output '{0}' of node '{1}'. You may want to run onnx-simplifier on the model first.")]
+    DimensionsMissing(String, String),
+
+    #[error("attribute not found")]
+    AttributeNotFound(#[from] AttributeNotFoundError),
+
+    #[error("operation not recognized: {0}")]
+    InvalidOperation(String),
+
+    #[error("op {0} is not implemented yet! Check the README if you want to implement it")]
+    UnimplementedOp(String),
+}
+
 pub fn compile(
     node: &crate::onnx::NodeProto,
     dims_infos: &HashMap<String, Vec<i64>>,
     tera: &Tera,
-) -> CompiledNode {
+) -> Result<CompiledNode, CompileError> {
     // Escape unwanted characters
     let mut inputs = node.get_input().to_vec();
     let mut outputs = node.get_output().to_vec();
 
     let input_dims = inputs
         .iter()
-        .map(|input| {
-            dims_infos
-                .get(input.as_str())
-                .unwrap_or_else(|| panic!("Dimensions information not found for input '{}' of node '{}'. You may want to run onnx-simplifier on the model first.", input, node.get_name()))
+        .map(|input| match dims_infos.get(input.as_str()) {
+            Some(info) => Ok(info),
+            None => Err(CompileError::DimensionsMissing(
+                input.to_string(),
+                node.get_name().to_string(),
+            )),
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, CompileError>>()?;
+
     let output_dims = outputs
         .iter()
-        .map(|output| {
-            dims_infos
-                .get(output.as_str())
-                .unwrap_or_else(|| panic!("Dimensions information not found for output '{}' of mode '{}'. You may want to run onnx-simplifier on the model first.", output, node.get_name()))
+        .map(|output| match dims_infos.get(output.as_str()) {
+            Some(info) => Ok(info),
+            None => Err(CompileError::DimensionsMissing(
+                output.to_string(),
+                node.get_name().to_string(),
+            )),
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, CompileError>>()?;
+
     let input_lengths = input_dims
         .iter()
         .map(|dims| dims.iter().product())
@@ -111,7 +133,7 @@ pub fn compile(
         // Arithmetic operation
         "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
         | "Mod" | "Mul" | "Or" | "Sub" => {
-            let coefficient = get_attribute("coefficient", Some(1.0), node);
+            let coefficient = get_attribute("coefficient", Some(1.0), node)?;
             context.insert("coefficient", &coefficient);
             context.insert(
                 "op_type",
@@ -140,7 +162,7 @@ pub fn compile(
         }
         // Not taking into account attributes
         "BatchNormalization" => {
-            let epsilon = get_attribute("epsilon", Some(1.0), node);
+            let epsilon = get_attribute("epsilon", Some(1.0), node)?;
             context.insert("epsilon", &epsilon);
 
             todo!();
@@ -153,7 +175,7 @@ pub fn compile(
             //   )
         }
         "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu" | "LeakyRelu" => {
-            let alpha = get_attribute("alpha", Some(1.0), node);
+            let alpha = get_attribute("alpha", Some(1.0), node)?;
             context.insert("alpha", &alpha);
             (
                 "endomorphism/activation.wgsl".to_string(),
@@ -181,11 +203,11 @@ pub fn compile(
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_dims[0].len() == 4usize);
 
-            let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node);
-            let dilations = get_attribute("dilations", Some(vec![1, 1]), node);
-            let kernel_shape = get_attribute::<Vec<i64>>("kernel_shape", None, node);
-            let strides = get_attribute("strides", Some(vec![1, 1]), node);
-            let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node);
+            let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node)?;
+            let dilations = get_attribute("dilations", Some(vec![1, 1]), node)?;
+            let kernel_shape = get_attribute::<Vec<i64>>("kernel_shape", None, node)?;
+            let strides = get_attribute("strides", Some(vec![1, 1]), node)?;
+            let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node)?;
 
             let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
@@ -247,7 +269,7 @@ pub fn compile(
                 ),
                 "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish" => {
                     // Alpha is the Leaky Relu attribute
-                    let alpha = get_attribute("alpha", Some(0.01), node);
+                    let alpha = get_attribute("alpha", Some(0.01), node)?;
                     context.insert("alpha", &alpha);
 
                     // GLSL shader for convolution computation
@@ -283,12 +305,12 @@ pub fn compile(
                         )
                     }
                 }
-                _ => panic!("Invalid Opset"),
+                _ => return Err(CompileError::InvalidOperation(op.to_string())),
             }
         }
         "Gemm" | "MatMul" => {
-            let alpha = get_attribute("alpha", Some(1.0), node);
-            let beta = get_attribute("beta", Some(1.0), node);
+            let alpha = get_attribute("alpha", Some(1.0), node)?;
+            let beta = get_attribute("beta", Some(1.0), node)?;
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
@@ -305,7 +327,7 @@ pub fn compile(
                 "coordinate_transformation_mode",
                 Some("half_pixel".to_string()),
                 node,
-            );
+            )?;
             context.insert(
                 "coordinate_transformation_mode",
                 &coordinate_transformation_mode,
@@ -317,8 +339,9 @@ pub fn compile(
                 "align_corners" => {}
                 "asymmetric" => {}
                 "tf_crop_and_resize" => {
-                    let roi = get_attribute::<Vec<i64>>("roi", None, node);
-                    let extrapolation_value = get_attribute("extrapolation_value", Some(0.0), node);
+                    let roi = get_attribute::<Vec<i64>>("roi", None, node)?;
+                    let extrapolation_value =
+                        get_attribute("extrapolation_value", Some(0.0), node)?;
                     context.insert("roi", &roi);
                     context.insert("extrapolation_value", &extrapolation_value);
                 }
@@ -327,9 +350,9 @@ pub fn compile(
                 }
             }
 
-            let scales = get_attribute::<Vec<f32>>("scales", Some(vec![]), node);
+            let scales = get_attribute::<Vec<f32>>("scales", Some(vec![]), node)?;
             let scale_prints = if scales.is_empty() {
-                let sizes = get_attribute::<Vec<i64>>("sizes", Some(vec![]), node);
+                let sizes = get_attribute::<Vec<i64>>("sizes", Some(vec![]), node)?;
                 sizes
                     .iter()
                     .enumerate()
@@ -342,14 +365,17 @@ pub fn compile(
                 scales.iter().map(|x| format!("{:.2}", x)).collect()
             };
 
-            let mode = get_attribute("mode", Some("nearest".to_string()), node);
+            let mode = get_attribute("mode", Some("nearest".to_string()), node)?;
             context.insert("mode", &mode);
             context.insert("scales", &scale_prints);
 
             match mode.as_str() {
                 "nearest" => {
-                    let nearest_mode =
-                        get_attribute("nearest_mode", Some("round_prefer_floor".to_string()), node);
+                    let nearest_mode = get_attribute(
+                        "nearest_mode",
+                        Some("round_prefer_floor".to_string()),
+                        node,
+                    )?;
                     match nearest_mode.as_str() {
                         "floor" => {}
                         _ => unimplemented!(),
@@ -359,7 +385,7 @@ pub fn compile(
                     unimplemented!("Is not implemented yet");
                 }
                 "cubic" => {
-                    let cubic_coeff_a = get_attribute("cubic_coeff_a", Some(-0.75), node);
+                    let cubic_coeff_a = get_attribute("cubic_coeff_a", Some(-0.75), node)?;
                     context.insert("cubic_coeff_a", &cubic_coeff_a);
                     unimplemented!("Is not implemented yet");
                 }
@@ -368,7 +394,7 @@ pub fn compile(
                 }
             };
 
-            let exclude_outside = get_attribute("exclude_outside", Some(0), node);
+            let exclude_outside = get_attribute("exclude_outside", Some(0), node)?;
             context.insert("exclude_outside", &exclude_outside);
 
             (
@@ -382,7 +408,7 @@ pub fn compile(
             unimplemented!()
         }
         "Split" => {
-            let mut axis = get_attribute("axis", Some(0), node);
+            let mut axis = get_attribute("axis", Some(0), node)?;
             if axis < 0 {
                 axis += input_dims[0].len() as i64
             }
@@ -393,7 +419,7 @@ pub fn compile(
                 .map(|x| (x * split_chunk) as _)
                 .collect();
 
-            let split = get_attribute::<Vec<i64>>("split", Some(default_split), node);
+            let split = get_attribute::<Vec<i64>>("split", Some(default_split), node)?;
             context.insert("split", &split);
 
             (
@@ -405,7 +431,7 @@ pub fn compile(
         }
         "Transpose" => {
             let default = (input_lengths[0]..0).collect::<Vec<_>>();
-            let perms = get_attribute("perm", Some(default), node);
+            let perms = get_attribute("perm", Some(default), node)?;
             let permuted_dims = perms
                 .iter()
                 .map(|p| output_dims[0][*p as usize])
@@ -426,10 +452,7 @@ pub fn compile(
                 1,
             )
         }
-        op => panic!(
-            "Op {} is not implemented yet! Check the README if you want to implement it",
-            op
-        ),
+        op => return Err(CompileError::UnimplementedOp(op.to_string())),
     };
 
     let shader = tera
@@ -442,8 +465,8 @@ pub fn compile(
         node.get_name(),
         x - 16352
     );
-    CompiledNode {
+    Ok(CompiledNode {
         shader,
         threads: (x, y, z),
-    }
+    })
 }

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::convert::From;
 use std::convert::Into;
 use std::str::from_utf8;
+use thiserror::Error;
 
 /* Minimum size of a buffer you can create with wgpu. Creating buffers smaller than this leads to panic "Validation
 * error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
@@ -17,24 +18,30 @@ pub fn buffer_len(dims: &[i64]) -> i64 {
     len(dims).max(MINIMUM_BUFFER_SIZE)
 }
 
+#[derive(Error, Debug)]
+#[error("did not find attribute '{attribute}' for node '{node_name}'")]
+pub struct AttributeNotFoundError {
+    attribute: String,
+    node_name: String,
+}
+
 pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
     attribute: &str,
     default: Option<T>,
     node: &onnx::NodeProto,
-) -> T {
+) -> Result<T, AttributeNotFoundError> {
     match (
         node.get_attribute()
             .iter()
             .find(|attr| attr.get_name() == attribute),
         default,
     ) {
-        (Some(attr), _) => attr.clone().into(),
-        (None, Some(default_attr)) => default_attr,
-        (None, None) => panic!(
-            "Did not find attribute: {} for node: {}",
-            attribute,
-            node.get_name()
-        ),
+        (Some(attr), _) => Ok(attr.clone().into()),
+        (None, Some(default_attr)) => Ok(default_attr),
+        (None, None) => Err(AttributeNotFoundError {
+            attribute: attribute.to_string(),
+            node_name: node.get_name().to_string(),
+        }),
     }
 }
 
