@@ -28,6 +28,9 @@ pub enum CompileError {
 
     #[error("op {0} is not implemented yet! Check the README if you want to implement it")]
     UnimplementedOp(String),
+
+    #[error("the variant '{1}' is not yet implemented for op {0}")]
+    UnimplementedVariant(String, String),
 }
 
 pub fn compile(
@@ -150,7 +153,11 @@ pub fn compile(
                     "Mul" => "*",
                     "Or" => "|",
                     "Sub" => "-",
-                    _ => unimplemented!(),
+                    _ => {
+                        return Err(CompileError::UnimplementedOp(
+                            node.get_op_type().to_string(),
+                        ))
+                    }
                 },
             );
             (
@@ -165,7 +172,9 @@ pub fn compile(
             let epsilon = get_attribute("epsilon", Some(1.0), node)?;
             context.insert("epsilon", &epsilon);
 
-            todo!();
+            return Err(CompileError::UnimplementedOp(
+                node.get_op_type().to_string(),
+            ));
 
             //   (
             //       "endomorphism/batchnormalization.wgsl".to_string(),
@@ -239,7 +248,7 @@ pub fn compile(
                         slack_1_div_2,
                     ]
                 }
-                _ => unimplemented!(),
+                _ => return Err(CompileError::UnimplementedVariant(op.to_string(), auto_pad)),
             };
 
             let input_dims = input_dims[0];
@@ -346,7 +355,10 @@ pub fn compile(
                     context.insert("extrapolation_value", &extrapolation_value);
                 }
                 _ => {
-                    unimplemented!("This resize coordinate transformation is not implemented.")
+                    return Err(CompileError::UnimplementedVariant(
+                        "Resize".to_string(),
+                        coordinate_transformation_mode,
+                    ))
                 }
             }
 
@@ -378,19 +390,33 @@ pub fn compile(
                     )?;
                     match nearest_mode.as_str() {
                         "floor" => {}
-                        _ => unimplemented!(),
+                        _ => {
+                            return Err(CompileError::UnimplementedVariant(
+                                "Resize".to_string(),
+                                nearest_mode.to_string(),
+                            ))
+                        }
                     }
                 }
                 "linear" => {
-                    unimplemented!("Is not implemented yet");
+                    return Err(CompileError::UnimplementedVariant(
+                        String::from("Resize"),
+                        mode,
+                    ));
                 }
                 "cubic" => {
                     let cubic_coeff_a = get_attribute("cubic_coeff_a", Some(-0.75), node)?;
                     context.insert("cubic_coeff_a", &cubic_coeff_a);
-                    unimplemented!("Is not implemented yet");
+                    return Err(CompileError::UnimplementedVariant(
+                        String::from("Resize"),
+                        String::from("cubic"),
+                    ));
                 }
                 _ => {
-                    unimplemented!("This resize mode is not implemented.")
+                    return Err(CompileError::UnimplementedVariant(
+                        String::from("Resize"),
+                        mode,
+                    ));
                 }
             };
 
@@ -404,9 +430,7 @@ pub fn compile(
                 1,
             )
         }
-        "Sum" => {
-            unimplemented!()
-        }
+        "Sum" => return Err(CompileError::UnimplementedOp(String::from("Sum"))),
         "Split" => {
             let mut axis = get_attribute("axis", Some(0), node)?;
             if axis < 0 {

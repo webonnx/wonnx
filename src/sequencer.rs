@@ -15,6 +15,9 @@ use crate::{
 pub enum SequenceError {
     #[error("a required attribute was not found")]
     AttributeNotFound(#[from] AttributeNotFoundError),
+
+    #[error("{0} is not implemented yet")]
+    NotImplemented(String),
 }
 
 pub fn sequence(
@@ -146,7 +149,9 @@ pub fn sequence(
                             if data == &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] {
                                 attributes.push(attribute("coefficient", 0));
                             } else {
-                                unimplemented!()
+                                return Err(SequenceError::NotImplemented(String::from(
+                                    "Add with non-zero data",
+                                )));
                             }
                         }
                         _ => {
