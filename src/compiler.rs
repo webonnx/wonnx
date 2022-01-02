@@ -20,7 +20,7 @@ pub enum CompileError {
     #[error("dimensions information missing for input/output '{0}' of node '{1}'. You may want to run onnx-simplifier on the model first.")]
     DimensionsMissing(String, String),
 
-    #[error("attribute not found")]
+    #[error("attribute not found: {0}")]
     AttributeNotFound(#[from] AttributeNotFoundError),
 
     #[error("operation not recognized: {0}")]
