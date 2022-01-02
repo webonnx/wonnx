@@ -1898,6 +1898,7 @@ dependencies = [
  "pollster",
  "protobuf",
  "tera",
+ "thiserror",
  "ureq",
  "wasm-bindgen",
  "wasm-bindgen-futures",

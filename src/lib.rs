@@ -1,4 +1,3 @@
-use std::error;
 pub mod compiler;
 pub mod onnx;
 pub mod optimisation;
@@ -9,15 +8,25 @@ pub mod utils;
 #[macro_use]
 extern crate lazy_static;
 
+use compiler::CompileError;
 use onnx::ValueInfoProto;
 use optimisation::EncoderBuilder;
-use protobuf::{self, Message};
+use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
+use std::result::Result;
 use utils::len;
 
 use crate::resource::resize;
-// Change the alias to `Box<error::Error>`.
-type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum WonnxError {
+    #[error("error compiling model")]
+    CompileError(#[from] CompileError),
+
+    #[error("error executing the model")]
+    SessionError(#[from] SessionError),
+}
 
 /// Creates a new session connected to the GPU.
 ///
@@ -59,19 +68,30 @@ pub struct Session {
     pub outputs: Vec<ValueInfoProto>,
 }
 
+#[derive(Error, Debug)]
+pub enum SessionError {
+    #[error("could not deserialize model")]
+    ModelDeserializationError(#[from] ProtobufError),
+
+    #[error("an error occurred reading the model file")]
+    ModelReadingError(#[from] std::io::Error),
+
+    #[error(
+        "invalid input name '{0}'; inspect the file with e.g. Netron to find the correct name"
+    )]
+    InvalidInput(String),
+}
+
 impl Session {
     // Read an ONNX model from a path and create a session.
-    pub async fn from_path(path: &str) -> Result<Session> {
-        let model = onnx::ModelProto::parse_from_bytes(
-            &std::fs::read(path).expect("ONNX Model path not found."),
-        )
-        .expect("Could not deserialize the Model");
+    pub async fn from_path(path: &str) -> Result<Session, SessionError> {
+        let model = onnx::ModelProto::parse_from_bytes(&std::fs::read(path)?)?;
 
         Session::from_model(model).await
     }
 
     // Create a Session given an ONNX model.
-    pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
+    pub async fn from_model(model: onnx::ModelProto) -> Result<Session, SessionError> {
         let promise = resource::request_device_queue();
 
         let (device, queue) = promise.await;
@@ -98,7 +118,10 @@ impl Session {
     // It copy input data to the buffers.
     // Run the command encoder.
     // Copy the output into an exit buffer that can be deleted.
-    pub async fn run(&self, inputs: HashMap<String, &[f32]>) -> Result<HashMap<String, Vec<f32>>> {
+    pub async fn run(
+        &self,
+        inputs: HashMap<String, &[f32]>,
+    ) -> Result<HashMap<String, Vec<f32>>, SessionError> {
         let device = &self.device;
         let queue = &self.queue;
         let builders = &self.builders;
@@ -108,12 +131,9 @@ impl Session {
         // Copy input data
         for (input, data) in inputs {
             queue.write_buffer(
-                inner_infos.get(&input).unwrap_or_else(|| {
-                    panic!(
-                        "Invalid input: {}, try to use netron.app to see the correct input name",
-                        input
-                    )
-                }),
+                inner_infos
+                    .get(&input)
+                    .ok_or(SessionError::InvalidInput(input))?,
                 0,
                 bytemuck::cast_slice(&resize(data.to_vec())),
             )
