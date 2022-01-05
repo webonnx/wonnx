@@ -189,9 +189,11 @@ pub fn load(
         let mut entries = vec![];
 
         for tensor in current_node.get_input() {
+            // Bindings are numbered 0...3 (MAX_BINDINGS_PER_GROUP-1) in binding groups (starting at group 0)
+            let binding_index = (binding_counter % MAX_BINDINGS_PER_GROUP) as u32;
             entries.push(wgpu::BindGroupEntry {
-                binding: binding_counter,
                 resource: inner_infos
+                binding: binding_index,
                     .get(tensor.as_str())
                     .unwrap_or_else(|| {
                         panic!("Tensor {} is not present in the inner infos", tensor)
