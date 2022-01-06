@@ -1,5 +1,5 @@
 use crate::{
-    compiler::compile,
+    compiler::{compile, CompiledNode},
     resource,
     sequencer::sequence,
     utils::{ceil, dimensions_infos, initializers, len},
@@ -151,7 +151,7 @@ pub fn load(
 
         let (current_node, optimisation_length) =
             sequence(&names, nodes, device, &initializers, &mut inner_infos);
-        let (shader, x, y, z) = compile(&current_node, &dims_info, &TEMPLATES);
+        let CompiledNode { shader, threads } = compile(&current_node, &dims_info, &TEMPLATES);
         info!("shader: {}", shader);
 
         // Initalialising Output
@@ -234,7 +234,7 @@ pub fn load(
         builders.push(EncoderBuilder {
             pipeline,
             bind_groups,
-            threads: (x, y, z),
+            threads,
         });
 
         node_index += optimisation_length;

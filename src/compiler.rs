@@ -2,11 +2,23 @@ use crate::utils::{ceil, get_attribute};
 use std::collections::HashMap;
 use tera::{Context, Tera};
 
+// Escaping special characters as well as adding `var_` in the beginning of the variable name to avoid collisions with wgsl syntax.
+// FIXME: this has the potential to cause collisions (i.e. "a/b" and "a.b" will both translate to "ab" and hence cannot be used simultaneously)
+fn to_wgsl_variable_name(input_or_output_name: &str) -> String {
+    String::from("var_")
+        + &input_or_output_name.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "")
+}
+
+pub struct CompiledNode {
+    pub shader: String,
+    pub threads: (u32, u32, u32),
+}
+
 pub fn compile(
     node: &crate::onnx::NodeProto,
     dims_infos: &HashMap<String, Vec<i64>>,
     tera: &Tera,
-) -> (String, u32, u32, u32) {
+) -> CompiledNode {
     // Escape unwanted characters
     let mut inputs = node.get_input().to_vec();
     let mut outputs = node.get_output().to_vec();
@@ -16,7 +28,7 @@ pub fn compile(
         .map(|input| {
             dims_infos
                 .get(input.as_str())
-                .unwrap_or_else(|| panic!("{} not found", input))
+                .unwrap_or_else(|| panic!("Dimensions information not found for input '{}' of node '{}'. You may want to run onnx-simplifier on the model first.", input, node.get_name()))
         })
         .collect::<Vec<_>>();
     let output_dims = outputs
@@ -24,7 +36,7 @@ pub fn compile(
         .map(|output| {
             dims_infos
                 .get(output.as_str())
-                .unwrap_or_else(|| panic!("{} not found", output))
+                .unwrap_or_else(|| panic!("Dimensions information not found for output '{}' of mode '{}'. You may want to run onnx-simplifier on the model first.", output, node.get_name()))
         })
         .collect::<Vec<_>>();
     let input_lengths = input_dims
@@ -37,23 +49,15 @@ pub fn compile(
         .map(|dims| dims.iter().product())
         .collect::<Vec<i64>>();
 
-    // Escaping special characters as well as adding `var_`
-    // in the beginning of the variable name to avoid collisions
-    // with wgsl syntax.
+    // Generate variable names from the input names (which may contain special characters we don't want)
     inputs = inputs
         .iter()
-        .map(|input| {
-            let input = input.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "");
-            String::from("var_") + &input
-        })
+        .map(|input| to_wgsl_variable_name(input))
         .collect::<Vec<_>>();
 
     outputs = outputs
         .iter()
-        .map(|output| {
-            let output = output.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "");
-            String::from("var_") + &output
-        })
+        .map(|output| to_wgsl_variable_name(output))
         .collect::<Vec<_>>();
 
     let mut input_chunks = vec![];
@@ -437,5 +441,8 @@ pub fn compile(
         node.get_name(),
         x - 16352
     );
-    (shader, x, y, z)
+    CompiledNode {
+        shader,
+        threads: (x, y, z),
+    }
 }
