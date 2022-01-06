@@ -151,7 +151,7 @@ pub fn compile(
             //       1,
             //   )
         }
-        "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu" => {
+        "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu" | "LeakyRelu" => {
             let alpha = get_attribute("alpha", Some(1.0), node);
             context.insert("alpha", &alpha);
             (
