@@ -29,8 +29,18 @@ pub enum CompileError {
     #[error("op {0} is not implemented yet! Check the README if you want to implement it")]
     UnimplementedOp(String),
 
-    #[error("the variant '{1}' is not yet implemented for op {0}")]
-    UnimplementedVariant(String, String),
+    #[error("'{variant}' is not yet implemented for op {op}")]
+    UnimplementedVariant { variant: String, op: String },
+
+    #[error("the opset version {0} is not supported")]
+    UnsupportedOpsetVersion(i64),
+
+    #[error("the value '{attribute}' is invalid for attribute '{value}' (opset version {opset_version})")]
+    InvalidAttributeValue {
+        attribute: String,
+        value: String,
+        opset_version: i64,
+    },
 }
 
 pub fn compile(
@@ -139,7 +149,7 @@ pub fn compile(
                 1..=10 => 1,   // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-1
                 11..=12 => 1, // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-11
                 13..=15 => -1, // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-13
-                _ => panic!("unknown opset version: {}", opset_version),
+                _ => return Err(CompileError::UnsupportedOpsetVersion(opset_version)),
             };
 
             /* Describes the axis of the inputs when coerced to 2D; defaults to one because the 0th axis most likely
@@ -150,16 +160,28 @@ pub fn compile(
                 if opset_version >= 13 {
                     axis += input_dims.len() as i64;
                 } else {
-                    panic!("invalid axis index {}", axis);
+                    return Err(CompileError::InvalidAttributeValue {
+                        attribute: "axis".to_string(),
+                        value: format!("{}", axis),
+                        opset_version,
+                    });
                 }
             }
 
             if axis >= (input_dims.len() as i64) {
-                panic!("invalid axis index {}", axis);
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "axis".to_string(),
+                    value: format!("{}", axis),
+                    opset_version,
+                });
             }
 
             if axis != 1 {
-                unimplemented!("Softmax is only implemented for [1,n] input tensors and on axis 1");
+                return Err(CompileError::UnimplementedVariant {
+                    variant: "softmax on an axis other than the second with [1,n] inputs"
+                        .to_string(),
+                    op: "Softmax".to_string(),
+                });
             }
 
             ("endomorphism/softmax.wgsl".to_string(), 1, 1, 1)
@@ -279,7 +301,12 @@ pub fn compile(
                         slack_1_div_2,
                     ]
                 }
-                _ => return Err(CompileError::UnimplementedVariant(op.to_string(), auto_pad)),
+                _ => {
+                    return Err(CompileError::UnimplementedVariant {
+                        op: op.to_string(),
+                        variant: format!("auto_pad={}", auto_pad),
+                    })
+                }
             };
 
             let input_dims = input_dims[0];
@@ -386,10 +413,13 @@ pub fn compile(
                     context.insert("extrapolation_value", &extrapolation_value);
                 }
                 _ => {
-                    return Err(CompileError::UnimplementedVariant(
-                        "Resize".to_string(),
-                        coordinate_transformation_mode,
-                    ))
+                    return Err(CompileError::UnimplementedVariant {
+                        op: "Resize".to_string(),
+                        variant: format!(
+                            "coordinate_transformation_mode={}",
+                            coordinate_transformation_mode
+                        ),
+                    })
                 }
             }
 
@@ -422,32 +452,27 @@ pub fn compile(
                     match nearest_mode.as_str() {
                         "floor" => {}
                         _ => {
-                            return Err(CompileError::UnimplementedVariant(
-                                "Resize".to_string(),
-                                nearest_mode.to_string(),
-                            ))
+                            return Err(CompileError::UnimplementedVariant {
+                                op: "Resize".to_string(),
+                                variant: format!("nearest_mode={}", nearest_mode.to_string()),
+                            })
                         }
                     }
-                }
-                "linear" => {
-                    return Err(CompileError::UnimplementedVariant(
-                        String::from("Resize"),
-                        mode,
-                    ));
                 }
                 "cubic" => {
                     let cubic_coeff_a = get_attribute("cubic_coeff_a", Some(-0.75), node)?;
                     context.insert("cubic_coeff_a", &cubic_coeff_a);
-                    return Err(CompileError::UnimplementedVariant(
-                        String::from("Resize"),
-                        String::from("cubic"),
-                    ));
+                    return Err(CompileError::UnimplementedVariant {
+                        op: String::from("Resize"),
+                        variant: format!("mode={}", mode),
+                    });
                 }
+                /* "linear" | */
                 _ => {
-                    return Err(CompileError::UnimplementedVariant(
-                        String::from("Resize"),
-                        mode,
-                    ));
+                    return Err(CompileError::UnimplementedVariant {
+                        op: String::from("Resize"),
+                        variant: format!("mode={}", mode),
+                    });
                 }
             };
 
