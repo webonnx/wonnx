@@ -1,4 +1,7 @@
+use protobuf::RepeatedField;
+
 use crate::onnx;
+use crate::onnx::OperatorSetIdProto;
 use std::collections::HashMap;
 use std::convert::From;
 use std::convert::Into;
@@ -189,6 +192,10 @@ pub fn graph(
 
 pub fn model(graph: onnx::GraphProto) -> onnx::ModelProto {
     let mut model = crate::onnx::ModelProto::new();
+    let mut onnx_opset_import = OperatorSetIdProto::new();
+    onnx_opset_import.set_domain("".to_string());
+    onnx_opset_import.set_version(13);
+    model.set_opset_import(RepeatedField::from_slice(&[onnx_opset_import]));
     model.set_graph(graph);
     model
 }

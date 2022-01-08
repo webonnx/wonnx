@@ -52,7 +52,7 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub inner_infos: HashMap<String, wgpu::Buffer>,
+    pub buffers: HashMap<String, wgpu::Buffer>,
     pub builders: Vec<EncoderBuilder>,
     pub outputs: Vec<String>,
 }
@@ -71,12 +71,40 @@ impl Session {
     // Create a Session given an ONNX model.
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
         let promise = resource::request_device_queue();
-
         let (device, queue) = promise.await;
 
-        let (inner_infos, builders) = optimisation::load(model.get_graph(), &device).unwrap();
+        // Find the version of the ONNX operator set this model is using (this is useful because some operators' specifications change over time).
+        // Note, if any other op set than the ONNX operator set is referenced, we cannot run the model.
+        // See https://github.com/onnx/onnx/blob/master/docs/Versioning.md#operator-sets
+        let mut onnx_opset_version = None;
+        for opset_import in model.get_opset_import() {
+            match opset_import.get_domain() {
+                "" => {
+                    // This is a reference to the ONNX specification op set
+                    if let Some(onnx_version) = onnx_opset_version {
+                        panic!(
+                            "two onnx operator set versions specified (first is {}, second is {})",
+                            onnx_version,
+                            opset_import.get_version()
+                        );
+                    } else {
+                        onnx_opset_version = Some(opset_import.get_version());
+                    }
+                }
+                some_other_opset => {
+                    panic!(
+                        "the model references other op sets than the ONNX specified opset ({})",
+                        some_other_opset
+                    );
+                }
+            }
+        }
 
+        let onnx_opset_version =
+            onnx_opset_version.expect("no ONNX opset was referenced by the model!");
         let graph = model.get_graph();
+        let (buffers, builders) = optimisation::load(graph, &device, onnx_opset_version).unwrap();
+
         let outputs = graph
             .get_output()
             .iter()
@@ -90,7 +118,7 @@ impl Session {
         Ok(Session {
             device,
             queue,
-            inner_infos,
+            buffers,
             builders,
             outputs,
         })
@@ -104,7 +132,7 @@ impl Session {
         let device = &self.device;
         let queue = &self.queue;
         let builders = &self.builders;
-        let inner_infos = &self.inner_infos;
+        let inner_infos = &self.buffers;
         let outputs = &self.outputs;
 
         // Copy input data
