@@ -112,6 +112,8 @@ lazy_static! {
     };
 }
 
+const MAX_BINDINGS_PER_GROUP: usize = 4;
+
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
@@ -119,10 +121,10 @@ pub fn load(
     let initializers = initializers(graph);
     let dims_info = dimensions_infos(graph);
 
-    let mut inner_infos = HashMap::new();
+    let mut buffers = HashMap::new();
 
     for (input_name, input_dims) in dims_info.iter() {
-        inner_infos.insert(
+        buffers.insert(
             input_name.clone(),
             resource::buffer(
                 device,
@@ -149,19 +151,20 @@ pub fn load(
             .map(|node| node.get_op_type())
             .collect::<Vec<_>>();
 
+        // Generate the shader source code for this node
         let (current_node, optimisation_length) =
-            sequence(&names, nodes, device, &initializers, &mut inner_infos);
+            sequence(&names, nodes, device, &initializers, &mut buffers);
         let CompiledNode { shader, threads } = compile(&current_node, &dims_info, &TEMPLATES);
         info!("shader: {}", shader);
 
-        // Initalialising Output
+        // Create buffers for all outputs of this node
         for output in current_node.get_output().iter() {
             if let Some(output_dims) = dims_info.get(output) {
                 if output_info
                     .iter()
                     .any(|el| el.get_name() == output.as_str())
                 {
-                    inner_infos.insert(
+                    buffers.insert(
                         output.clone(),
                         resource::buffer(
                             device,
@@ -171,7 +174,7 @@ pub fn load(
                         ),
                     );
                 } else {
-                    inner_infos.insert(
+                    buffers.insert(
                         output.clone(),
                         resource::buffer(
                             device,
@@ -185,13 +188,17 @@ pub fn load(
                 panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
             }
         }
-        let mut binding_counter: u32 = 0;
+
+        // Find all the buffers we want to use as inputs and outputs for this node. These will be 'bound' to variables in the shader
+        let mut binding_counter: usize = 0;
         let mut entries = vec![];
 
         for tensor in current_node.get_input() {
+            // Bindings are numbered 0...3 (MAX_BINDINGS_PER_GROUP-1) in binding groups (starting at group 0)
+            let binding_index = (binding_counter % MAX_BINDINGS_PER_GROUP) as u32;
             entries.push(wgpu::BindGroupEntry {
-                binding: binding_counter,
-                resource: inner_infos
+                binding: binding_index,
+                resource: buffers
                     .get(tensor.as_str())
                     .unwrap_or_else(|| {
                         panic!("Tensor {} is not present in the inner infos", tensor)
@@ -202,9 +209,11 @@ pub fn load(
         }
 
         for tensor in current_node.get_output() {
+            // Bindings are numbered 0...3 (MAX_BINDINGS_PER_GROUP-1) in binding groups (starting at group 0)
+            let binding_index = (binding_counter % MAX_BINDINGS_PER_GROUP) as u32;
             entries.push(wgpu::BindGroupEntry {
-                binding: binding_counter % 4,
-                resource: inner_infos
+                binding: binding_index,
+                resource: buffers
                     .get(tensor.as_str())
                     .unwrap_or_else(|| {
                         panic!("Tensor {} is not present in the inner infos", tensor)
@@ -214,6 +223,7 @@ pub fn load(
             binding_counter += 1;
         }
 
+        // Compile the shader source code for this node
         let mut bind_groups = vec![];
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(current_node.get_name()),
@@ -224,13 +234,22 @@ pub fn load(
             }),
             entry_point: "main",
         });
-        for index in 0..ceil(binding_counter.into(), 4) as usize {
+
+        // Perform the binding for each group
+        let number_of_groups = ceil(binding_counter as i64, MAX_BINDINGS_PER_GROUP as i64) as usize;
+        for group_index in 0..number_of_groups {
+            let group_range = group_index * MAX_BINDINGS_PER_GROUP
+                ..usize::min(
+                    binding_counter as _,
+                    (group_index + 1) * MAX_BINDINGS_PER_GROUP,
+                );
             bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(current_node.get_name()),
-                layout: &pipeline.get_bind_group_layout(index as u32),
-                entries: &entries[index * 4..usize::min(binding_counter as _, (index + 1) * 4)],
+                layout: &pipeline.get_bind_group_layout(group_index as u32),
+                entries: &entries[group_range],
             }));
         }
+
         builders.push(EncoderBuilder {
             pipeline,
             bind_groups,
@@ -240,5 +259,5 @@ pub fn load(
         node_index += optimisation_length;
     }
 
-    Ok((inner_infos, builders))
+    Ok((buffers, builders))
 }
