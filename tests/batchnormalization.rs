@@ -19,7 +19,7 @@ fn batch_normalization() {
     let data: Vec<f32> = (0..(batches * width_height * width_height * channels))
         .map(|x| x as f32)
         .collect();
-    let dims = vec![
+    let shape = vec![
         batches as i64,
         channels as i64,
         width_height as i64,
@@ -38,8 +38,8 @@ fn batch_normalization() {
     assert_eq!(scale.len(), channels);
 
     let bn_model = model(graph(
-        vec![tensor("X", &dims)],
-        vec![tensor("Y", &dims)],
+        vec![tensor("X", &shape)],
+        vec![tensor("Y", &shape)],
         vec![
             tensor("scale", &[channels as i64]),
             tensor("B", &[channels as i64]),

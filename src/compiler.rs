@@ -1,4 +1,4 @@
-use crate::utils::{ceil, get_attribute, AttributeNotFoundError, DataType, Dims};
+use crate::utils::{ceil, get_attribute, AttributeNotFoundError, DataType, Shape};
 use std::collections::HashMap;
 use tera::{Context, Tera};
 use thiserror::Error;
@@ -42,16 +42,16 @@ pub enum CompileError {
         opset_version: i64,
     },
 
-    #[error("input {input_index} has invalid dimensions {input_dims}")]
-    InvalidInputDimensions {
+    #[error("input {input_index} has invalid shape {input_shape}")]
+    InvalidInputShape {
         input_index: usize,
-        input_dims: Dims,
+        input_shape: Shape,
     },
 }
 
 pub fn compile(
     node: &crate::onnx::NodeProto,
-    dims_infos: &HashMap<String, Dims>,
+    shape_infos: &HashMap<String, Shape>,
     tera: &Tera,
     opset_version: i64,
 ) -> Result<CompiledNode, CompileError> {
@@ -59,9 +59,9 @@ pub fn compile(
     let mut inputs = node.get_input().to_vec();
     let mut outputs = node.get_output().to_vec();
 
-    let input_dims = inputs
+    let input_shape = inputs
         .iter()
-        .map(|input| match dims_infos.get(input.as_str()) {
+        .map(|input| match shape_infos.get(input.as_str()) {
             Some(info) => Ok(info),
             None => Err(CompileError::DimensionsMissing(
                 input.to_string(),
@@ -70,9 +70,9 @@ pub fn compile(
         })
         .collect::<Result<Vec<_>, CompileError>>()?;
 
-    let output_dims = outputs
+    let output_shape = outputs
         .iter()
-        .map(|output| match dims_infos.get(output.as_str()) {
+        .map(|output| match shape_infos.get(output.as_str()) {
             Some(info) => Ok(info),
             None => Err(CompileError::DimensionsMissing(
                 output.to_string(),
@@ -81,14 +81,14 @@ pub fn compile(
         })
         .collect::<Result<Vec<_>, CompileError>>()?;
 
-    let input_lengths = input_dims
+    let input_lengths = input_shape
         .iter()
-        .map(|dims| dims.len())
+        .map(|shape| shape.len())
         .collect::<Vec<u64>>();
 
-    let output_lengths = output_dims
+    let output_lengths = output_shape
         .iter()
-        .map(|dims| dims.len())
+        .map(|shape| shape.len())
         .collect::<Vec<u64>>();
 
     // Generate variable names from the input names (which may contain special characters we don't want)
@@ -102,16 +102,16 @@ pub fn compile(
         .map(|output| to_wgsl_variable_name(output))
         .collect::<Vec<_>>();
 
-    let input_chunks: Vec<Vec<u64>> = input_dims.iter().map(|d| d.chunks()).collect();
-    let output_chunks: Vec<Vec<u64>> = output_dims.iter().map(|d| d.chunks()).collect();
+    let input_chunks: Vec<Vec<u64>> = input_shape.iter().map(|d| d.chunks()).collect();
+    let output_chunks: Vec<Vec<u64>> = output_shape.iter().map(|d| d.chunks()).collect();
 
     let mut context = Context::new();
     context.insert("inputs", &inputs);
     context.insert("outputs", &outputs);
     context.insert("i_lens", &input_lengths);
     context.insert("o_lens", &output_lengths);
-    context.insert("i_dims", &input_dims);
-    context.insert("o_dims", &output_dims);
+    context.insert("i_dims", &input_shape);
+    context.insert("o_dims", &output_shape);
     context.insert("i_chunks", &input_chunks);
     context.insert("o_chunks", &output_chunks);
     context.insert("op_type", &node.get_op_type());
@@ -148,7 +148,7 @@ pub fn compile(
             let mut axis = get_attribute("axis", Some(default_axis), node)?;
             if axis < 0 {
                 if opset_version >= 13 {
-                    axis += input_dims.len() as i64;
+                    axis += input_shape.len() as i64;
                 } else {
                     return Err(CompileError::InvalidAttributeValue {
                         attribute: "axis".to_string(),
@@ -158,7 +158,7 @@ pub fn compile(
                 }
             }
 
-            if axis >= (input_dims.len() as i64) {
+            if axis >= (input_shape.len() as i64) {
                 return Err(CompileError::InvalidAttributeValue {
                     attribute: "axis".to_string(),
                     value: format!("{}", axis),
@@ -233,12 +233,12 @@ pub fn compile(
 
             // [N,C,w,h] => [N,C,w,h] where [w,h] is normalized using stats for each [N,C]
             // N and C are optional and assumed to be one for lower-rank inputs
-            if input_dims[0].rank() <= 2 || input_dims[0].rank() > 4 {
+            if input_shape[0].rank() <= 2 || input_shape[0].rank() > 4 {
                 return Err(CompileError::UnimplementedVariant {
                     op: "BatchNormalization".to_string(),
                     variant: format!(
                         "with input {}",
-                        input_dims[0]
+                        input_shape[0]
                             .0
                             .iter()
                             .map(|x| x.to_string())
@@ -248,27 +248,27 @@ pub fn compile(
                 });
             }
 
-            let (input_batches, input_channels, input_w, input_h) = match input_dims[0].rank() {
-                2 => (1, 1, input_dims[0].dim(0), input_dims[0].dim(1)), // WxH, C=1, N=1
+            let (input_batches, input_channels, input_w, input_h) = match input_shape[0].rank() {
+                2 => (1, 1, input_shape[0].dim(0), input_shape[0].dim(1)), // WxH, C=1, N=1
                 3 => (
                     1,
-                    input_dims[0].dim(0),
-                    input_dims[0].dim(1),
-                    input_dims[0].dim(2),
+                    input_shape[0].dim(0),
+                    input_shape[0].dim(1),
+                    input_shape[0].dim(2),
                 ), // CxWxH, single batch N=1
                 4 => (
-                    input_dims[0].dim(0),
-                    input_dims[0].dim(1),
-                    input_dims[0].dim(2),
-                    input_dims[0].dim(3),
+                    input_shape[0].dim(0),
+                    input_shape[0].dim(1),
+                    input_shape[0].dim(2),
+                    input_shape[0].dim(3),
                 ), // NxCxWxH
                 _ => unreachable!(),
             };
 
             if input_batches == 0 || input_channels == 0 {
-                return Err(CompileError::InvalidInputDimensions {
+                return Err(CompileError::InvalidInputShape {
                     input_index: 0,
-                    input_dims: input_dims[0].clone(),
+                    input_shape: input_shape[0].clone(),
                 });
             }
 
@@ -327,7 +327,7 @@ pub fn compile(
         }
         op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish") => {
             // TODO: Conv only support NxCxHxW for the moment.
-            debug_assert!(input_dims[0].rank() == 4);
+            debug_assert!(input_shape[0].rank() == 4);
 
             let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node)?;
             let dilations = get_attribute("dilations", Some(vec![1, 1]), node)?;
@@ -373,21 +373,21 @@ pub fn compile(
                 }
             };
 
-            let input_dims = input_dims[0];
-            let output_dims = output_dims[0];
+            let input_shape = input_shape[0];
+            let output_shape = output_shape[0];
             assert!(kernel_shape.len() >= 2);
             assert!(kernel_shape[0] >= 0 && kernel_shape[1] >= 0);
 
-            context.insert("original_width", &input_dims.dim(3));
-            context.insert("width", &output_dims.dim(3));
-            context.insert("original_height", &input_dims.dim(2));
-            context.insert("channel", &input_dims.dim(1));
+            context.insert("original_width", &input_shape.dim(3));
+            context.insert("width", &output_shape.dim(3));
+            context.insert("original_height", &input_shape.dim(2));
+            context.insert("channel", &input_shape.dim(1));
             context.insert("stride", &strides);
             context.insert("kernel_shape", &kernel_shape);
             context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
             context.insert(
                 "kernel_channel_len",
-                &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * input_dims.dim(1)),
+                &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * input_shape.dim(1)),
             );
             context.insert("pad", &pads);
             context.insert("dilation", &dilations);
@@ -409,8 +409,8 @@ pub fn compile(
                     if (strides == [1, 1])
                         && (kernel_shape == [1, 1])
                         && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
-                        && (input_dims.dim(1) % 16 == 0)
-                        && (output_dims.dim(1) % 4 == 0)
+                        && (input_shape.dim(1) % 16 == 0)
+                        && (output_shape.dim(1) % 4 == 0)
                     {
                         (
                             "pool/conv_kernel_1.wgsl".to_string(),
@@ -421,7 +421,7 @@ pub fn compile(
                     } else if (strides == [1, 1])
                         && (kernel_shape == [3, 3])
                         && (dilations == [1, 1])
-                        && (output_dims.dim(1) % 4 == 0)
+                        && (output_shape.dim(1) % 4 == 0)
                     {
                         (
                             "pool/conv_kernel_3.wgsl".to_string(),
@@ -447,11 +447,11 @@ pub fn compile(
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
-            if input_dims[0].dim(0) == 1 {
-                let threads = output_dims[0].dim(1);
+            if input_shape[0].dim(0) == 1 {
+                let threads = output_shape[0].dim(1);
                 ("matrix/gemm_1.wgsl".to_string(), threads as _, 1, 1)
             } else {
-                let threads = input_dims[0].dim(0) * input_dims[1].dim(1) / 16;
+                let threads = input_shape[0].dim(0) * input_shape[1].dim(1) / 16;
                 ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
             }
         }
@@ -496,7 +496,7 @@ pub fn compile(
                     .iter()
                     .enumerate()
                     .map(|(i, x)| {
-                        let tmp = *x as f32 / input_dims[0].dim(i) as f32;
+                        let tmp = *x as f32 / input_shape[0].dim(i) as f32;
                         format!("{:.2}", tmp)
                     })
                     .collect::<Vec<_>>()
@@ -556,11 +556,11 @@ pub fn compile(
         "Split" => {
             let mut axis = get_attribute("axis", Some(0), node)?;
             if axis < 0 {
-                axis += input_dims[0].len() as i64
+                axis += input_shape[0].len() as i64
             }
             context.insert("axis", &axis);
 
-            let split_chunk = input_dims[0].dim(axis as usize) as usize / outputs.len();
+            let split_chunk = input_shape[0].dim(axis as usize) as usize / outputs.len();
             let default_split = (1..=outputs.len())
                 .map(|x| (x * split_chunk) as _)
                 .collect();
@@ -578,14 +578,14 @@ pub fn compile(
         "Transpose" => {
             let default = ((input_lengths[0] as i64)..0).collect::<Vec<_>>();
             let perms: Vec<i64> = get_attribute("perm", Some(default), node)?;
-            let permuted_dims = perms
+            let permuted_shapes = perms
                 .iter()
-                .map(|p| output_dims[0].dim(*p as usize))
+                .map(|p| output_shape[0].dim(*p as usize))
                 .collect::<Vec<_>>();
 
             let mut chunks = vec![];
-            for i in 1..permuted_dims.len() {
-                chunks.push(permuted_dims[i..].iter().product::<u64>());
+            for i in 1..permuted_shapes.len() {
+                chunks.push(permuted_shapes[i..].iter().product::<u64>());
             }
             chunks.push(1);
 

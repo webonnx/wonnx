@@ -12,13 +12,13 @@ fn test_cos() {
     let mut input_data = HashMap::new();
 
     let data = vec![0.0f32; n];
-    let dims = vec![n as i64];
+    let shape = vec![n as i64];
     input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
     let model = model(graph(
-        vec![tensor("X", &dims)],
-        vec![tensor("Y", &dims)],
+        vec![tensor("X", &shape)],
+        vec![tensor("Y", &shape)],
         vec![],
         vec![],
         vec![node(vec!["X"], vec!["Y"], "cos", "Cos", vec![])],

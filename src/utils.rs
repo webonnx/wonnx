@@ -17,11 +17,11 @@ const MINIMUM_BUFFER_SIZE: u64 = 64;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(transparent)]
-pub struct Dims(pub Vec<u64>);
+pub struct Shape(pub Vec<u64>);
 
-impl Dims {
-    pub fn from(ds: &[i64]) -> Dims {
-        Dims(ds.iter().map(|x| *x as u64).collect())
+impl Shape {
+    pub fn from(ds: &[i64]) -> Shape {
+        Shape(ds.iter().map(|x| *x as u64).collect())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -107,7 +107,7 @@ impl DataType {
     }
 }
 
-impl Display for Dims {
+impl Display for Shape {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -162,8 +162,8 @@ pub fn rename_attribute(
 }
 
 impl ValueInfoProto {
-    pub fn get_shape(&self) -> Dims {
-        Dims(
+    pub fn get_shape(&self) -> Shape {
+        Shape(
             self.get_field_type()
                 .get_tensor_type()
                 .get_shape()
@@ -175,30 +175,30 @@ impl ValueInfoProto {
     }
 }
 
-pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Dims> {
-    let mut dims_info = HashMap::new();
+pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Shape> {
+    let mut shapes_info = HashMap::new();
 
     for info in graph_proto.get_input() {
-        let dims = info.get_shape();
-        dims_info.insert(info.get_name().to_string(), dims);
+        let shape = info.get_shape();
+        shapes_info.insert(info.get_name().to_string(), shape);
     }
 
     for info in graph_proto.get_output() {
-        let dims = info.get_shape();
-        dims_info.insert(info.get_name().to_string(), dims);
+        let shape = info.get_shape();
+        shapes_info.insert(info.get_name().to_string(), shape);
     }
 
     for info in graph_proto.get_value_info() {
-        let dims = info.get_shape();
-        dims_info.insert(info.get_name().to_string(), dims);
+        let shape = info.get_shape();
+        shapes_info.insert(info.get_name().to_string(), shape);
     }
 
     for info in graph_proto.get_initializer() {
-        let dims = Dims::from(info.get_dims());
-        dims_info.insert(info.get_name().to_string(), dims);
+        let shape = Shape::from(info.get_dims());
+        shapes_info.insert(info.get_name().to_string(), shape);
     }
 
-    dims_info
+    shapes_info
 }
 
 pub fn initializers(graph_proto: &onnx::GraphProto) -> HashMap<String, &[u8]> {
@@ -403,12 +403,12 @@ mod tests {
         input_data.insert("X".to_string(), data.as_slice());
 
         // ONNX INPUTS
-        let dims = vec![1, c, n, n];
+        let shape = vec![1, c, n, n];
         let kernel_n = 3;
         let m = 1;
         let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
         let conv_model = model(graph(
-            vec![tensor("X", &dims)],
+            vec![tensor("X", &shape)],
             vec![tensor("Y", &[1, 1, 3, 3])],
             vec![tensor("W", &[2, c, 3, 3])],
             vec![initializer("W", data_w)],

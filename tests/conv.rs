@@ -25,7 +25,7 @@ fn conv_pad() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..50).map(|x| x as f32).collect();
-    let dims = vec![2, c as i64, n as i64, n as i64];
+    let shape = vec![2, c as i64, n as i64, n as i64];
     input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
@@ -33,7 +33,7 @@ fn conv_pad() {
     let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1.0f32).collect();
 
     let conv_model = model(graph(
-        vec![tensor("X", &dims)],
+        vec![tensor("X", &shape)],
         vec![tensor("Y", &[2, 2, n, n])],
         vec![tensor("W", &[2, c, 3, 3])],
         vec![initializer("W", data_w)],
@@ -80,7 +80,7 @@ fn conv_without_pad() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
-    let dims = vec![1, c as i64, n as i64, n as i64];
+    let shape = vec![1, c as i64, n as i64, n as i64];
     input_data.insert("X".to_string(), data.as_slice());
 
     // ONNX INPUTS
@@ -89,7 +89,7 @@ fn conv_without_pad() {
     let m = 1;
     let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
     let conv_model = model(graph(
-        vec![tensor("X", &dims)],
+        vec![tensor("X", &shape)],
         vec![tensor("Y", &[1, 1, 3, 3])],
         vec![tensor("W", &[2, c, 3, 3])],
         vec![initializer("W", data_w)],

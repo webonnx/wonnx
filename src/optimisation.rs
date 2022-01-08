@@ -125,8 +125,8 @@ pub enum OptimizationError {
     #[error("compilation failed: {0}")]
     CompilationFailed(#[from] CompileError),
 
-    #[error("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")]
-    OutputDimsMissing,
+    #[error("output shape was not provided. You can use python's onnx-simplifier to generate implied shapes.")]
+    OutputShapeMissing,
 
     #[error("tensor metadata missing: '{0}'")]
     TensorMetadataMissing(String),
@@ -141,16 +141,16 @@ pub fn load(
     opset_version: i64,
 ) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>), OptimizationError> {
     let initializers = initializers(graph);
-    let dims_info = dimensions_infos(graph);
+    let shapes_info = dimensions_infos(graph);
 
     let mut buffers = HashMap::new();
 
-    for (input_name, input_dims) in dims_info.iter() {
+    for (input_name, input_shape) in shapes_info.iter() {
         buffers.insert(
             input_name.clone(),
             resource::buffer(
                 device,
-                input_dims.buffer_len() as _,
+                input_shape.buffer_len() as _,
                 input_name,
                 BufferUsages::STORAGE | BufferUsages::COPY_DST,
             ),
@@ -177,12 +177,12 @@ pub fn load(
         let (current_node, optimisation_length) =
             sequence(&names, nodes, device, &initializers, &mut buffers)?;
         let CompiledNode { shader, threads } =
-            compile(&current_node, &dims_info, &TEMPLATES, opset_version)?;
+            compile(&current_node, &shapes_info, &TEMPLATES, opset_version)?;
         info!("shader: {}", shader);
 
         // Create buffers for all outputs of this node
         for output in current_node.get_output().iter() {
-            if let Some(output_dims) = dims_info.get(output) {
+            if let Some(output_shapes) = shapes_info.get(output) {
                 if output_info
                     .iter()
                     .any(|el| el.get_name() == output.as_str())
@@ -191,7 +191,7 @@ pub fn load(
                         output.clone(),
                         resource::buffer(
                             device,
-                            output_dims.buffer_len() as _,
+                            output_shapes.buffer_len() as _,
                             output.as_str(),
                             BufferUsages::STORAGE | BufferUsages::MAP_READ,
                         ),
@@ -201,14 +201,14 @@ pub fn load(
                         output.clone(),
                         resource::buffer(
                             device,
-                            output_dims.buffer_len() as _,
+                            output_shapes.buffer_len() as _,
                             output.as_str(),
                             BufferUsages::STORAGE,
                         ),
                     );
                 }
             } else {
-                return Err(OptimizationError::OutputDimsMissing);
+                return Err(OptimizationError::OutputShapeMissing);
             }
         }
 
