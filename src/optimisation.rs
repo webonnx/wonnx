@@ -1,8 +1,8 @@
 use crate::{
-    compiler::{compile, CompiledNode},
+    compiler::{compile, CompileError, CompiledNode},
     resource,
-    sequencer::sequence,
-    utils::{ceil, dimensions_infos, initializers, len},
+    sequencer::{sequence, SequenceError},
+    utils::{buffer_len, ceil, dimensions_infos, initializers},
     Result,
 };
 
@@ -10,6 +10,7 @@ use std::{borrow::Cow, collections::HashMap};
 
 use log::info;
 use tera::Tera;
+use thiserror::Error;
 use wgpu::BufferUsages;
 
 pub struct EncoderBuilder {
@@ -39,6 +40,11 @@ lazy_static! {
         tera.add_raw_template(
             "endomorphism/copy.wgsl",
             include_str!("../templates/endomorphism/copy.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "endomorphism/softmax.wgsl",
+            include_str!("../templates/endomorphism/softmax.wgsl"),
         )
         .unwrap();
         tera.add_raw_template(
@@ -114,10 +120,26 @@ lazy_static! {
 
 const MAX_BINDINGS_PER_GROUP: usize = 4;
 
+#[derive(Error, Debug)]
+pub enum OptimizationError {
+    #[error("compilation failed: {0}")]
+    CompilationFailed(#[from] CompileError),
+
+    #[error("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")]
+    OutputDimsMissing,
+
+    #[error("tensor metadata missing: '{0}'")]
+    TensorMetadataMissing(String),
+
+    #[error("sequencing failed: {0}")]
+    SequencingFailed(#[from] SequenceError),
+}
+
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
-) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>)> {
+    opset_version: i64,
+) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>), OptimizationError> {
     let initializers = initializers(graph);
     let dims_info = dimensions_infos(graph);
 
@@ -128,7 +150,7 @@ pub fn load(
             input_name.clone(),
             resource::buffer(
                 device,
-                len(input_dims) as _,
+                buffer_len(input_dims) as _,
                 input_name,
                 BufferUsages::STORAGE | BufferUsages::COPY_DST,
             ),
@@ -153,8 +175,9 @@ pub fn load(
 
         // Generate the shader source code for this node
         let (current_node, optimisation_length) =
-            sequence(&names, nodes, device, &initializers, &mut buffers);
-        let CompiledNode { shader, threads } = compile(&current_node, &dims_info, &TEMPLATES);
+            sequence(&names, nodes, device, &initializers, &mut buffers)?;
+        let CompiledNode { shader, threads } =
+            compile(&current_node, &dims_info, &TEMPLATES, opset_version)?;
         info!("shader: {}", shader);
 
         // Create buffers for all outputs of this node
@@ -168,7 +191,7 @@ pub fn load(
                         output.clone(),
                         resource::buffer(
                             device,
-                            len(output_dims) as _,
+                            buffer_len(output_dims) as _,
                             output.as_str(),
                             BufferUsages::STORAGE | BufferUsages::MAP_READ,
                         ),
@@ -178,14 +201,14 @@ pub fn load(
                         output.clone(),
                         resource::buffer(
                             device,
-                            len(output_dims) as _,
+                            buffer_len(output_dims) as _,
                             output.as_str(),
                             BufferUsages::STORAGE,
                         ),
                     );
                 }
             } else {
-                panic!("output dims was not provided. You can use python's onnx-simplifier to generate implied dimensions.")
+                return Err(OptimizationError::OutputDimsMissing);
             }
         }
 
@@ -200,9 +223,7 @@ pub fn load(
                 binding: binding_index,
                 resource: buffers
                     .get(tensor.as_str())
-                    .unwrap_or_else(|| {
-                        panic!("Tensor {} is not present in the inner infos", tensor)
-                    })
+                    .ok_or_else(|| OptimizationError::TensorMetadataMissing(tensor.to_string()))?
                     .as_entire_binding(),
             });
             binding_counter += 1;
@@ -215,9 +236,7 @@ pub fn load(
                 binding: binding_index,
                 resource: buffers
                     .get(tensor.as_str())
-                    .unwrap_or_else(|| {
-                        panic!("Tensor {} is not present in the inner infos", tensor)
-                    })
+                    .ok_or_else(|| OptimizationError::TensorMetadataMissing(tensor.to_string()))?
                     .as_entire_binding(),
             });
             binding_counter += 1;

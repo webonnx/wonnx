@@ -1,4 +1,3 @@
-use std::error;
 pub mod compiler;
 pub mod onnx;
 pub mod optimisation;
@@ -9,13 +8,25 @@ pub mod utils;
 #[macro_use]
 extern crate lazy_static;
 
-use optimisation::EncoderBuilder;
-use protobuf::{self, Message};
+use compiler::CompileError;
+use onnx::ValueInfoProto;
+use optimisation::{EncoderBuilder, OptimizationError};
+use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
+use std::result::Result;
+use utils::len;
 
 use crate::resource::resize;
-// Change the alias to `Box<error::Error>`.
-type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum WonnxError {
+    #[error("error compiling model: {0}")]
+    CompileError(#[from] CompileError),
+
+    #[error("error executing the model: {0}")]
+    SessionError(#[from] SessionError),
+}
 
 /// Creates a new session connected to the GPU.
 ///
@@ -52,36 +63,77 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub inner_infos: HashMap<String, wgpu::Buffer>,
+    pub buffers: HashMap<String, wgpu::Buffer>,
     pub builders: Vec<EncoderBuilder>,
-    pub outputs: Vec<String>,
+    pub outputs: Vec<ValueInfoProto>,
+}
+
+#[derive(Error, Debug)]
+pub enum SessionError {
+    #[error("could not deserialize model: {0}")]
+    ModelDeserializationError(#[from] ProtobufError),
+
+    #[error("an error occurred reading the model file: {0}")]
+    ModelReadingError(#[from] std::io::Error),
+
+    #[error(
+        "invalid input name '{0}'; inspect the file with e.g. Netron to find the correct name"
+    )]
+    InvalidInput(String),
+
+    #[error(
+        "invalid output name '{0}'; inspect the file with e.g. Netron to find the correct name"
+    )]
+    InvalidOutput(String),
+
+    #[error("optimization failed: {0}")]
+    OptimizationFailed(#[from] OptimizationError),
 }
 
 impl Session {
     // Read an ONNX model from a path and create a session.
-    pub async fn from_path(path: &str) -> Result<Session> {
-        let model = onnx::ModelProto::parse_from_bytes(
-            &std::fs::read(path).expect("ONNX Model path not found."),
-        )
-        .expect("Could not deserialize the Model");
+    pub async fn from_path(path: &str) -> Result<Session, SessionError> {
+        let model = onnx::ModelProto::parse_from_bytes(&std::fs::read(path)?)?;
 
         Session::from_model(model).await
     }
 
     // Create a Session given an ONNX model.
-    pub async fn from_model(model: onnx::ModelProto) -> Result<Session> {
+    pub async fn from_model(model: onnx::ModelProto) -> Result<Session, SessionError> {
         let promise = resource::request_device_queue();
-
         let (device, queue) = promise.await;
 
-        let (inner_infos, builders) = optimisation::load(model.get_graph(), &device).unwrap();
+        // Find the version of the ONNX operator set this model is using (this is useful because some operators' specifications change over time).
+        // Note, if any other op set than the ONNX operator set is referenced, we cannot run the model.
+        // See https://github.com/onnx/onnx/blob/master/docs/Versioning.md#operator-sets
+        let mut onnx_opset_version = None;
+        for opset_import in model.get_opset_import() {
+            match opset_import.get_domain() {
+                "" => {
+                    // This is a reference to the ONNX specification op set
+                    if let Some(onnx_version) = onnx_opset_version {
+                        panic!(
+                            "two onnx operator set versions specified (first is {}, second is {})",
+                            onnx_version,
+                            opset_import.get_version()
+                        );
+                    } else {
+                        onnx_opset_version = Some(opset_import.get_version());
+                    }
+                }
+                some_other_opset => {
+                    panic!(
+                        "the model references other op sets than the ONNX specified opset ({})",
+                        some_other_opset
+                    );
+                }
+            }
+        }
 
+        let onnx_opset_version =
+            onnx_opset_version.expect("no ONNX opset was referenced by the model!");
         let graph = model.get_graph();
-        let outputs = graph
-            .get_output()
-            .iter()
-            .map(|info| (info.get_name().to_string()))
-            .collect();
+        let (buffers, builders) = optimisation::load(graph, &device, onnx_opset_version).unwrap();
 
         // The data is loaded after the first submit
         let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -90,9 +142,9 @@ impl Session {
         Ok(Session {
             device,
             queue,
-            inner_infos,
+            buffers,
             builders,
-            outputs,
+            outputs: graph.get_output().to_vec(),
         })
     }
 
@@ -100,22 +152,22 @@ impl Session {
     // It copy input data to the buffers.
     // Run the command encoder.
     // Copy the output into an exit buffer that can be deleted.
-    pub async fn run(&self, inputs: HashMap<String, &[f32]>) -> Result<HashMap<String, Vec<f32>>> {
+    pub async fn run(
+        &self,
+        inputs: HashMap<String, &[f32]>,
+    ) -> Result<HashMap<String, Vec<f32>>, SessionError> {
         let device = &self.device;
         let queue = &self.queue;
         let builders = &self.builders;
-        let inner_infos = &self.inner_infos;
+        let inner_infos = &self.buffers;
         let outputs = &self.outputs;
 
         // Copy input data
         for (input, data) in inputs {
             queue.write_buffer(
-                inner_infos.get(&input).unwrap_or_else(|| {
-                    panic!(
-                        "Invalid input: {}, try to use netron.app to see the correct input name",
-                        input
-                    )
-                }),
+                inner_infos
+                    .get(&input)
+                    .ok_or(SessionError::InvalidInput(input))?,
                 0,
                 bytemuck::cast_slice(&resize(data.to_vec())),
             )
@@ -142,8 +194,12 @@ impl Session {
         let mut results = HashMap::new();
 
         for output in outputs {
+            let output_name = output.get_name();
+
             // Copy the output data into the staging buffer.
-            let buffer = inner_infos.get(output.as_str()).unwrap();
+            let buffer = inner_infos
+                .get(output_name)
+                .ok_or_else(|| SessionError::InvalidOutput(output_name.to_string()))?;
 
             let buffer_slice = buffer.slice(..);
             // TODO: Define behavior for multi output.
@@ -155,7 +211,15 @@ impl Session {
             // Gets contents of buffer
             let data = buffer_slice.get_mapped_range();
             // Since contents are got in bytes, this converts these bytes back to f32
-            results.insert(output.clone(), bytemuck::cast_slice(&data).to_vec());
+
+            // The actual buffer may be bigger than what we should return, because buffers have a minimum size in wgpu
+            // Fetch the size we should expect so we can chop the buffer to the correct size
+            let output_buffer_size = len(&output.get_shape()) as usize;
+
+            results.insert(
+                output_name.to_string(),
+                bytemuck::cast_slice(&data)[..output_buffer_size].to_vec(),
+            );
             drop(data);
             buffer.unmap();
         }

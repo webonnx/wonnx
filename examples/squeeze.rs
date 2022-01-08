@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use log::info;
 use ndarray::s;
-use std::error;
 use std::time::Instant;
 use std::{
     fs,
@@ -12,8 +11,8 @@ use std::{
     path::Path,
     time::Duration,
 };
+use wonnx::WonnxError;
 
-type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 // Args Management
 async fn run() {
     let probabilities = &execute_gpu().await.unwrap();
@@ -39,23 +38,21 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>> {
+async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, WonnxError> {
     let mut input_data = HashMap::new();
     let image = load_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap());
 
-    let session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx")
-        .await
-        .unwrap();
+    let session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx").await?;
     let time_pre_compute = Instant::now();
     info!("Start Compute");
-    let result = session.run(input_data.clone()).await;
+    let result = session.run(input_data.clone()).await?;
     let time_post_compute = Instant::now();
     println!(
         "time: first_prediction: {:#?}",
         time_post_compute - time_pre_compute
     );
-    result
+    Ok(result)
 }
 
 fn main() {
@@ -88,7 +85,7 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
 
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(image_path)
         .unwrap()
-        .resize_to_fill(224 as u32, 224 as u32, FilterType::Nearest)
+        .resize_to_fill(224, 224, FilterType::Nearest)
         .to_rgb8();
 
     // Python:

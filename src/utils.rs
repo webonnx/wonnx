@@ -1,31 +1,50 @@
+use protobuf::RepeatedField;
+
 use crate::onnx;
+use crate::onnx::OperatorSetIdProto;
+use crate::onnx::ValueInfoProto;
 use std::collections::HashMap;
 use std::convert::From;
 use std::convert::Into;
 use std::str::from_utf8;
+use thiserror::Error;
+
+/* Minimum size of a buffer you can create with wgpu. Creating buffers smaller than this leads to panic "Validation
+* error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
+const MINIMUM_BUFFER_SIZE: i64 = 64;
 
 pub fn len(dims: &[i64]) -> i64 {
     dims.iter().product::<i64>()
+}
+
+pub fn buffer_len(dims: &[i64]) -> i64 {
+    len(dims).max(MINIMUM_BUFFER_SIZE)
+}
+
+#[derive(Error, Debug)]
+#[error("did not find attribute '{attribute}' for node '{node_name}'")]
+pub struct AttributeNotFoundError {
+    attribute: String,
+    node_name: String,
 }
 
 pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
     attribute: &str,
     default: Option<T>,
     node: &onnx::NodeProto,
-) -> T {
+) -> Result<T, AttributeNotFoundError> {
     match (
         node.get_attribute()
             .iter()
             .find(|attr| attr.get_name() == attribute),
         default,
     ) {
-        (Some(attr), _) => attr.clone().into(),
-        (None, Some(default_attr)) => default_attr,
-        (None, None) => panic!(
-            "Did not find attribute: {} for node: {}",
-            attribute,
-            node.get_name()
-        ),
+        (Some(attr), _) => Ok(attr.clone().into()),
+        (None, Some(default_attr)) => Ok(default_attr),
+        (None, None) => Err(AttributeNotFoundError {
+            attribute: attribute.to_string(),
+            node_name: node.get_name().to_string(),
+        }),
     }
 }
 
@@ -42,42 +61,33 @@ pub fn rename_attribute(
     attr
 }
 
+impl ValueInfoProto {
+    pub fn get_shape(&self) -> Vec<i64> {
+        self.get_field_type()
+            .get_tensor_type()
+            .get_shape()
+            .get_dim()
+            .iter()
+            .map(|x| x.get_dim_value())
+            .collect::<Vec<i64>>()
+    }
+}
+
 pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Vec<i64>> {
     let mut dims_info = HashMap::new();
 
     for info in graph_proto.get_input() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
+        let dims = info.get_shape();
         dims_info.insert(info.get_name().to_string(), dims);
     }
 
     for info in graph_proto.get_output() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
+        let dims = info.get_shape();
         dims_info.insert(info.get_name().to_string(), dims);
     }
 
     for info in graph_proto.get_value_info() {
-        let dims = info
-            .get_field_type()
-            .get_tensor_type()
-            .get_shape()
-            .get_dim()
-            .iter()
-            .map(|x| x.get_dim_value())
-            .collect::<Vec<i64>>();
+        let dims = info.get_shape();
         dims_info.insert(info.get_name().to_string(), dims);
     }
 
@@ -189,6 +199,10 @@ pub fn graph(
 
 pub fn model(graph: onnx::GraphProto) -> onnx::ModelProto {
     let mut model = crate::onnx::ModelProto::new();
+    let mut onnx_opset_import = OperatorSetIdProto::new();
+    onnx_opset_import.set_domain("".to_string());
+    onnx_opset_import.set_version(13);
+    model.set_opset_import(RepeatedField::from_slice(&[onnx_opset_import]));
     model.set_graph(graph);
     model
 }

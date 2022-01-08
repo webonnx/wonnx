@@ -2,13 +2,23 @@ use std::collections::HashMap;
 
 use bytemuck::cast_slice;
 use protobuf::RepeatedField;
+use thiserror::Error;
 use wgpu::{Buffer, BufferUsages, Device};
 
 use crate::{
     onnx::NodeProto,
     resource::{self, padding},
-    utils::{attribute, get_attribute, node},
+    utils::{attribute, get_attribute, node, AttributeNotFoundError},
 };
+
+#[derive(Error, Debug)]
+pub enum SequenceError {
+    #[error("a required attribute was not found: {0}")]
+    AttributeNotFound(#[from] AttributeNotFoundError),
+
+    #[error("{0} is not implemented yet")]
+    NotImplemented(String),
+}
 
 pub fn sequence(
     names: &[&str],
@@ -16,7 +26,7 @@ pub fn sequence(
     device: &Device,
     initializers: &HashMap<String, &[u8]>,
     inner_infos: &mut HashMap<String, Buffer>,
-) -> (NodeProto, usize) {
+) -> Result<(NodeProto, usize), SequenceError> {
     let mut optimisation_length = 1;
     let inputs = nodes[0].get_input();
 
@@ -36,12 +46,15 @@ pub fn sequence(
             for input in inputs {
                 if let Some(data) = initializers.get(input) {
                     let data = if input == &inputs[1]
-                        && get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0]) == [3, 3]
-                        && (get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0])
+                        && get_attribute::<Vec<i64>>("kernel_shape", None, &nodes[0])? == [3, 3]
+                        && (get_attribute("pads", Some(vec![0, 0, 0, 0]), &nodes[0])?
                             == [1, 1, 1, 1]
-                            || get_attribute("auto_pad", Some("SAME_UPPER".to_string()), &nodes[0])
-                                == "SAME_UPPER")
-                        && get_attribute("strides", Some(vec![1, 1]), &nodes[0]) == [1, 1]
+                            || get_attribute(
+                                "auto_pad",
+                                Some("SAME_UPPER".to_string()),
+                                &nodes[0],
+                            )? == "SAME_UPPER")
+                        && get_attribute("strides", Some(vec![1, 1]), &nodes[0])? == [1, 1]
                     {
                         padding(data, 12, 4)
                         // data.to_vec()
@@ -136,7 +149,9 @@ pub fn sequence(
                             if data == &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] {
                                 attributes.push(attribute("coefficient", 0));
                             } else {
-                                unimplemented!()
+                                return Err(SequenceError::NotImplemented(String::from(
+                                    "Add with non-zero data",
+                                )));
                             }
                         }
                         _ => {
@@ -176,5 +191,5 @@ pub fn sequence(
         }
     };
 
-    (result, optimisation_length)
+    Ok((result, optimisation_length))
 }
