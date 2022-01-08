@@ -379,7 +379,7 @@ pub fn compile(
             assert!(kernel_shape[0] >= 0 && kernel_shape[1] >= 0);
 
             context.insert("original_width", &input_dims.dim(3));
-            context.insert("width", &output_dims.0[3]);
+            context.insert("width", &output_dims.dim(3));
             context.insert("original_height", &input_dims.dim(2));
             context.insert("channel", &input_dims.dim(1));
             context.insert("stride", &strides);
