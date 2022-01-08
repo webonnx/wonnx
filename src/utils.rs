@@ -75,7 +75,9 @@ impl DataType {
         let d = num::integer::gcd(n, 4);
         match d {
             1 => DataType::F32,
-            2..=4 => DataType::Vec(d),
+            2 | 4 => DataType::Vec(d),
+            /* 3 can't occur here because it is not a divisor of 4. Even so, we wouldn't be able to use vec3, because
+            its stride is 16 instead of the expected 12, which would require padding to work properly. */
             _ => unreachable!(),
         }
     }
