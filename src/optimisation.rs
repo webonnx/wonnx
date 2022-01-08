@@ -153,7 +153,7 @@ pub fn load(
 
         // Generate the shader source code for this node
         let (current_node, optimisation_length) =
-            sequence(&names, nodes, device, &initializers, &mut inner_infos);
+            sequence(&names, nodes, device, &initializers, &mut buffers);
         let CompiledNode { shader, threads } = compile(&current_node, &dims_info, &TEMPLATES);
         info!("shader: {}", shader);
 
