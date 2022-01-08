@@ -148,7 +148,7 @@ pub fn compile(
             let mut axis = get_attribute("axis", Some(default_axis), node)?;
             if axis < 0 {
                 if opset_version >= 13 {
-                    axis += input_shape.len() as i64;
+                    axis += input_shape[0].rank() as i64;
                 } else {
                     return Err(CompileError::InvalidAttributeValue {
                         attribute: "axis".to_string(),
@@ -158,7 +158,7 @@ pub fn compile(
                 }
             }
 
-            if axis >= (input_shape.len() as i64) {
+            if axis >= (input_shape[0].rank() as i64) {
                 return Err(CompileError::InvalidAttributeValue {
                     attribute: "axis".to_string(),
                     value: format!("{}", axis),
@@ -168,8 +168,10 @@ pub fn compile(
 
             if axis != 1 {
                 return Err(CompileError::UnimplementedVariant {
-                    variant: "softmax on an axis other than the second with [1,n] inputs"
-                        .to_string(),
+                    variant: format!(
+                        "softmax on an axis ({}) other than the second with [1,n] inputs",
+                        axis,
+                    ),
                     op: "Softmax".to_string(),
                 });
             }
