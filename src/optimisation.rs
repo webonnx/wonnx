@@ -138,6 +138,7 @@ pub enum OptimizationError {
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
+    _opset_version: i64,
 ) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>), OptimizationError> {
     let initializers = initializers(graph);
     let dims_info = dimensions_infos(graph);

@@ -85,7 +85,7 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
 
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(image_path)
         .unwrap()
-        .resize_to_fill(224 as u32, 224 as u32, FilterType::Nearest)
+        .resize_to_fill(224, 224, FilterType::Nearest)
         .to_rgb8();
 
     // Python:
