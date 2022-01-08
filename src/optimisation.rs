@@ -138,7 +138,7 @@ pub enum OptimizationError {
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
-    _opset_version: i64,
+    opset_version: i64,
 ) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>), OptimizationError> {
     let initializers = initializers(graph);
     let dims_info = dimensions_infos(graph);
@@ -176,7 +176,8 @@ pub fn load(
         // Generate the shader source code for this node
         let (current_node, optimisation_length) =
             sequence(&names, nodes, device, &initializers, &mut buffers)?;
-        let CompiledNode { shader, threads } = compile(&current_node, &dims_info, &TEMPLATES)?;
+        let CompiledNode { shader, threads } =
+            compile(&current_node, &dims_info, &TEMPLATES, opset_version)?;
         info!("shader: {}", shader);
 
         // Create buffers for all outputs of this node
