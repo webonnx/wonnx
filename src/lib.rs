@@ -132,7 +132,7 @@ impl Session {
         let onnx_opset_version =
             onnx_opset_version.expect("no ONNX opset was referenced by the model!");
         let graph = model.get_graph();
-        let (buffers, builders) = optimisation::load(graph, &device, onnx_opset_version).unwrap();
+        let (buffers, builders) = optimisation::load(graph, &device, onnx_opset_version)?;
 
         // The data is loaded after the first submit
         let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
