@@ -36,7 +36,7 @@ impl Shape {
         self.dims.len()
     }
 
-    pub fn len(&self) -> u64 {
+    pub fn element_count(&self) -> u64 {
         self.dims.iter().product()
     }
 

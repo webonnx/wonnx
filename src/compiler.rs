@@ -83,12 +83,12 @@ pub fn compile(
 
     let input_lengths = input_shape
         .iter()
-        .map(|shape| shape.len())
+        .map(|shape| shape.element_count())
         .collect::<Vec<u64>>();
 
     let output_lengths = output_shape
         .iter()
-        .map(|shape| shape.len())
+        .map(|shape| shape.element_count())
         .collect::<Vec<u64>>();
 
     // Generate variable names from the input names (which may contain special characters we don't want)
@@ -550,7 +550,7 @@ pub fn compile(
         "Split" => {
             let mut axis = get_attribute("axis", Some(0), node)?;
             if axis < 0 {
-                axis += input_shape[0].len() as i64
+                axis += input_shape[0].element_count() as i64
             }
             context.insert("axis", &axis);
 
