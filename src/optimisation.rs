@@ -2,7 +2,7 @@ use crate::{
     compiler::{compile, CompileError, CompiledNode},
     resource,
     sequencer::{sequence, SequenceError},
-    utils::{buffer_len, ceil, dimensions_infos, initializers},
+    utils::{ceil, dimensions_infos, initializers},
     Result,
 };
 
@@ -150,7 +150,7 @@ pub fn load(
             input_name.clone(),
             resource::buffer(
                 device,
-                buffer_len(input_dims) as _,
+                input_dims.buffer_len() as _,
                 input_name,
                 BufferUsages::STORAGE | BufferUsages::COPY_DST,
             ),
@@ -191,7 +191,7 @@ pub fn load(
                         output.clone(),
                         resource::buffer(
                             device,
-                            buffer_len(output_dims) as _,
+                            output_dims.buffer_len() as _,
                             output.as_str(),
                             BufferUsages::STORAGE | BufferUsages::MAP_READ,
                         ),
@@ -201,7 +201,7 @@ pub fn load(
                         output.clone(),
                         resource::buffer(
                             device,
-                            buffer_len(output_dims) as _,
+                            output_dims.buffer_len() as _,
                             output.as_str(),
                             BufferUsages::STORAGE,
                         ),
@@ -255,7 +255,7 @@ pub fn load(
         });
 
         // Perform the binding for each group
-        let number_of_groups = ceil(binding_counter as i64, MAX_BINDINGS_PER_GROUP as i64) as usize;
+        let number_of_groups = ceil(binding_counter as u64, MAX_BINDINGS_PER_GROUP as u64) as usize;
         for group_index in 0..number_of_groups {
             let group_range = group_index * MAX_BINDINGS_PER_GROUP
                 ..usize::min(

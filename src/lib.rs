@@ -14,7 +14,6 @@ use optimisation::{EncoderBuilder, OptimizationError};
 use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::result::Result;
-use utils::len;
 
 use crate::resource::resize;
 use thiserror::Error;
@@ -214,7 +213,7 @@ impl Session {
 
             // The actual buffer may be bigger than what we should return, because buffers have a minimum size in wgpu
             // Fetch the size we should expect so we can chop the buffer to the correct size
-            let output_buffer_size = len(&output.get_shape()) as usize;
+            let output_buffer_size = output.get_shape().len() as usize;
 
             results.insert(
                 output_name.to_string(),
