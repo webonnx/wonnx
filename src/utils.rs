@@ -17,23 +17,27 @@ const MINIMUM_BUFFER_SIZE: u64 = 64;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(transparent)]
-pub struct Shape(pub Vec<u64>);
+pub struct Shape {
+    dims: Vec<u64>,
+}
 
 impl Shape {
     pub fn from(ds: &[i64]) -> Shape {
-        Shape(ds.iter().map(|x| *x as u64).collect())
+        Shape {
+            dims: ds.iter().map(|x| *x as u64).collect(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.dims.is_empty()
     }
 
     pub fn rank(&self) -> usize {
-        self.0.len()
+        self.dims.len()
     }
 
     pub fn len(&self) -> u64 {
-        self.0.iter().product()
+        self.dims.iter().product()
     }
 
     pub fn buffer_len(&self) -> u64 {
@@ -41,13 +45,13 @@ impl Shape {
     }
 
     pub fn dim(&self, idx: usize) -> u64 {
-        self.0[idx]
+        self.dims[idx]
     }
 
     pub fn chunks(&self) -> Vec<u64> {
         let mut chunk = vec![];
-        let ds = &self.0;
-        for i in 1..self.0.len() {
+        let ds = &self.dims;
+        for i in 1..self.dims.len() {
             chunk.push(ds[i..].iter().product::<u64>());
         }
         chunk.push(1);
@@ -112,7 +116,7 @@ impl Display for Shape {
         write!(
             f,
             "{}",
-            self.0
+            self.dims
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>()
@@ -163,14 +167,15 @@ pub fn rename_attribute(
 
 impl ValueInfoProto {
     pub fn get_shape(&self) -> Shape {
-        Shape(
+        Shape::from(
             self.get_field_type()
                 .get_tensor_type()
                 .get_shape()
                 .get_dim()
                 .iter()
-                .map(|x| x.get_dim_value() as u64)
-                .collect::<Vec<u64>>(),
+                .map(|x| x.get_dim_value() as i64)
+                .collect::<Vec<i64>>()
+                .as_slice(),
         )
     }
 }

@@ -238,15 +238,7 @@ pub fn compile(
             if input_shape[0].rank() <= 2 || input_shape[0].rank() > 4 {
                 return Err(CompileError::UnimplementedVariant {
                     op: "BatchNormalization".to_string(),
-                    variant: format!(
-                        "with input {}",
-                        input_shape[0]
-                            .0
-                            .iter()
-                            .map(|x| x.to_string())
-                            .collect::<Vec<String>>()
-                            .join("x")
-                    ),
+                    variant: format!("with input {}", input_shape[0]),
                 });
             }
 
