@@ -110,8 +110,8 @@ pub fn compile(
     context.insert("outputs", &outputs);
     context.insert("i_lens", &input_lengths);
     context.insert("o_lens", &output_lengths);
-    context.insert("i_dims", &input_shape);
-    context.insert("o_dims", &output_shape);
+    context.insert("i_shape", &input_shape);
+    context.insert("o_shape", &output_shape);
     context.insert("i_chunks", &input_chunks);
     context.insert("o_chunks", &output_chunks);
     context.insert("op_type", &node.get_op_type());
