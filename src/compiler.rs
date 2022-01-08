@@ -109,10 +109,7 @@ pub fn compile(
             1,
             1,
         ),
-        "Softmax" => ("endomorphism/softmax.wgsl".to_string(), 1, 1, 1),
-        // Arithmetic operation
-        "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
-        | "Mod" | "Mul" | "Or" | "Sub" => {
+        "Softmax" => {
             let default_axis = match opset_version {
                 1..=10 => 1,   // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-1
                 11..=12 => 1, // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-11
@@ -140,6 +137,11 @@ pub fn compile(
                 unimplemented!("Softmax is only implemented for [1,n] input tensors and on axis 1");
             }
 
+            ("endomorphism/softmax.wgsl".to_string(), 1, 1, 1)
+        }
+        // Arithmetic operation
+        "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
+        | "Mod" | "Mul" | "Or" | "Sub" => {
             let coefficient = get_attribute("coefficient", Some(1.0), node);
             context.insert("coefficient", &coefficient);
             context.insert(
