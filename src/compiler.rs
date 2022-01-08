@@ -18,6 +18,7 @@ pub fn compile(
     node: &crate::onnx::NodeProto,
     dims_infos: &HashMap<String, Vec<i64>>,
     tera: &Tera,
+    opset_version: i64,
 ) -> CompiledNode {
     // Escape unwanted characters
     let mut inputs = node.get_input().to_vec();
@@ -90,6 +91,7 @@ pub fn compile(
     context.insert("i_chunks", &input_chunks);
     context.insert("o_chunks", &output_chunks);
     context.insert("op_type", &node.get_op_type());
+    context.insert("opset_version", &opset_version);
 
     let (template, x, y, z) = match node.get_op_type() {
         // Map simple function
@@ -111,6 +113,33 @@ pub fn compile(
         // Arithmetic operation
         "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
         | "Mod" | "Mul" | "Or" | "Sub" => {
+            let default_axis = match opset_version {
+                1..=10 => 1,   // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-1
+                11..=12 => 1, // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-11
+                13..=15 => -1, // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-13
+                _ => panic!("unknown opset version: {}", opset_version),
+            };
+
+            /* Describes the axis of the inputs when coerced to 2D; defaults to one because the 0th axis most likely
+            describes the batch_size. From version 13 onwards, counting backwards is also allowed. We only support the
+            variant with [1,n] input tensors, where axis is 1 or -1 */
+            let mut axis = get_attribute("axis", Some(default_axis), node);
+            if axis < 0 {
+                if opset_version >= 13 {
+                    axis += input_dims.len() as i64;
+                } else {
+                    panic!("invalid axis index {}", axis);
+                }
+            }
+
+            if axis >= (input_dims.len() as i64) {
+                panic!("invalid axis index {}", axis);
+            }
+
+            if axis != 1 {
+                unimplemented!("Softmax is only implemented for [1,n] input tensors and on axis 1");
+            }
+
             let coefficient = get_attribute("coefficient", Some(1.0), node);
             context.insert("coefficient", &coefficient);
             context.insert(
