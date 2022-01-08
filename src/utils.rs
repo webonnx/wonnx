@@ -13,7 +13,7 @@ use thiserror::Error;
 
 /* Minimum size of a buffer you can create with wgpu. Creating buffers smaller than this leads to panic "Validation
 * error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
-const MINIMUM_BUFFER_SIZE: u64 = 64;
+const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(transparent)]
@@ -41,7 +41,8 @@ impl Shape {
     }
 
     pub fn buffer_len(&self) -> u64 {
-        self.len().max(MINIMUM_BUFFER_SIZE)
+        // Dividing by 4 since that is the size of an f32 in bytes
+        self.element_count().max(MINIMUM_BUFFER_SIZE_BYTES / 4)
     }
 
     pub fn dim(&self, idx: usize) -> u64 {
