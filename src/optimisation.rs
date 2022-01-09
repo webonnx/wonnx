@@ -141,7 +141,7 @@ pub fn load(
     opset_version: i64,
 ) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>), OptimizationError> {
     let initializers = initializers(graph);
-    let shapes_info = dimensions_infos(graph);
+    let mut shapes_info = dimensions_infos(graph);
 
     let mut buffers = HashMap::new();
 
@@ -174,8 +174,16 @@ pub fn load(
             .collect::<Vec<_>>();
 
         // Generate the shader source code for this node
-        let (current_node, optimisation_length) =
-            sequence(&names, nodes, device, &initializers, &mut buffers)?;
+        let sequence = sequence(
+            &names,
+            nodes,
+            device,
+            &initializers,
+            &mut buffers,
+            &mut shapes_info,
+        )?;
+
+        let current_node = sequence.node;
         let CompiledNode { shader, threads } =
             compile(&current_node, &shapes_info, &TEMPLATES, opset_version)?;
         info!("shader: {}", shader);
@@ -274,8 +282,7 @@ pub fn load(
             bind_groups,
             threads,
         });
-
-        node_index += optimisation_length;
+        node_index += sequence.nodes_consumed;
     }
 
     Ok((buffers, builders))
