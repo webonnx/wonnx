@@ -1,4 +1,4 @@
-use crate::utils::{ceil, get_attribute, AttributeNotFoundError};
+use crate::utils::{ceil, get_attribute, AttributeNotFoundError, DataType, Shape};
 use std::collections::HashMap;
 use tera::{Context, Tera};
 use thiserror::Error;
@@ -41,11 +41,17 @@ pub enum CompileError {
         value: String,
         opset_version: i64,
     },
+
+    #[error("input {input_index} has invalid shape {input_shape}")]
+    InvalidInputShape {
+        input_index: usize,
+        input_shape: Shape,
+    },
 }
 
 pub fn compile(
     node: &crate::onnx::NodeProto,
-    dims_infos: &HashMap<String, Vec<i64>>,
+    shape_infos: &HashMap<String, Shape>,
     tera: &Tera,
     opset_version: i64,
 ) -> Result<CompiledNode, CompileError> {
@@ -53,9 +59,9 @@ pub fn compile(
     let mut inputs = node.get_input().to_vec();
     let mut outputs = node.get_output().to_vec();
 
-    let input_dims = inputs
+    let input_shape = inputs
         .iter()
-        .map(|input| match dims_infos.get(input.as_str()) {
+        .map(|input| match shape_infos.get(input.as_str()) {
             Some(info) => Ok(info),
             None => Err(CompileError::DimensionsMissing(
                 input.to_string(),
@@ -64,9 +70,9 @@ pub fn compile(
         })
         .collect::<Result<Vec<_>, CompileError>>()?;
 
-    let output_dims = outputs
+    let output_shape = outputs
         .iter()
-        .map(|output| match dims_infos.get(output.as_str()) {
+        .map(|output| match shape_infos.get(output.as_str()) {
             Some(info) => Ok(info),
             None => Err(CompileError::DimensionsMissing(
                 output.to_string(),
@@ -75,15 +81,15 @@ pub fn compile(
         })
         .collect::<Result<Vec<_>, CompileError>>()?;
 
-    let input_lengths = input_dims
+    let input_lengths = input_shape
         .iter()
-        .map(|dims| dims.iter().product())
-        .collect::<Vec<i64>>();
+        .map(|shape| shape.element_count())
+        .collect::<Vec<u64>>();
 
-    let output_lengths = output_dims
+    let output_lengths = output_shape
         .iter()
-        .map(|dims| dims.iter().product())
-        .collect::<Vec<i64>>();
+        .map(|shape| shape.element_count())
+        .collect::<Vec<u64>>();
 
     // Generate variable names from the input names (which may contain special characters we don't want)
     inputs = inputs
@@ -96,33 +102,16 @@ pub fn compile(
         .map(|output| to_wgsl_variable_name(output))
         .collect::<Vec<_>>();
 
-    let mut input_chunks = vec![];
-    for dims in input_dims.iter() {
-        let mut chunk = vec![];
-        for i in 1..dims.len() {
-            chunk.push(dims[i..].iter().product::<i64>());
-        }
-        chunk.push(1);
-        input_chunks.push(chunk);
-    }
-
-    let mut output_chunks = vec![];
-    for dims in output_dims.iter() {
-        let mut chunk = vec![];
-        for i in 1..dims.len() {
-            chunk.push(dims[i..].iter().product::<i64>());
-        }
-        chunk.push(1);
-        output_chunks.push(chunk);
-    }
+    let input_chunks: Vec<Vec<u64>> = input_shape.iter().map(|d| d.chunks()).collect();
+    let output_chunks: Vec<Vec<u64>> = output_shape.iter().map(|d| d.chunks()).collect();
 
     let mut context = Context::new();
     context.insert("inputs", &inputs);
     context.insert("outputs", &outputs);
     context.insert("i_lens", &input_lengths);
     context.insert("o_lens", &output_lengths);
-    context.insert("i_dims", &input_dims);
-    context.insert("o_dims", &output_dims);
+    context.insert("i_shape", &input_shape);
+    context.insert("o_shape", &output_shape);
     context.insert("i_chunks", &input_chunks);
     context.insert("o_chunks", &output_chunks);
     context.insert("op_type", &node.get_op_type());
@@ -144,6 +133,7 @@ pub fn compile(
             1,
             1,
         ),
+
         "Softmax" => {
             let default_axis = match opset_version {
                 1..=10 => 1,   // https://github.com/onnx/onnx/blob/master/docs/Changelog.md#softmax-1
@@ -158,7 +148,7 @@ pub fn compile(
             let mut axis = get_attribute("axis", Some(default_axis), node)?;
             if axis < 0 {
                 if opset_version >= 13 {
-                    axis += input_dims.len() as i64;
+                    axis += input_shape[0].rank() as i64;
                 } else {
                     return Err(CompileError::InvalidAttributeValue {
                         attribute: "axis".to_string(),
@@ -168,7 +158,7 @@ pub fn compile(
                 }
             }
 
-            if axis >= (input_dims.len() as i64) {
+            if axis >= (input_shape[0].rank() as i64) {
                 return Err(CompileError::InvalidAttributeValue {
                     attribute: "axis".to_string(),
                     value: format!("{}", axis),
@@ -178,14 +168,17 @@ pub fn compile(
 
             if axis != 1 {
                 return Err(CompileError::UnimplementedVariant {
-                    variant: "softmax on an axis other than the second with [1,n] inputs"
-                        .to_string(),
+                    variant: format!(
+                        "softmax on an axis ({}) other than the second with [1,n] inputs",
+                        axis,
+                    ),
                     op: "Softmax".to_string(),
                 });
             }
 
             ("endomorphism/softmax.wgsl".to_string(), 1, 1, 1)
         }
+
         // Arithmetic operation
         "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
         | "Mod" | "Mul" | "Or" | "Sub" => {
@@ -222,19 +215,84 @@ pub fn compile(
         }
         // Not taking into account attributes
         "BatchNormalization" => {
-            let epsilon = get_attribute("epsilon", Some(1.0), node)?;
+            /* Prior to version 9, BatchNormalization supported a 'spatial' mode where input mean/variance are of shape
+            [C,W,H] instead of just [C]. See https://github.com/onnx/onnx/blob/master/docs/Changelog.md#BatchNormalization-7.
+            This mode is not supported. */
+            if let Ok(spatial_value) = get_attribute::<i64>("spatial", None, node) {
+                if opset_version < 9 {
+                    return Err(CompileError::UnimplementedVariant {
+                        op: "BatchNormalization".to_string(),
+                        variant: "spatial".to_string(),
+                    });
+                } else {
+                    return Err(CompileError::InvalidAttributeValue {
+                        attribute: "spatial".to_string(),
+                        opset_version,
+                        value: spatial_value.to_string(),
+                    });
+                }
+            }
+
+            // [N,C,w,h] => [N,C,w,h] where [w,h] is normalized using stats for each [N,C]
+            // N and C are optional and assumed to be one for lower-rank inputs
+            if input_shape[0].rank() <= 2 || input_shape[0].rank() > 4 {
+                return Err(CompileError::UnimplementedVariant {
+                    op: "BatchNormalization".to_string(),
+                    variant: format!("with input {}", input_shape[0]),
+                });
+            }
+
+            let (input_batches, input_channels, input_w, input_h) = match input_shape[0].rank() {
+                2 => (1, 1, input_shape[0].dim(0), input_shape[0].dim(1)), // WxH, C=1, N=1
+                3 => (
+                    1,
+                    input_shape[0].dim(0),
+                    input_shape[0].dim(1),
+                    input_shape[0].dim(2),
+                ), // CxWxH, single batch N=1
+                4 => (
+                    input_shape[0].dim(0),
+                    input_shape[0].dim(1),
+                    input_shape[0].dim(2),
+                    input_shape[0].dim(3),
+                ), // NxCxWxH
+                _ => unreachable!(),
+            };
+
+            if input_batches == 0 || input_channels == 0 {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 0,
+                    input_shape: input_shape[0].clone(),
+                });
+            }
+
+            // If w*h is a multiple of 4, we can use vec4 in our shader
+            let elem_type = DataType::for_size((input_w * input_h) as usize);
+
+            context.insert("elem_type", &elem_type.wgsl_type_name());
+            context.insert("elem_stride", &elem_type.size_bytes());
+
+            // The default for epsilon is 1e05, see https://github.com/onnx/onnx/blob/master/docs/Changelog.md#attributes-252
+            let epsilon = get_attribute("epsilon", Some(1e-05), node)?;
             context.insert("epsilon", &epsilon);
+            context.insert(
+                "batch_size",
+                &ceil(
+                    input_channels * input_w * input_h,
+                    elem_type.elements() as u64,
+                ),
+            );
+            context.insert(
+                "channel_size",
+                &ceil(input_w * input_h, elem_type.elements() as u64),
+            );
 
-            return Err(CompileError::UnimplementedOp(
-                node.get_op_type().to_string(),
-            ));
-
-            //   (
-            //       "endomorphism/batchnormalization.wgsl".to_string(),
-            //       (length / 4) as _,
-            //       1,
-            //       1,
-            //   )
+            (
+                "endomorphism/batchnormalization.wgsl".to_string(),
+                ceil(input_w * input_h, elem_type.elements() as u64) as _,
+                input_channels as _,
+                input_batches as _,
+            )
         }
         "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu" | "LeakyRelu" => {
             let alpha = get_attribute("alpha", Some(1.0), node)?;
@@ -263,7 +321,7 @@ pub fn compile(
         }
         op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish") => {
             // TODO: Conv only support NxCxHxW for the moment.
-            debug_assert!(input_dims[0].len() == 4usize);
+            debug_assert!(input_shape[0].rank() == 4);
 
             let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node)?;
             let dilations = get_attribute("dilations", Some(vec![1, 1]), node)?;
@@ -309,19 +367,21 @@ pub fn compile(
                 }
             };
 
-            let input_dims = input_dims[0];
-            let output_dims = output_dims[0];
+            let input_shape = input_shape[0];
+            let output_shape = output_shape[0];
+            assert!(kernel_shape.len() >= 2);
+            assert!(kernel_shape[0] >= 0 && kernel_shape[1] >= 0);
 
-            context.insert("original_width", &input_dims[3]);
-            context.insert("width", &output_dims[3]);
-            context.insert("original_height", &input_dims[2]);
-            context.insert("channel", &input_dims[1]);
+            context.insert("original_width", &input_shape.dim(3));
+            context.insert("width", &output_shape.dim(3));
+            context.insert("original_height", &input_shape.dim(2));
+            context.insert("channel", &input_shape.dim(1));
             context.insert("stride", &strides);
             context.insert("kernel_shape", &kernel_shape);
             context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
             context.insert(
                 "kernel_channel_len",
-                &(kernel_shape[0] * kernel_shape[1] * input_dims[1]),
+                &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * input_shape.dim(1)),
             );
             context.insert("pad", &pads);
             context.insert("dilation", &dilations);
@@ -339,12 +399,12 @@ pub fn compile(
                     let alpha = get_attribute("alpha", Some(0.01), node)?;
                     context.insert("alpha", &alpha);
 
-                    // GLSL shader for convolution computation
+                    // WGSL shader for convolution computation
                     if (strides == [1, 1])
                         && (kernel_shape == [1, 1])
                         && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
-                        && (input_dims[1] % 16 == 0)
-                        && (output_dims[1] % 4 == 0)
+                        && (input_shape.dim(1) % 16 == 0)
+                        && (output_shape.dim(1) % 4 == 0)
                     {
                         (
                             "pool/conv_kernel_1.wgsl".to_string(),
@@ -355,7 +415,7 @@ pub fn compile(
                     } else if (strides == [1, 1])
                         && (kernel_shape == [3, 3])
                         && (dilations == [1, 1])
-                        && (output_dims[1] % 4 == 0)
+                        && (output_shape.dim(1) % 4 == 0)
                     {
                         (
                             "pool/conv_kernel_3.wgsl".to_string(),
@@ -381,11 +441,11 @@ pub fn compile(
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
-            if input_dims[0][0] == 1 {
-                let threads = output_dims[0][1];
+            if input_shape[0].dim(0) == 1 {
+                let threads = output_shape[0].dim(1);
                 ("matrix/gemm_1.wgsl".to_string(), threads as _, 1, 1)
             } else {
-                let threads = input_dims[0][0] * input_dims[1][1] / 16;
+                let threads = input_shape[0].dim(0) * input_shape[1].dim(1) / 16;
                 ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
             }
         }
@@ -430,7 +490,7 @@ pub fn compile(
                     .iter()
                     .enumerate()
                     .map(|(i, x)| {
-                        let tmp = *x as f32 / input_dims[0][i] as f32;
+                        let tmp = *x as f32 / input_shape[0].dim(i) as f32;
                         format!("{:.2}", tmp)
                     })
                     .collect::<Vec<_>>()
@@ -490,11 +550,11 @@ pub fn compile(
         "Split" => {
             let mut axis = get_attribute("axis", Some(0), node)?;
             if axis < 0 {
-                axis += input_dims[0].len() as i64
+                axis += input_shape[0].element_count() as i64
             }
             context.insert("axis", &axis);
 
-            let split_chunk = input_dims[0][axis as usize] as usize / outputs.len();
+            let split_chunk = input_shape[0].dim(axis as usize) as usize / outputs.len();
             let default_split = (1..=outputs.len())
                 .map(|x| (x * split_chunk) as _)
                 .collect();
@@ -510,16 +570,16 @@ pub fn compile(
             )
         }
         "Transpose" => {
-            let default = (input_lengths[0]..0).collect::<Vec<_>>();
-            let perms = get_attribute("perm", Some(default), node)?;
-            let permuted_dims = perms
+            let default = ((input_lengths[0] as i64)..0).collect::<Vec<_>>();
+            let perms: Vec<i64> = get_attribute("perm", Some(default), node)?;
+            let permuted_shapes = perms
                 .iter()
-                .map(|p| output_dims[0][*p as usize])
+                .map(|p| output_shape[0].dim(*p as usize))
                 .collect::<Vec<_>>();
 
             let mut chunks = vec![];
-            for i in 1..permuted_dims.len() {
-                chunks.push(permuted_dims[i..].iter().product::<i64>());
+            for i in 1..permuted_shapes.len() {
+                chunks.push(permuted_shapes[i..].iter().product::<u64>());
             }
             chunks.push(1);
 

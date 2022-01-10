@@ -102,7 +102,7 @@ To implement an operator all you have to do is:
 There is default variables in the context: 
 - `{{ inputs[0] }}`: the name of the variable.
 - `{{ i_lens[0] }}`: the length of the input 0. This also work for output: `{{ o_lens[0] }}` and other input `{{ i_lens[1] }}`
-- `{{ i_dims[0] }}`: the array of dimensions of input 0. To get the first dimension of the array, just use: `{{ i_dims[0][0] }}` 
+- `{{ i_shape[0] }}`: the array of dimensions of input 0. To get the first dimension of the array, just use: `{{ i_shape[0][0] }}` 
 - `{{ i_chunks[0] }}`: the size of the chunks of each dimensions of input 0. By default, each variable is represented as a long array of values where to get to specific values you have to move by chunks. Those chunks are represented within this variable. To get the size of the chunks of the first dimensions use: `{{ i_chunks[0][0] }}`.
 - `{{ op_type }}` the op type as some op_type like activation are using the same template.
 
@@ -162,7 +162,7 @@ fn test_matmul_square_matrix() {
 |<a href="#Atan">Atan</a>|<a href="Changelog.md#Atan-7">7</a>|✅|
 |<a href="#Atanh">Atanh</a>|<a href="Changelog.md#Atanh-9">9</a>|
 |<a href="#AveragePool">AveragePool</a>|<a href="Changelog.md#AveragePool-11">11</a>, <a href="Changelog.md#AveragePool-10">10</a>, <a href="Changelog.md#AveragePool-7">7</a>, <a href="Changelog.md#AveragePool-1">1</a>|✅|
-|<a href="#BatchNormalization">BatchNormalization</a>|<a href="Changelog.md#BatchNormalization-15">15</a>, <a href="Changelog.md#BatchNormalization-14">14</a>, <a href="Changelog.md#BatchNormalization-9">9</a>, <a href="Changelog.md#BatchNormalization-7">7</a>, <a href="Changelog.md#BatchNormalization-6">6</a>, <a href="Changelog.md#BatchNormalization-1">1</a>|
+|<a href="#BatchNormalization">BatchNormalization</a>|<a href="Changelog.md#BatchNormalization-15">15</a>, <a href="Changelog.md#BatchNormalization-14">14</a>, <a href="Changelog.md#BatchNormalization-9">9</a>, <a href="Changelog.md#BatchNormalization-7">7</a>, <a href="Changelog.md#BatchNormalization-6">6</a>, <a href="Changelog.md#BatchNormalization-1">1</a>|✅|
 |<a href="#BitShift">BitShift</a>|<a href="Changelog.md#BitShift-11">11</a>|
 |<a href="#Cast">Cast</a>|<a href="Changelog.md#Cast-13">13</a>, <a href="Changelog.md#Cast-9">9</a>, <a href="Changelog.md#Cast-6">6</a>, <a href="Changelog.md#Cast-1">1</a>|
 |<a href="#Ceil">Ceil</a>|<a href="Changelog.md#Ceil-13">13</a>, <a href="Changelog.md#Ceil-6">6</a>, <a href="Changelog.md#Ceil-1">1</a>|✅|

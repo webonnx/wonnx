@@ -179,10 +179,20 @@ pub fn sequence(
             for input in inputs {
                 if let Some(data) = initializers.get(input) {
                     // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
+                    let mut data = data.to_vec();
 
+                    // Prevent issue with minimum buffer size for binding enforced by wgpu
+                    if data.len() < 16 {
+                        data.resize(16, 0);
+                    }
                     inner_infos.insert(
                         input.to_string(),
-                        resource::create_buffer_init(device, data, input, BufferUsages::STORAGE),
+                        resource::create_buffer_init(
+                            device,
+                            data.as_slice(),
+                            input,
+                            BufferUsages::STORAGE,
+                        ),
                     );
                 }
             }
