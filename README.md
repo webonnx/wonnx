@@ -102,7 +102,7 @@ To implement an operator all you have to do is:
 There is default variables in the context: 
 - `{{ inputs[0] }}`: the name of the variable.
 - `{{ i_lens[0] }}`: the length of the input 0. This also work for output: `{{ o_lens[0] }}` and other input `{{ i_lens[1] }}`
-- `{{ i_dims[0] }}`: the array of dimensions of input 0. To get the first dimension of the array, just use: `{{ i_dims[0][0] }}` 
+- `{{ i_shape[0] }}`: the array of dimensions of input 0. To get the first dimension of the array, just use: `{{ i_shape[0][0] }}` 
 - `{{ i_chunks[0] }}`: the size of the chunks of each dimensions of input 0. By default, each variable is represented as a long array of values where to get to specific values you have to move by chunks. Those chunks are represented within this variable. To get the size of the chunks of the first dimensions use: `{{ i_chunks[0][0] }}`.
 - `{{ op_type }}` the op type as some op_type like activation are using the same template.
 
