@@ -8,7 +8,7 @@ use wgpu::{Buffer, BufferUsages, Device};
 use crate::{
     onnx::NodeProto,
     resource::{self, padding},
-    utils::{attribute, get_attribute, node, AttributeNotFoundError},
+    utils::{attribute, get_attribute, node, AttributeNotFoundError, Shape},
 };
 
 #[derive(Error, Debug)]
@@ -18,6 +18,14 @@ pub enum SequenceError {
 
     #[error("{0} is not implemented yet")]
     NotImplemented(String),
+
+    #[error("could not cull identity node")]
+    CullFailed,
+}
+
+pub struct Sequence {
+    pub node: NodeProto,
+    pub nodes_consumed: usize,
 }
 
 pub fn sequence(
@@ -26,23 +34,22 @@ pub fn sequence(
     device: &Device,
     initializers: &HashMap<String, &[u8]>,
     inner_infos: &mut HashMap<String, Buffer>,
-) -> Result<(NodeProto, usize), SequenceError> {
-    let mut optimisation_length = 1;
+    shapes_info: &mut HashMap<String, Shape>,
+) -> Result<Sequence, SequenceError> {
     let inputs = nodes[0].get_input();
 
-    let result = match names {
-        ["Conv", "Exp", "Add", "Log", "Tanh", "Mul", ..] => {
-            optimisation_length = 6;
-            node(
+    Ok(match names {
+        ["Conv", "Exp", "Add", "Log", "Tanh", "Mul", ..] => Sequence {
+            node: node(
                 inputs.iter().map(|x| x.as_str()).collect(),
                 nodes[6].get_output().iter().map(|x| x.as_str()).collect(),
                 &(nodes[0].get_name().to_string() + nodes[1].get_name()),
                 "ConvMish",
                 nodes[0].get_attribute().to_vec(),
-            )
-        }
+            ),
+            nodes_consumed: 6,
+        },
         ["Conv", "Relu", ..] | ["Conv", "LeakyRelu", ..] => {
-            optimisation_length = 2;
             for input in inputs {
                 if let Some(data) = initializers.get(input) {
                     let data = if input == &inputs[1]
@@ -82,16 +89,77 @@ pub fn sequence(
                 attributes.push(attribute.clone());
             }
 
-            node(
-                inputs.iter().map(|x| x.as_str()).collect(),
-                nodes[1].get_output().iter().map(|x| x.as_str()).collect(),
-                &(nodes[0].get_name().to_string() + nodes[1].get_name()),
-                "ConvRelu",
-                attributes,
-            )
+            Sequence {
+                nodes_consumed: 2,
+                node: node(
+                    inputs.iter().map(|x| x.as_str()).collect(),
+                    nodes[1].get_output().iter().map(|x| x.as_str()).collect(),
+                    &(nodes[0].get_name().to_string() + nodes[1].get_name()),
+                    "ConvRelu",
+                    attributes,
+                ),
+            }
         }
-        op
-        @ (["Reshape", ..] | ["Clip", ..] | ["Squeeze", ..] | ["Split", ..] | ["Resize", ..]) => {
+
+        /* These ops can simply be skipped if they are followed by another op. This is efficiently done by replacing the
+        input of the next op (which is the output of a skippable op) with the input of the skippable op itself. */
+        ["Identity", _next_op, ..]
+        | ["Squeeze", _next_op, ..]
+        | ["Unsqueeze", _next_op, ..]
+        | ["Flatten", _next_op, ..]
+        | ["Dropout", _next_op, ..]
+        | ["Reshape", _next_op, ..] => {
+            // Replace the input received from the identity op with the input the identity op takes
+            let identity_input_name = &nodes[0].get_input()[0];
+            let identity_output_name = &nodes[0].get_output()[0];
+
+            // The input to the identity op can still be an initializer
+            if let Some(data) = initializers.get(identity_input_name) {
+                inner_infos.insert(
+                    identity_input_name.to_string(),
+                    resource::create_buffer_init(
+                        device,
+                        data,
+                        identity_input_name,
+                        BufferUsages::STORAGE,
+                    ),
+                );
+            }
+
+            let mut node = nodes[1].clone();
+
+            let mut found = false;
+            for input in node.mut_input() {
+                if input == identity_output_name {
+                    if found {
+                        return Err(SequenceError::CullFailed);
+                    }
+                    *input = identity_input_name.clone();
+                    found = true;
+                } else if let Some(data) = initializers.get(input) {
+                    inner_infos.insert(
+                        input.to_string(),
+                        resource::create_buffer_init(device, data, input, BufferUsages::STORAGE),
+                    );
+                }
+            }
+
+            if found {
+                // Patch the dims of the re-used input
+                shapes_info.insert(
+                    identity_input_name.clone(),
+                    shapes_info.get(identity_output_name).unwrap().clone(),
+                );
+            } else {
+                return Err(SequenceError::CullFailed);
+            }
+
+            Sequence {
+                node,
+                nodes_consumed: 2,
+            }
+        }
+        op @ (["Clip", ..] | ["Split", ..] | ["Resize", ..] | ["Reshape", ..]) => {
             // Remove non binding related input for those Op
             let mut inputs = inputs.iter();
 
@@ -123,6 +191,10 @@ pub fn sequence(
                         let value: Vec<f32> = cast_slice(initializers.get(input).unwrap()).to_vec();
                         attributes.push(attribute(input, value));
                     }
+                    (["Reshape", ..], "shape") => {
+                        let value: Vec<f32> = cast_slice(initializers.get(input).unwrap()).to_vec();
+                        attributes.push(attribute(input, value));
+                    }
                     (["Resize", ..], "sizes") => {
                         let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
                         attributes.push(attribute(input, value));
@@ -133,7 +205,10 @@ pub fn sequence(
 
             node.set_attribute(attributes);
 
-            node
+            Sequence {
+                node,
+                nodes_consumed: 1,
+            }
         }
         op @ (["Mul", ..] | ["Add", ..]) => {
             let mut ending_input = vec![];
@@ -173,7 +248,10 @@ pub fn sequence(
 
             let mut node = nodes[0].clone();
             node.set_input(RepeatedField::from(ending_input));
-            node
+            Sequence {
+                node,
+                nodes_consumed: 1,
+            }
         }
         [..] => {
             for input in inputs {
@@ -197,9 +275,10 @@ pub fn sequence(
                 }
             }
 
-            nodes[0].clone()
+            Sequence {
+                node: nodes[0].clone(),
+                nodes_consumed: 1,
+            }
         }
-    };
-
-    Ok((result, optimisation_length))
+    })
 }

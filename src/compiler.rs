@@ -127,7 +127,7 @@ pub fn compile(
             1,
         ),
         // Copy data
-        "Reshape" | "Dropout" | "Flatten" | "Squeeze" => (
+        "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Unsqueeze" | "Identity" => (
             "endomorphism/copy.wgsl".to_string(),
             ceil(output_lengths[0], 16) as _,
             1,
