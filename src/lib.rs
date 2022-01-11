@@ -10,7 +10,7 @@ extern crate lazy_static;
 
 use compiler::CompileError;
 use onnx::ValueInfoProto;
-use optimisation::{EncoderBuilder, OptimizationError};
+use optimisation::{OptimizationError, OptimizedModel};
 use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::result::Result;
@@ -62,8 +62,7 @@ pub enum WonnxError {
 pub struct Session {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub buffers: HashMap<String, wgpu::Buffer>,
-    pub builders: Vec<EncoderBuilder>,
+    pub optimized_model: OptimizedModel,
     pub outputs: Vec<ValueInfoProto>,
 }
 
@@ -132,7 +131,7 @@ impl Session {
         let onnx_opset_version =
             onnx_opset_version.expect("no ONNX opset was referenced by the model!");
         let graph = model.get_graph();
-        let (buffers, builders) = optimisation::load(graph, &device, onnx_opset_version)?;
+        let optimized_model = optimisation::load(graph, &device, onnx_opset_version)?;
 
         // The data is loaded after the first submit
         let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -141,8 +140,7 @@ impl Session {
         Ok(Session {
             device,
             queue,
-            buffers,
-            builders,
+            optimized_model,
             outputs: graph.get_output().to_vec(),
         })
     }
@@ -157,14 +155,13 @@ impl Session {
     ) -> Result<HashMap<String, Vec<f32>>, SessionError> {
         let device = &self.device;
         let queue = &self.queue;
-        let builders = &self.builders;
-        let inner_infos = &self.buffers;
+        let buffers = &self.optimized_model.buffers;
         let outputs = &self.outputs;
 
-        // Copy input data
+        // Copy input data to the GPU buffer where our first node will read it
         for (input, data) in inputs {
             queue.write_buffer(
-                inner_infos
+                buffers
                     .get(&input)
                     .ok_or(SessionError::InvalidInput(input))?,
                 0,
@@ -176,9 +173,8 @@ impl Session {
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        for builder in builders {
-            let (x, y, z) = builder.threads;
-
+        // Sequentially execute each node (compiled to a shader 'builder')
+        for builder in &self.optimized_model.builders {
             let mut cpass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&builder.pipeline);
@@ -196,7 +192,7 @@ impl Session {
             let output_name = output.get_name();
 
             // Copy the output data into the staging buffer.
-            let buffer = inner_infos
+            let buffer = buffers
                 .get(output_name)
                 .ok_or_else(|| SessionError::InvalidOutput(output_name.to_string()))?;
 

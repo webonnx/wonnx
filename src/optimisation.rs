@@ -135,11 +135,16 @@ pub enum OptimizationError {
     SequencingFailed(#[from] SequenceError),
 }
 
+pub struct OptimizedModel {
+    pub buffers: HashMap<String, wgpu::Buffer>,
+    pub builders: Vec<EncoderBuilder>,
+}
+
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
     opset_version: i64,
-) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>), OptimizationError> {
+) -> Result<OptimizedModel, OptimizationError> {
     let initializers = initializers(graph);
     let mut shapes_info = dimensions_infos(graph);
 
@@ -285,5 +290,5 @@ pub fn load(
         node_index += sequence.nodes_consumed;
     }
 
-    Ok((buffers, builders))
+    Ok(OptimizedModel { buffers, builders })
 }
