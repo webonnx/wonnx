@@ -107,8 +107,7 @@ impl Session {
 
     // Create a Session given an ONNX model.
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session, SessionError> {
-        let promise = resource::request_device_queue();
-        let (device, queue) = promise.await;
+        let (device, queue) = resource::request_device_queue().await;
 
         // Find the version of the ONNX operator set this model is using (this is useful because some operators' specifications change over time).
         // Note, if any other op set than the ONNX operator set is referenced, we cannot run the model.
@@ -188,11 +187,12 @@ impl Session {
             for (index, bind_group) in builder.bind_groups.iter().enumerate() {
                 cpass.set_bind_group(index as u32, bind_group, &[]);
             }
+
+            let (x, y, z) = builder.threads;
             cpass.dispatch(x, y, z); // Number of cells to run, the (x,y,z) size of item being processed
         }
 
         queue.submit(Some(encoder.finish()));
-
         let mut results = HashMap::new();
 
         for output in outputs {
