@@ -221,14 +221,14 @@ pub fn compile(
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
         | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => (
             "endomorphism/map.wgsl".to_string(),
-            ceil(output_lengths[0], 4) as _,
+            ceil(output_lengths[0], 4 * 256) as _,
             1,
             1,
         ),
         // Copy data
         "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Unsqueeze" | "Identity" => (
             "endomorphism/copy.wgsl".to_string(),
-            ceil(output_lengths[0], 16) as _,
+            ceil(output_lengths[0], 16 * 256) as _,
             1,
             1,
         ),
@@ -398,7 +398,7 @@ pub fn compile(
             context.insert("alpha", &alpha);
             (
                 "endomorphism/activation.wgsl".to_string(),
-                ceil(output_lengths[0], 4) as _,
+                ceil(output_lengths[0], 4 * 256) as _,
                 1,
                 1,
             )
