@@ -10,6 +10,106 @@ fn to_wgsl_variable_name(input_or_output_name: &str) -> String {
         + &input_or_output_name.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "")
 }
 
+lazy_static! {
+    // Templates for shader source code that we generate for nodes
+    pub static ref TEMPLATES: Tera = {
+        let mut tera = Tera::default();
+        tera.add_raw_template(
+            "endomorphism/activation.wgsl",
+            include_str!("../templates/endomorphism/activation.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "endomorphism/arithmetic.wgsl",
+            include_str!("../templates/endomorphism/arithmetic.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "endomorphism/batchnormalization.wgsl",
+            include_str!("../templates/endomorphism/batchnormalization.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "endomorphism/copy.wgsl",
+            include_str!("../templates/endomorphism/copy.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "endomorphism/softmax.wgsl",
+            include_str!("../templates/endomorphism/softmax.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "endomorphism/map.wgsl",
+            include_str!("../templates/endomorphism/map.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "matrix/concat.wgsl",
+            include_str!("../templates/matrix/concat.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "matrix/gemm_1.wgsl",
+            include_str!("../templates/matrix/gemm_1.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "matrix/gemm.wgsl",
+            include_str!("../templates/matrix/gemm.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "matrix/resize.wgsl",
+            include_str!("../templates/matrix/resize.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "matrix/split.wgsl",
+            include_str!("../templates/matrix/split.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "matrix/transpose.wgsl",
+            include_str!("../templates/matrix/transpose.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "pool/aggregate.wgsl",
+            include_str!("../templates/pool/aggregate.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "pool/conv_kernel_1.wgsl",
+            include_str!("../templates/pool/conv_kernel_1.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "pool/conv_kernel_3.wgsl",
+            include_str!("../templates/pool/conv_kernel_3.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "pool/conv.wgsl",
+            include_str!("../templates/pool/conv.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template("structs.wgsl", include_str!("../templates/structs.wgsl"))
+            .unwrap();
+        tera.add_raw_template(
+            "snippets/activation_vec.wgsl",
+            include_str!("../templates/snippets/activation_vec.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "snippets/activation_scalar.wgsl",
+            include_str!("../templates/snippets/activation_scalar.wgsl"),
+        )
+        .unwrap();
+        tera
+    };
+}
+
 pub struct CompiledNode {
     pub shader: String,
     pub threads: (u32, u32, u32),
@@ -52,7 +152,6 @@ pub enum CompileError {
 pub fn compile(
     node: &crate::onnx::NodeProto,
     shape_infos: &HashMap<String, Shape>,
-    tera: &Tera,
     opset_version: i64,
 ) -> Result<CompiledNode, CompileError> {
     // Escape unwanted characters
@@ -595,7 +694,7 @@ pub fn compile(
         op => return Err(CompileError::UnimplementedOp(op.to_string())),
     };
 
-    let shader = tera
+    let shader = TEMPLATES
         .render(&template, &context)
         .expect("failed to render shader");
 
