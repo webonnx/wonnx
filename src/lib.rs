@@ -86,6 +86,15 @@ pub enum SessionError {
 
     #[error("optimization failed: {0}")]
     OptimizationFailed(#[from] OptimizationError),
+
+    #[error("more than one ONNX opset was specified: {0} and {1}")]
+    DuplicateONNXOpset(i64, i64),
+
+    #[error("the model references an unknown opset: '{0}'")]
+    UnknownOpset(String),
+
+    #[error("the model did not reference a specific version of the ONNX opset")]
+    UnknownONNXOpsetVersion,
 }
 
 impl Session {
@@ -110,26 +119,24 @@ impl Session {
                 "" => {
                     // This is a reference to the ONNX specification op set
                     if let Some(onnx_version) = onnx_opset_version {
-                        panic!(
-                            "two onnx operator set versions specified (first is {}, second is {})",
-                            onnx_version,
-                            opset_import.get_version()
-                        );
+                        if opset_import.get_version() != onnx_version {
+                            return Err(SessionError::DuplicateONNXOpset(
+                                onnx_version,
+                                opset_import.get_version(),
+                            ));
+                        }
                     } else {
                         onnx_opset_version = Some(opset_import.get_version());
                     }
                 }
                 some_other_opset => {
-                    panic!(
-                        "the model references other op sets than the ONNX specified opset ({})",
-                        some_other_opset
-                    );
+                    return Err(SessionError::UnknownOpset(some_other_opset.to_string()));
                 }
             }
         }
 
-        let onnx_opset_version =
-            onnx_opset_version.expect("no ONNX opset was referenced by the model!");
+        // Optimize and compile the model graph to a set of buffers and 'builders' which can basically run GPU shader code referencing these buffers
+        let onnx_opset_version = onnx_opset_version.ok_or(SessionError::UnknownONNXOpsetVersion)?;
         let graph = model.get_graph();
         let optimized_model = optimisation::load(graph, &device, onnx_opset_version)?;
 
