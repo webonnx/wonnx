@@ -20,6 +20,7 @@ pub struct EncoderBuilder {
 }
 
 lazy_static! {
+    // Templates for shader source code that is generated for nodes
     pub static ref TEMPLATES: Tera = {
         let mut tera = Tera::default();
         tera.add_raw_template(
@@ -147,7 +148,6 @@ pub fn load(
 ) -> Result<OptimizedModel, OptimizationError> {
     let initializers = initializers(graph);
     let mut shapes_info = dimensions_infos(graph);
-
     let mut buffers = HashMap::new();
 
     for (input_name, input_shape) in shapes_info.iter() {
@@ -164,9 +164,7 @@ pub fn load(
 
     let base_nodes = graph.get_node();
     let n = base_nodes.len();
-
     let mut node_index = 0;
-
     let mut builders = vec![];
 
     let output_info = &graph.get_output().to_vec();
