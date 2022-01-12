@@ -197,7 +197,7 @@ fn test_matmul_square_matrix() {
 |<a href="#GatherElements">GatherElements</a>|<a href="Changelog.md#GatherElements-13">13</a>, <a href="Changelog.md#GatherElements-11">11</a>|
 |<a href="#GatherND">GatherND</a>|<a href="Changelog.md#GatherND-13">13</a>, <a href="Changelog.md#GatherND-12">12</a>, <a href="Changelog.md#GatherND-11">11</a>|
 |<a href="#Gemm">Gemm</a>|<a href="Changelog.md#Gemm-13">13</a>, <a href="Changelog.md#Gemm-11">11</a>, <a href="Changelog.md#Gemm-9">9</a>, <a href="Changelog.md#Gemm-7">7</a>, <a href="Changelog.md#Gemm-6">6</a>, <a href="Changelog.md#Gemm-1">1</a>|✅|
-|<a href="#GlobalAveragePool">GlobalAveragePool</a>|<a href="Changelog.md#GlobalAveragePool-1">1</a>|
+|<a href="#GlobalAveragePool">GlobalAveragePool</a>|<a href="Changelog.md#GlobalAveragePool-1">1</a>|✅|
 |<a href="#GlobalLpPool">GlobalLpPool</a>|<a href="Changelog.md#GlobalLpPool-2">2</a>, <a href="Changelog.md#GlobalLpPool-1">1</a>|
 |<a href="#GlobalMaxPool">GlobalMaxPool</a>|<a href="Changelog.md#GlobalMaxPool-1">1</a>|
 |<a href="#Greater">Greater</a>|<a href="Changelog.md#Greater-13">13</a>, <a href="Changelog.md#Greater-9">9</a>, <a href="Changelog.md#Greater-7">7</a>, <a href="Changelog.md#Greater-1">1</a>|✅|

@@ -319,13 +319,29 @@ pub fn compile(
                 1,
             )
         }
-        op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish") => {
+        op
+        @
+        ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
+        | "GlobalAveragePool") => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_shape[0].rank() == 4);
 
+            // GlobalAveragePool is equivalent to AveragePool, with the kernel shape set to the size of the input tensor
+            // See https://github.com/onnx/onnx/blob/main/docs/Operators.md#globalaveragepool
+            // Other attributes are not supported and also not relevant, and are simply ignored
+            let is_global_average_pool = op == "GlobalAveragePool";
+            if is_global_average_pool {
+                // Generate shader code as if this were a regular AveragePool
+                context.insert("op_type", "AveragePool");
+            }
+
             let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node)?;
             let dilations = get_attribute("dilations", Some(vec![1, 1]), node)?;
-            let kernel_shape = get_attribute::<Vec<i64>>("kernel_shape", None, node)?;
+            let kernel_shape = if is_global_average_pool {
+                vec![input_shape[0].dim(2) as i64, input_shape[0].dim(3) as i64]
+            } else {
+                get_attribute::<Vec<i64>>("kernel_shape", None, node)?
+            };
             let strides = get_attribute("strides", Some(vec![1, 1]), node)?;
             let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node)?;
 
@@ -388,7 +404,7 @@ pub fn compile(
 
             // GLSL shader for convolution computation
             match op {
-                "MaxPool" | "AveragePool" => (
+                "MaxPool" | "AveragePool" | "GlobalAveragePool" => (
                     "pool/aggregate.wgsl".to_string(),
                     ceil(output_lengths[0], 1024) as _,
                     1,
