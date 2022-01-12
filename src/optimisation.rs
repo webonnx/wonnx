@@ -9,7 +9,6 @@ use crate::{
 use std::{borrow::Cow, collections::HashMap};
 
 use log::info;
-use tera::Tera;
 use thiserror::Error;
 use wgpu::BufferUsages;
 
@@ -17,105 +16,6 @@ pub struct EncoderBuilder {
     pub pipeline: wgpu::ComputePipeline,
     pub bind_groups: Vec<wgpu::BindGroup>,
     pub threads: (u32, u32, u32),
-}
-
-lazy_static! {
-    pub static ref TEMPLATES: Tera = {
-        let mut tera = Tera::default();
-        tera.add_raw_template(
-            "endomorphism/activation.wgsl",
-            include_str!("../templates/endomorphism/activation.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "endomorphism/arithmetic.wgsl",
-            include_str!("../templates/endomorphism/arithmetic.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "endomorphism/batchnormalization.wgsl",
-            include_str!("../templates/endomorphism/batchnormalization.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "endomorphism/copy.wgsl",
-            include_str!("../templates/endomorphism/copy.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "endomorphism/softmax.wgsl",
-            include_str!("../templates/endomorphism/softmax.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "endomorphism/map.wgsl",
-            include_str!("../templates/endomorphism/map.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "matrix/concat.wgsl",
-            include_str!("../templates/matrix/concat.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "matrix/gemm_1.wgsl",
-            include_str!("../templates/matrix/gemm_1.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "matrix/gemm.wgsl",
-            include_str!("../templates/matrix/gemm.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "matrix/resize.wgsl",
-            include_str!("../templates/matrix/resize.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "matrix/split.wgsl",
-            include_str!("../templates/matrix/split.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "matrix/transpose.wgsl",
-            include_str!("../templates/matrix/transpose.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "pool/aggregate.wgsl",
-            include_str!("../templates/pool/aggregate.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "pool/conv_kernel_1.wgsl",
-            include_str!("../templates/pool/conv_kernel_1.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "pool/conv_kernel_3.wgsl",
-            include_str!("../templates/pool/conv_kernel_3.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "pool/conv.wgsl",
-            include_str!("../templates/pool/conv.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template("structs.wgsl", include_str!("../templates/structs.wgsl"))
-            .unwrap();
-        tera.add_raw_template(
-            "snippets/activation_vec.wgsl",
-            include_str!("../templates/snippets/activation_vec.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "snippets/activation_scalar.wgsl",
-            include_str!("../templates/snippets/activation_scalar.wgsl"),
-        )
-        .unwrap();
-        tera
-    };
 }
 
 const MAX_BINDINGS_PER_GROUP: usize = 4;
@@ -135,14 +35,18 @@ pub enum OptimizationError {
     SequencingFailed(#[from] SequenceError),
 }
 
+pub struct OptimizedModel {
+    pub buffers: HashMap<String, wgpu::Buffer>,
+    pub builders: Vec<EncoderBuilder>,
+}
+
 pub fn load(
     graph: &crate::onnx::GraphProto,
     device: &wgpu::Device,
     opset_version: i64,
-) -> Result<(HashMap<String, wgpu::Buffer>, Vec<EncoderBuilder>), OptimizationError> {
+) -> Result<OptimizedModel, OptimizationError> {
     let initializers = initializers(graph);
     let mut shapes_info = dimensions_infos(graph);
-
     let mut buffers = HashMap::new();
 
     for (input_name, input_shape) in shapes_info.iter() {
@@ -159,9 +63,7 @@ pub fn load(
 
     let base_nodes = graph.get_node();
     let n = base_nodes.len();
-
     let mut node_index = 0;
-
     let mut builders = vec![];
 
     let output_info = &graph.get_output().to_vec();
@@ -184,8 +86,7 @@ pub fn load(
         )?;
 
         let current_node = sequence.node;
-        let CompiledNode { shader, threads } =
-            compile(&current_node, &shapes_info, &TEMPLATES, opset_version)?;
+        let CompiledNode { shader, threads } = compile(&current_node, &shapes_info, opset_version)?;
         info!("shader: {}", shader);
 
         // Create buffers for all outputs of this node
@@ -285,5 +186,5 @@ pub fn load(
         node_index += sequence.nodes_consumed;
     }
 
-    Ok((buffers, builders))
+    Ok(OptimizedModel { buffers, builders })
 }

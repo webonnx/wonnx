@@ -28,6 +28,9 @@ pub struct Sequence {
     pub nodes_consumed: usize,
 }
 
+/* This function will take in a list of nodes and their op names, and will consume one or more nodes from the front of
+the list and return a single node representing the removed node(s), as well as the number of nodes consumed from the
+sequence. This function can coalesce or even skip certain nodes. */
 pub fn sequence(
     names: &[&str],
     nodes: &[NodeProto],
@@ -36,6 +39,7 @@ pub fn sequence(
     inner_infos: &mut HashMap<String, Buffer>,
     shapes_info: &mut HashMap<String, Shape>,
 ) -> Result<Sequence, SequenceError> {
+    assert_eq!(names.len(), nodes.len());
     let inputs = nodes[0].get_input();
 
     Ok(match names {

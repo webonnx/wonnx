@@ -153,6 +153,7 @@ pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
     }
 }
 
+/// Divide a number by the indicated dividend, then round up to the next multiple of the dividend if there is a rest.
 pub fn ceil(num: u64, div: u64) -> u64 {
     num / div + (num % div != 0) as u64
 }
@@ -222,6 +223,7 @@ pub fn initializers(graph_proto: &onnx::GraphProto) -> HashMap<String, &[u8]> {
     }
     initializers
 }
+
 // TODO: Make dimension optional
 pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     let mut dim_value = vec![];
