@@ -14,7 +14,6 @@ exclude = [
     "coverage/**/**",
     "examples/**/*", 
     "target/**/*",
-    "templates/**/**",
     "tests/**/*",
     "Cargo.lock",
     "CODE_OF_CONDUCT.md",
