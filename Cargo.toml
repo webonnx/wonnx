@@ -1,6 +1,6 @@
 [package]
 name = "wonnx"
-version = "0.2.3"
+version = "0.2.4"
 authors = ["haixuanTao <tao.xavier@outlook.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -24,7 +24,7 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu= "0.11.1"
+wgpu= "0.12.0"
 bytemuck = "1.7.2"
 env_logger = "0.9.0"
 pollster = "0.2.4"

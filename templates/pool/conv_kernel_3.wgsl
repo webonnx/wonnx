@@ -1,6 +1,5 @@
 {%- include "structs.wgsl" -%}
 
-[[block]]
 struct ArrayMatrix3 {
     data: [[stride(48)]] array<mat3x3<f32>>;
 }; // this is used as both input and output for convenience
