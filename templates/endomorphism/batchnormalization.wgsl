@@ -1,7 +1,6 @@
 
 {%- include "structs.wgsl" -%}
 
-[[block]]
 struct Block {
     data: [[stride({{ elem_stride }})]] array<{{ elem_type }}>;
 }; 
