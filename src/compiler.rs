@@ -522,9 +522,24 @@ pub fn compile(
                 _ => return Err(CompileError::InvalidOperation(op.to_string())),
             }
         }
-        "Gemm" | "MatMul" => {
+        op @ ("Gemm" | "MatMul") => {
             let alpha = get_attribute("alpha", Some(1.0), node)?;
             let beta = get_attribute("beta", Some(1.0), node)?;
+
+            // Whether A resp. B should be transposed, or C should be broadcast (default: 0 = false)
+            if op == "Gemm" {
+                let transpose_a = get_attribute("transA", Some(0), node)?;
+                let transpose_b = get_attribute("transB", Some(0), node)?;
+                let broadcast = get_attribute("broadcast", Some(0), node)?;
+
+                if transpose_a != 0 || transpose_b != 0 || broadcast != 0 {
+                    return Err(CompileError::UnimplementedVariant {
+                        variant: "Gemm with transA/transB/broadcast not equal to zero".to_string(),
+                        op: op.to_string(),
+                    });
+                }
+            }
+
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
