@@ -18,7 +18,7 @@ const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 #[derive(Debug, Serialize, Clone)]
 #[serde(transparent)]
 pub struct Shape {
-    dims: Vec<u64>,
+    pub dims: Vec<u64>,
 }
 
 impl Shape {
