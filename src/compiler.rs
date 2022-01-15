@@ -418,9 +418,7 @@ pub fn compile(
                 1,
             )
         }
-        op
-        @
-        ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
+        op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
         | "GlobalAveragePool") => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_shape[0].rank() == 4);
@@ -629,7 +627,7 @@ pub fn compile(
                         _ => {
                             return Err(CompileError::UnimplementedVariant {
                                 op: "Resize".to_string(),
-                                variant: format!("nearest_mode={}", nearest_mode.to_string()),
+                                variant: format!("nearest_mode={}", nearest_mode),
                             })
                         }
                     }
