@@ -164,7 +164,7 @@ fn test_matmul_square_matrix() {
 |<a href="#AveragePool">AveragePool</a>|<a href="Changelog.md#AveragePool-11">11</a>, <a href="Changelog.md#AveragePool-10">10</a>, <a href="Changelog.md#AveragePool-7">7</a>, <a href="Changelog.md#AveragePool-1">1</a>|✅|
 |<a href="#BatchNormalization">BatchNormalization</a>|<a href="Changelog.md#BatchNormalization-15">15</a>, <a href="Changelog.md#BatchNormalization-14">14</a>, <a href="Changelog.md#BatchNormalization-9">9</a>, <a href="Changelog.md#BatchNormalization-7">7</a>, <a href="Changelog.md#BatchNormalization-6">6</a>, <a href="Changelog.md#BatchNormalization-1">1</a>|✅|
 |<a href="#BitShift">BitShift</a>|<a href="Changelog.md#BitShift-11">11</a>|
-|<a href="#Cast">Cast</a>|<a href="Changelog.md#Cast-13">13</a>, <a href="Changelog.md#Cast-9">9</a>, <a href="Changelog.md#Cast-6">6</a>, <a href="Changelog.md#Cast-1">1</a>|
+|<a href="#Cast">Cast</a>|<a href="Changelog.md#Cast-13">13</a>, <a href="Changelog.md#Cast-9">9</a>, <a href="Changelog.md#Cast-6">6</a>, <a href="Changelog.md#Cast-1">1</a>|✅|
 |<a href="#Ceil">Ceil</a>|<a href="Changelog.md#Ceil-13">13</a>, <a href="Changelog.md#Ceil-6">6</a>, <a href="Changelog.md#Ceil-1">1</a>|✅|
 |<a href="#Clip">Clip</a>|<a href="Changelog.md#Clip-13">13</a>, <a href="Changelog.md#Clip-12">12</a>, <a href="Changelog.md#Clip-11">11</a>, <a href="Changelog.md#Clip-6">6</a>, <a href="Changelog.md#Clip-1">1</a>|✅|
 |<a href="#Compress">Compress</a>|<a href="Changelog.md#Compress-11">11</a>, <a href="Changelog.md#Compress-9">9</a>|

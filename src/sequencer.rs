@@ -112,7 +112,8 @@ pub fn sequence(
         | ["Unsqueeze", _next_op, ..]
         | ["Flatten", _next_op, ..]
         | ["Dropout", _next_op, ..]
-        | ["Reshape", _next_op, ..] => {
+        | ["Reshape", _next_op, ..]
+        | ["Cast", _next_op, ..] => {
             // Replace the input received from the identity op with the input the identity op takes
             let identity_input_name = &nodes[0].get_input()[0];
             let identity_output_name = &nodes[0].get_output()[0];

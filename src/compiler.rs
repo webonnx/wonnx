@@ -226,7 +226,7 @@ pub fn compile(
             1,
         ),
         // Copy data
-        "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Unsqueeze" | "Identity" => (
+        "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Unsqueeze" | "Identity" | "Cast" => (
             "endomorphism/copy.wgsl".to_string(),
             ceil(output_lengths[0], 16) as _,
             1,
