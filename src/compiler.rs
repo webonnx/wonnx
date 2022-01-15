@@ -418,9 +418,7 @@ pub fn compile(
                 1,
             )
         }
-        op
-        @
-        ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
+        op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
         | "GlobalAveragePool") => {
             // TODO: Conv only support NxCxHxW for the moment.
             debug_assert!(input_shape[0].rank() == 4);
