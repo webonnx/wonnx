@@ -37,7 +37,7 @@ pub fn sequence(
     device: &Device,
     initializers: &HashMap<String, &[u8]>,
     inner_infos: &mut HashMap<String, Buffer>,
-    shapes_info: &mut HashMap<String, Shape>,
+    _shapes_info: &mut HashMap<String, Shape>,
 ) -> Result<Sequence, SequenceError> {
     assert_eq!(names.len(), nodes.len());
     let inputs = nodes[0].get_input();
@@ -105,64 +105,6 @@ pub fn sequence(
             }
         }
 
-        /* These ops can simply be skipped if they are followed by another op. This is efficiently done by replacing the
-        input of the next op (which is the output of a skippable op) with the input of the skippable op itself. */
-        ["Identity", _next_op, ..]
-        | ["Squeeze", _next_op, ..]
-        | ["Unsqueeze", _next_op, ..]
-        | ["Flatten", _next_op, ..]
-        | ["Dropout", _next_op, ..]
-        | ["Reshape", _next_op, ..] => {
-            // Replace the input received from the identity op with the input the identity op takes
-            let identity_input_name = &nodes[0].get_input()[0];
-            let identity_output_name = &nodes[0].get_output()[0];
-
-            // The input to the identity op can still be an initializer
-            if let Some(data) = initializers.get(identity_input_name) {
-                inner_infos.insert(
-                    identity_input_name.to_string(),
-                    resource::create_buffer_init(
-                        device,
-                        data,
-                        identity_input_name,
-                        BufferUsages::STORAGE,
-                    ),
-                );
-            }
-
-            let mut node = nodes[1].clone();
-
-            let mut found = false;
-            for input in node.mut_input() {
-                if input == identity_output_name {
-                    if found {
-                        return Err(SequenceError::CullFailed);
-                    }
-                    *input = identity_input_name.clone();
-                    found = true;
-                } else if let Some(data) = initializers.get(input) {
-                    inner_infos.insert(
-                        input.to_string(),
-                        resource::create_buffer_init(device, data, input, BufferUsages::STORAGE),
-                    );
-                }
-            }
-
-            if found {
-                // Patch the dims of the re-used input
-                shapes_info.insert(
-                    identity_input_name.clone(),
-                    shapes_info.get(identity_output_name).unwrap().clone(),
-                );
-            } else {
-                return Err(SequenceError::CullFailed);
-            }
-
-            Sequence {
-                node,
-                nodes_consumed: 2,
-            }
-        }
         op @ (["Clip", ..] | ["Split", ..] | ["Resize", ..] | ["Reshape", ..]) => {
             // Remove non binding related input for those Op
             let mut inputs = inputs.iter();
