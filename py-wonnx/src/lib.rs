@@ -29,7 +29,7 @@ impl PySession {
         for (key, value) in map.iter() {
             inputs.insert(key.clone(), value.as_slice());
         }
-        let result = pollster::block_on(self.session.run(inputs)).unwrap();
+        let result = pollster::block_on(self.session.run(&inputs)).unwrap();
 
         Ok(result)
     }

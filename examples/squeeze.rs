@@ -16,20 +16,13 @@ use wonnx::WonnxError;
 // Args Management
 async fn run() {
     let probabilities = &execute_gpu().await.unwrap();
-
     let (_, probabilities) = probabilities.iter().next().unwrap();
-
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
-
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
     let class_labels = get_imagenet_labels();
 
     for i in 0..10 {
-        //      println!(
-        //          "probabilities[i*9..(i+1)*9]: {:#?}",
-        //          &probabilities[i * 12..(i + 1) * 12]
-        //      );
         println!(
             "Infered result: {} of class: {}",
             class_labels[probabilities[i].0], probabilities[i].0
@@ -46,7 +39,7 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, WonnxError> {
     let session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx").await?;
     let time_pre_compute = Instant::now();
     info!("Start Compute");
-    let result = session.run(input_data.clone()).await?;
+    let result = session.run(&input_data).await?;
     let time_post_compute = Instant::now();
     println!(
         "time: first_prediction: {:#?}",

@@ -3,12 +3,12 @@
 
 
 [[group(0), binding(0)]]
-var<storage, read> {{ inputs[0] }}: Array;
+var<storage, read> input_0: Array;
 
 
-{% for output in outputs %}
+{% for output in o_lens %}
 [[group({{ loop.index / 4 | int }}), binding({{ loop.index % 4}})]]
-var<storage, write> {{ output }}: Array;
+var<storage, write> output_{{ loop.index0 }}: Array;
 {% endfor %}
 
 // split.wgsl
@@ -28,7 +28,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         {% endif %}
         {%- endfor -%}
 
-{% for output in outputs %}
+{% for output in o_lens %}
 {%- if loop.first %}
     if (d_{{ axis }} < {{ split | first }}u) {
 
@@ -39,7 +39,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         d_{{ loop.index0 }} * {{ chunk }}u
         {%- endfor -%};
 
-	    {{ output }}.data[index] = {{ inputs[0] }}.data[gidx];
+	    output_{{ loop.index0 }}.data[index] = input_0.data[gidx];
     }
 {%- else %}
 {% set split_output = split | nth(n=loop.index0 -1) %}
@@ -56,7 +56,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         {%- endif -%}
         {%- endfor -%};
 
-	    {{ output }}.data[index] = {{ inputs[0] }}.data[gidx];
+	    output_{{ loop.index0 }}.data[index] = input_0.data[gidx];
     }
 {% endif %}
 {% endfor %}

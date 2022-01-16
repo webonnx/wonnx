@@ -15,7 +15,7 @@ fn test_relu() {
         "examples/data/models/single_relu.onnx",
     ))
     .expect("session did not create");
-    let result = pollster::block_on(session.run(input_data)).unwrap();
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     assert_eq!(result["y"], &[0.0, 1.0]);
 }
@@ -30,7 +30,7 @@ fn test_mnist() {
     ))
     .expect("Session did not create");
 
-    let result = pollster::block_on(session.run(input_data)).unwrap()["Plus214_Output_0"]
+    let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -46,7 +46,7 @@ fn test_mnist() {
     let image = load_image("3.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(session.run(input_data)).unwrap()["Plus214_Output_0"]
+    let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -62,7 +62,7 @@ fn test_mnist() {
     let image = load_image("5.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(session.run(input_data)).unwrap()["Plus214_Output_0"]
+    let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -78,7 +78,7 @@ fn test_mnist() {
     let image = load_image("7.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());
-    let result = pollster::block_on(session.run(input_data)).unwrap()["Plus214_Output_0"]
+    let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -104,7 +104,7 @@ fn test_squeeze() {
     ))
     .expect("session did not create");
     let result =
-        &pollster::block_on(session.run(input_data)).unwrap()["squeezenet0_flatten0_reshape0"];
+        &pollster::block_on(session.run(&input_data)).unwrap()["squeezenet0_flatten0_reshape0"];
     let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
 
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());

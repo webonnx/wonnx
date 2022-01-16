@@ -4,7 +4,6 @@ use serde_derive::Serialize;
 use crate::onnx;
 use crate::onnx::OperatorSetIdProto;
 use crate::onnx::ValueInfoProto;
-use std::collections::HashMap;
 use std::convert::From;
 use std::convert::Into;
 use std::fmt::Display;
@@ -13,12 +12,12 @@ use thiserror::Error;
 
 /* Minimum size of a buffer you can create with wgpu. Creating buffers smaller than this leads to panic "Validation
 * error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
-const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
+pub const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(transparent)]
 pub struct Shape {
-    dims: Vec<u64>,
+    pub dims: Vec<u64>,
 }
 
 impl Shape {
@@ -158,15 +157,6 @@ pub fn ceil(num: u64, div: u64) -> u64 {
     num / div + (num % div != 0) as u64
 }
 
-pub fn rename_attribute(
-    attribute: &onnx::AttributeProto,
-    new_name: String,
-) -> onnx::AttributeProto {
-    let mut attr = attribute.clone();
-    attr.set_name(new_name);
-    attr
-}
-
 impl ValueInfoProto {
     pub fn get_shape(&self) -> Shape {
         Shape::from(
@@ -180,48 +170,6 @@ impl ValueInfoProto {
                 .as_slice(),
         )
     }
-}
-
-pub fn dimensions_infos(graph_proto: &onnx::GraphProto) -> HashMap<String, Shape> {
-    let mut shapes_info = HashMap::new();
-
-    for info in graph_proto.get_input() {
-        let shape = info.get_shape();
-        shapes_info.insert(info.get_name().to_string(), shape);
-    }
-
-    for info in graph_proto.get_output() {
-        let shape = info.get_shape();
-        shapes_info.insert(info.get_name().to_string(), shape);
-    }
-
-    for info in graph_proto.get_value_info() {
-        let shape = info.get_shape();
-        shapes_info.insert(info.get_name().to_string(), shape);
-    }
-
-    for info in graph_proto.get_initializer() {
-        let shape = Shape::from(info.get_dims());
-        shapes_info.insert(info.get_name().to_string(), shape);
-    }
-
-    shapes_info
-}
-
-pub fn initializers(graph_proto: &onnx::GraphProto) -> HashMap<String, &[u8]> {
-    let mut initializers = HashMap::new();
-    for initializer in graph_proto.get_initializer() {
-        let input = initializer.get_name().to_string();
-        let data = initializer.get_float_data();
-        let raw_data = if !data.is_empty() {
-            bytemuck::cast_slice(data)
-        } else {
-            initializer.get_raw_data()
-        };
-
-        initializers.insert(input, raw_data);
-    }
-    initializers
 }
 
 // TODO: Make dimension optional
@@ -434,7 +382,7 @@ mod tests {
         let session = pollster::block_on(crate::Session::from_model(conv_model))
             .expect("Session did not create");
 
-        let result = pollster::block_on(session.run(input_data)).unwrap();
+        let result = pollster::block_on(session.run(&input_data)).unwrap();
 
         assert_eq!(
             result["Y"],

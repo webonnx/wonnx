@@ -1,21 +1,21 @@
 {%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> {{ inputs[0] }}: ArrayVector;
+var<storage, read> input_0: ArrayVector;
 
 [[group(0), binding(1)]]
-var<storage, read> {{ inputs[1] }}: Array;
+var<storage, read> input_1: Array;
 
-{%- if inputs | length == 3 -%} // Bias
+{%- if i_lens | length == 3 -%} // Bias
 [[group(0), binding(2)]]
-var<storage, read> {{ inputs[2] }}: Array;
+var<storage, read> input_2: Array;
 
 [[group(0), binding(3)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 
 {%- else -%}
 [[group(0), binding(2)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 
 {%- endif -%}  
 
@@ -31,13 +31,13 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         let index_left = k; 
         let index_right = k * {{ i_shape[1][1] * 4 }}u + gidx; 
 
-        let vec_left = {{ inputs[0] }}.data[index_left];
+        let vec_left = input_0.data[index_left];
 
         let vec_right = vec4<f32>(
-                              {{ inputs[1] }}.data[index_right], 
-                              {{ inputs[1] }}.data[index_right + {{ i_shape[1][1] }}u],
-                              {{ inputs[1] }}.data[index_right + {{ 2 * i_shape[1][1] }}u],
-                              {{ inputs[1] }}.data[index_right + {{ 3 * i_shape[1][1] }}u],
+                              input_1.data[index_right], 
+                              input_1.data[index_right + {{ i_shape[1][1] }}u],
+                              input_1.data[index_right + {{ 2 * i_shape[1][1] }}u],
+                              input_1.data[index_right + {{ 3 * i_shape[1][1] }}u],
                           );
 	
         product = dot(vec_left, vec_right);
@@ -45,8 +45,8 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	    tmpsum = tmpsum + product;
     }
     
-    {{ outputs[0] }}.data[gidx] = {%- if alpha != 1 -%}{{ alpha | float }} * {%- endif -%}tmpsum
-{%- if inputs | length == 3 -%}
- + {%- if beta != 1 -%}{{ beta | float }} * {%- endif -%}{{ inputs[2] }}.data[gidx];
+    output_0.data[gidx] = {%- if alpha != 1 -%}{{ alpha | float }} * {%- endif -%}tmpsum
+{%- if i_lens | length == 3 -%}
+ + {%- if beta != 1 -%}{{ beta | float }} * {%- endif -%}input_2.data[gidx];
 {%- endif -%};
 }

@@ -2,10 +2,10 @@
 {%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> {{ inputs[0] }}: Array;
+var<storage, read> input_0: Array;
 
 [[group(0), binding(1)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
@@ -19,21 +19,21 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	// Therefore we use log(0.0) instead which returns -Infinity
 	var max_element: f32 = log(0.0);
 	for(var k: u32 = 0u; k < {{ i_lens[0] }}u; k = k + 1u) {
-		let element = {{ inputs[0] }}.data[gidx + k];
+		let element = input_0.data[gidx + k];
 		max_element = max(max_element, element);
 	}
 
 	// Calculate sum(exp(input - max(input)))
 	var sum: f32 = 0.0;
 	for(var k: u32 = 0u; k < {{ i_lens[0] }}u; k = k + 1u) {
-		let element = {{ inputs[0] }}.data[gidx + k];
+		let element = input_0.data[gidx + k];
 		sum  = sum + exp(element - max_element);
 	}
 
 	// Calculate elements and write to output
 	for(var k: u32 = 0u; k < {{ i_lens[0] }}u; k = k + 1u) {
-		let element = {{ inputs[0] }}.data[gidx + k];
-		{{ outputs[0] }}.data[gidx + k] = exp(element - max_element) / sum;
+		let element = input_0.data[gidx + k];
+		output_0.data[gidx + k] = exp(element - max_element) / sum;
 	}
 	{% endif %}
 }

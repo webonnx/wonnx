@@ -1,13 +1,8 @@
-// use approx::assert_relative_eq;
 use std::collections::HashMap;
-// use wasm_bindgen_test::*;
 use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
-// Indicates a f32 overflow in an intermediate Collatz value
 
 #[test]
 fn test_matmul_square_matrix() {
-    // USER INPUT
-
     let n = 16;
     let mut input_data = HashMap::new();
 
@@ -40,19 +35,18 @@ fn test_matmul_square_matrix() {
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let result = pollster::block_on(session.run(input_data)).unwrap();
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     assert_eq!(result["C"].as_slice(), sum.as_slice().unwrap());
 }
 
 #[test]
 fn test_two_transposes() {
-    // USER INPUT
-
     let mut input_data = HashMap::new();
     let data = (0..2 * 3 * 4).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice());
 
+    // Model: X -> Transpose -> Y -> Transpose -> Z; X==Z
     let model = model(graph(
         vec![tensor("X", &[2, 3, 4])],
         vec![tensor("Z", &[2, 3, 4])],
@@ -78,15 +72,13 @@ fn test_two_transposes() {
 
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
-    let result = pollster::block_on(session.run(input_data)).unwrap();
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     assert_eq!(result["Z"], data);
 }
 
 #[test]
 fn test_split() {
-    // USER INPUT
-
     let mut input_data = HashMap::new();
     let data = (1..=2 * 6).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice());
@@ -107,7 +99,7 @@ fn test_split() {
 
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
-    let result = pollster::block_on(session.run(input_data)).unwrap();
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     let test_y = vec![1., 2., 3., 7., 8., 9.];
     assert_eq!(result["Y"], test_y);
@@ -117,8 +109,7 @@ fn test_split() {
 
 #[test]
 fn test_resize() {
-    // USER INPUT
-
+    let _ = env_logger::builder().is_test(true).try_init();
     let mut input_data = HashMap::new();
     let data = (1..=2 * 4).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice());
@@ -129,7 +120,7 @@ fn test_resize() {
         vec![],
         vec![initializer("scales", vec![1., 1., 0.6, 0.6])],
         vec![node(
-            vec!["X", "scales"],
+            vec!["X", "" /* roi */, "scales"],
             vec!["Y"],
             "Resize",
             "Resize",
@@ -139,7 +130,7 @@ fn test_resize() {
 
     let session = pollster::block_on(wonnx::Session::from_model(downsampling_model))
         .expect("session did not create");
-    let result = pollster::block_on(session.run(input_data)).unwrap();
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     let test_y = vec![1., 3.];
     assert_eq!(result["Y"], test_y);
@@ -164,7 +155,7 @@ fn test_resize() {
 
     let session = pollster::block_on(wonnx::Session::from_model(upsampling_model))
         .expect("session did not create");
-    let _result = pollster::block_on(session.run(input_data)).unwrap();
+    let _result = pollster::block_on(session.run(&input_data)).unwrap();
 
     //let test_y = vec![
     //    1., 1., 1., 2., 2., 2., 1., 1., 1., 2., 2., 2., 3., 3., 3., 4., 4., 4., 3., 3., 3., 4., 4.,

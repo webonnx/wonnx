@@ -105,57 +105,6 @@ pub fn sequence(
             }
         }
 
-        op @ (["Clip", ..] | ["Split", ..] | ["Resize", ..] | ["Reshape", ..]) => {
-            // Remove non binding related input for those Op
-            let mut inputs = inputs.iter();
-
-            // Remove the first input.
-            let input = inputs.next().unwrap();
-            if let Some(data) = initializers.get(input) {
-                inner_infos.insert(
-                    input.to_string(),
-                    resource::create_buffer_init(device, data, input, BufferUsages::STORAGE),
-                );
-            }
-
-            let mut node = nodes[0].clone();
-            node.set_input(RepeatedField::from(vec![input.clone()]));
-            // Transform some intput into attributes for optimisation.
-            let mut attributes = node.take_attribute();
-
-            for input in inputs {
-                match (op, input.as_str()) {
-                    (["Split", ..], "split") => {
-                        let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
-                        attributes.push(attribute(input, value));
-                    }
-                    (["Resize", ..], "roi") => {
-                        let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
-                        attributes.push(attribute(input, value));
-                    }
-                    (["Resize", ..], "scales") => {
-                        let value: Vec<f32> = cast_slice(initializers.get(input).unwrap()).to_vec();
-                        attributes.push(attribute(input, value));
-                    }
-                    (["Reshape", ..], "shape") => {
-                        let value: Vec<f32> = cast_slice(initializers.get(input).unwrap()).to_vec();
-                        attributes.push(attribute(input, value));
-                    }
-                    (["Resize", ..], "sizes") => {
-                        let value: Vec<i64> = cast_slice(initializers.get(input).unwrap()).to_vec();
-                        attributes.push(attribute(input, value));
-                    }
-                    _ => (),
-                }
-            }
-
-            node.set_attribute(attributes);
-
-            Sequence {
-                node,
-                nodes_consumed: 1,
-            }
-        }
         op @ (["Mul", ..] | ["Add", ..]) => {
             let mut ending_input = vec![];
             let mut attributes = vec![];
@@ -196,33 +145,6 @@ pub fn sequence(
             node.set_input(RepeatedField::from(ending_input));
             Sequence {
                 node,
-                nodes_consumed: 1,
-            }
-        }
-        [..] => {
-            for input in inputs {
-                if let Some(data) = initializers.get(input) {
-                    // debug_assert!(!data.is_empty(), "Not inserting input: {}", input);
-                    let mut data = data.to_vec();
-
-                    // Prevent issue with minimum buffer size for binding enforced by wgpu
-                    if data.len() < 16 {
-                        data.resize(16, 0);
-                    }
-                    inner_infos.insert(
-                        input.to_string(),
-                        resource::create_buffer_init(
-                            device,
-                            data.as_slice(),
-                            input,
-                            BufferUsages::STORAGE,
-                        ),
-                    );
-                }
-            }
-
-            Sequence {
-                node: nodes[0].clone(),
                 nodes_consumed: 1,
             }
         }

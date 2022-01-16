@@ -12,8 +12,8 @@
     {{ activation_output }} = log(1.0 + exp({{ activation_input }}));
 
 {%- elif activation_type == "Clip" -%}
-    let min_clip = {{ inputs[1] }}.data[0u];
-    let max_clip = {{ inputs[2] }}.data[0u];
+    let min_clip = input_1.data[0u];
+    let max_clip = input_2.data[0u];
     {{ activation_output }} = clamp(
         {{ activation_input }}, 
         vec4<f32>(min_clip, min_clip, min_clip, min_clip),

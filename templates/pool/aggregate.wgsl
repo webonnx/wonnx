@@ -1,10 +1,10 @@
 {%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> {{ inputs[0] }}: Array;
+var<storage, read> input_0: Array;
 
 [[group(0), binding(1)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 
 // aggregate.wgsl
 [[stage(compute), workgroup_size(256, 1, 1)]]
@@ -34,10 +34,10 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
                         let tmp_index  = base_index + tmp_y * {{ original_width }}u + tmp_x;
                         let vector = vec4<f32>(
-                                {{ inputs[0] }}.data[tmp_index],
-                                {{ inputs[0] }}.data[tmp_index + {{ i_chunks[0][1] }}u],
-                                {{ inputs[0] }}.data[tmp_index + {{ 2 * i_chunks[0][1] }}u],
-                                {{ inputs[0] }}.data[tmp_index + {{ 3 * i_chunks[0][1] }}u],
+                                input_0.data[tmp_index],
+                                input_0.data[tmp_index + {{ i_chunks[0][1] }}u],
+                                input_0.data[tmp_index + {{ 2 * i_chunks[0][1] }}u],
+                                input_0.data[tmp_index + {{ 3 * i_chunks[0][1] }}u],
                         );
 {%- if op_type == "MaxPool" -%}
 
@@ -59,7 +59,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {
                 let index = base_index + index_vec * {{ o_chunks[0][1] }}u;
 
-                {{ outputs[0] }}.data[index] = result[index_vec];
+                output_0.data[index] = result[index_vec];
         }
         }
 }

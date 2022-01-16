@@ -1,20 +1,20 @@
 {%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> {{ inputs[0] }}: Array;
+var<storage, read> input_0: Array;
 
 [[group(0), binding(1)]]
-var<storage, read> {{ inputs[1] }}: ArrayMatrix;
+var<storage, read> input_1: ArrayMatrix;
 
-{%- if inputs | length == 3 -%} // Bias
+{%- if i_lens | length == 3 -%} // Bias
 [[group(0), binding(2)]]
-var<storage, read> {{ inputs[2] }}: ArrayVector;
+var<storage, read> input_2: ArrayVector;
 
 [[group(0), binding(3)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 {%- else -%}
 [[group(0), binding(2)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 {%- endif %}  
 
 // conv_kernel_1.wgsl
@@ -38,19 +38,19 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                 let base_index = root_index + c * {{ 16 * i_chunks[0][1] }}u;
                 var base_kernel_index = root_kernel_index + c;
                 
-                var matrix_0 = {{ inputs[1] }}.data[base_kernel_index];
-                var matrix_1 = {{ inputs[1] }}.data[base_kernel_index + {{ channel / 16 }}u];
-                var matrix_2 = {{ inputs[1] }}.data[base_kernel_index + {{ 2 * channel / 16 }}u];
-                var matrix_3 = {{ inputs[1] }}.data[base_kernel_index + {{ 3 * channel / 16 }}u];
+                var matrix_0 = input_1.data[base_kernel_index];
+                var matrix_1 = input_1.data[base_kernel_index + {{ channel / 16 }}u];
+                var matrix_2 = input_1.data[base_kernel_index + {{ 2 * channel / 16 }}u];
+                var matrix_3 = input_1.data[base_kernel_index + {{ 3 * channel / 16 }}u];
 
                 for(var index_c_vec: u32 = 0u; index_c_vec < 4u; index_c_vec = index_c_vec + 1u) {
                         
                         let base_index = base_index + index_c_vec * {{ 4 * i_chunks[0][1] }}u;
                         let tmp_vec = vec4<f32>(
-                                {{ inputs[0] }}.data[base_index],
-                                {{ inputs[0] }}.data[base_index + {{ i_chunks[0][1] }}u],
-                                {{ inputs[0] }}.data[base_index + {{ 2 * i_chunks[0][1] }}u],
-                                {{ inputs[0] }}.data[base_index + {{ 3 * i_chunks[0][1] }}u],
+                                input_0.data[base_index],
+                                input_0.data[base_index + {{ i_chunks[0][1] }}u],
+                                input_0.data[base_index + {{ 2 * i_chunks[0][1] }}u],
+                                input_0.data[base_index + {{ 3 * i_chunks[0][1] }}u],
                         );
                 
                         result = tmp_vec * mat4x4<f32>(
@@ -62,8 +62,8 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                 }
 	}
 
-        {% if inputs | length == 3 -%}
-        result = result + {{ inputs[2] }}.data[m];
+        {% if i_lens | length == 3 -%}
+        result = result + input_2.data[m];
         {%- endif %}
 
 {% set activation_input = "result" %}
@@ -75,7 +75,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {
                 let index = base_index + index_vec * {{ o_chunks[0][1] }}u;
 
-                {{ outputs[0] }}.data[index] = result[index_vec];
+                output_0.data[index] = result[index_vec];
         }
         }
 }
