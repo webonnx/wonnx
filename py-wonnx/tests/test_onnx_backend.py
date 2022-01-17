@@ -35,20 +35,39 @@ import numpy  # type: ignore
 # This is a pytest magic variable to load extra plugins
 pytest_plugins = ("onnx.backend.test.report",)
 
+import wonnx
+import numpy as np
+
 
 class DummyRep(BackendRep):
-    def __init__(self, inputs, outputs):
+    def __init__(self, inputs, outputs, outputs_shape, model):
         self.inputs = inputs
         self.outputs = outputs
-        self.model = model
+        self.outputs_shape = outputs_shape
+        self.session = wonnx.PySession.from_bytes(onnx._serialize(model))
         pass
 
-    def run(self, inputs, **kwargs):
-        super(DummyRep, self).run(self.outputs, **kwargs)
+    def run(self, inputs, rtol=1.0, **kwargs):
 
-        return namedtupledict("Outputs", self.outputs)(
-            [[[0.0]] for output in inputs]
-        )
+        dicts = {}
+        for k, v in zip(self.inputs, inputs):
+            if isinstance(v, np.ndarray):
+                dicts[k] = v.flatten()
+            else:
+                tmp_v = np.array(v)
+                np.reshape(tmp_v, self.outputs_shape[k])
+                dicts[k] = tmp_v
+
+        results = self.session.run(dicts)
+
+        outputs = []
+        for item in results.items():
+            tmp_v = np.array(item[1])
+            print(self.outputs_shape[item[0]])
+            tmp_v = np.reshape(tmp_v, self.outputs_shape[item[0]])
+            tmp_v = tmp_v.astype("float32")
+            outputs.append(tmp_v)
+        return outputs
 
 
 class DummyBackend(onnx.backend.base.Backend):
@@ -67,6 +86,12 @@ class DummyBackend(onnx.backend.base.Backend):
         inputs = [input.name for input in model.graph.input]
         outputs = [output.name for output in model.graph.output]
 
+        outputs_shape = {}
+        for output in model.graph.output:
+            outputs_shape[output.name] = [
+                shape.dim_value for shape in output.type.tensor_type.shape.dim
+            ]
+
         if do_enforce_test_coverage_safelist(model):
             for node in model.graph.node:
                 for i, output in enumerate(node.output):
@@ -77,7 +102,13 @@ class DummyBackend(onnx.backend.base.Backend):
                     assert tt.elem_type != TensorProto.UNDEFINED
                     for dim in tt.shape.dim:
                         assert dim.WhichOneof("value") == "dim_value"
-        return DummyRep(inputs=inputs, outputs=outputs, model=model)
+
+        return DummyRep(
+            inputs=inputs,
+            outputs=outputs,
+            model=model,
+            outputs_shape=outputs_shape,
+        )
 
     @classmethod
     def supports_device(cls, device):  # type: (Text) -> bool

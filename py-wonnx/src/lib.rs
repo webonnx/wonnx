@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::collections::HashMap;
 
 use wonnx::Session;
 #[pyclass]
@@ -15,6 +14,12 @@ impl PySession {
     #[staticmethod]
     pub fn from_bytes(bytes: &[u8]) -> PyResult<Self> {
         let session = pollster::block_on(wonnx::Session::from_bytes(bytes)).unwrap();
+        Ok(PySession { session: session })
+    }
+
+    #[staticmethod]
+    pub fn from_path(path: &str) -> PyResult<Self> {
+        let session = pollster::block_on(wonnx::Session::from_path(path)).unwrap();
         Ok(PySession { session: session })
     }
 
