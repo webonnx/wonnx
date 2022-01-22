@@ -35,6 +35,22 @@ git clone https://github.com/haixuanTao/wonnx.git
 cargo run --example squeeze --release
 ```
 
+or with python. 
+
+```bash
+pip install wonnx
+```
+
+And then:
+
+```python
+session = wonnx.PySession.from_path(
+    "../examples/data/models/single_relu.onnx"
+)
+inputs = {"x": [-1.0, 2.0]}
+assert session.run(inputs) == {"y": [0.0, 2.0]}
+```
+
 ## Running a model from scratch
 
 - To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
