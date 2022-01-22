@@ -14,13 +14,13 @@ impl PySession {
     #[staticmethod]
     pub fn from_bytes(bytes: &[u8]) -> PyResult<Self> {
         let session = pollster::block_on(wonnx::Session::from_bytes(bytes)).unwrap();
-        Ok(PySession { session: session })
+        Ok(PySession { session })
     }
 
     #[staticmethod]
     pub fn from_path(path: &str) -> PyResult<Self> {
         let session = pollster::block_on(wonnx::Session::from_path(path)).unwrap();
-        Ok(PySession { session: session })
+        Ok(PySession { session })
     }
 
     pub fn run(&self, dict: &PyDict) -> PyResult<HashMap<String, Vec<f32>>> {
