@@ -42,4 +42,4 @@ jobs:
             --skip-existing \
             -o wheels \
             -i python \
-            --username haixuantao \
+            --username __token__ \

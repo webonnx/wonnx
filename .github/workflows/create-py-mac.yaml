@@ -41,4 +41,4 @@ jobs:
         with:
           maturin-version: 0.12.1
           command: publish
-          args: -m py-wonnx/Cargo.toml --no-sdist --universal2 -o wheels -i python -u haixuantao
+          args: -m py-wonnx/Cargo.toml --no-sdist --universal2 -o wheels -i python -u __token__
