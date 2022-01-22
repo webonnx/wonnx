@@ -2,6 +2,7 @@ import onnx
 import wonnx
 from onnx import helper
 from onnx import AttributeProto, TensorProto, GraphProto
+from torchvision import transforms
 
 import numpy as np
 import cv2
@@ -61,14 +62,27 @@ def test_mnist():
 
 def test_squeezenet():
 
-    image = cv2.imread("../examples/data/images/7.jpg")
-
+    image = cv2.imread("../examples/data/images/bald_eagle.jpeg")
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # apply transforms to the input image
+    transform = transforms.Compose(
+        [
+            transforms.ToPILImage(),
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+            ),
+        ]
+    )
+    input_tensor = transform(image)
     # Create the model (ModelProto)
 
     session = wonnx.PySession.from_path(
         "../examples/data/models/opt-squeeze.onnx"
     )
-    inputs = {"Input3": input.flatten().tolist()}
+    inputs = {"data": input_tensor.flatten().tolist()}
     assert (
-        np.argmax(session.run(inputs)["Plus214_Output_0"]) == 7
-    ), "MNIST does not work"
+        np.argmax(session.run(inputs)["squeezenet0_flatten0_reshape0"]) == 22
+    ), "Squeezenet does not work"
