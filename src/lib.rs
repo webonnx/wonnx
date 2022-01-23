@@ -105,6 +105,12 @@ impl Session {
         Session::from_model(model).await
     }
 
+    pub async fn from_bytes(bytes: &[u8]) -> Result<Session, SessionError> {
+        let model = onnx::ModelProto::parse_from_bytes(bytes)?;
+
+        Session::from_model(model).await
+    }
+
     // Create a Session given an ONNX model.
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session, SessionError> {
         let (device, queue) = resource::request_device_queue().await;
