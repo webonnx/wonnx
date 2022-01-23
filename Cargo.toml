@@ -2,7 +2,7 @@
 name = "wonnx"
 version = "0.2.4"
 authors = ["haixuanTao <tao.xavier@outlook.com>", "Tommy van der Vorst <tommy@pixelspark.nl>"]
-edition = "2021"
+edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "Wonnx is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
 repository = "https://github.com/haixuanTao/wonnx.git"
