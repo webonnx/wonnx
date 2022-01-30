@@ -244,10 +244,44 @@ impl<'model> Node<'model> {
     /// Create a new node from an existing definition, applying optimizations local to a single node
     fn new_optimized(
         definition: NodeDefinition<'model>,
-        inputs: Vec<Input<'model>>,
+        mut inputs: Vec<Input<'model>>,
     ) -> Result<Arc<Self>, OptimizerError> {
         if let NodeDefinition::Operator(op_index, op_def) = definition {
             match op_def.proto.get_op_type() {
+                "Conv" => {
+                    if inputs.len() > 2
+                        && get_attribute::<Vec<i64>>("kernel_shape", None, &op_def.proto)? == [3, 3]
+                        && (get_attribute("pads", Some(vec![0, 0, 0, 0]), &op_def.proto)?
+                            == [1, 1, 1, 1]
+                            || get_attribute(
+                                "auto_pad",
+                                Some("SAME_UPPER".to_string()),
+                                &op_def.proto,
+                            )? == "SAME_UPPER")
+                        && get_attribute("strides", Some(vec![1, 1]), &op_def.proto)? == [1, 1]
+                    {
+                        if let NodeDefinition::Tensor(idx, tensor) =
+                            inputs[1].source_node.definition
+                        {
+                            let data = tensor.get_float_data();
+                            let raw_data = if !data.is_empty() {
+                                bytemuck::cast_slice(data)
+                            } else {
+                                tensor.get_raw_data()
+                            };
+
+                            // Set data of tensor = padding(data, 12, 4)
+                        }
+                    }
+
+                    let new_node = Self {
+                        inputs,
+                        definition: NodeDefinition::Operator(op_index, op_def),
+                    };
+
+                    Ok(Arc::new(new_node))
+                }
+
                 // The Clip, Split, Resize and Reshape operator each take optional inputs that influence the operation.
                 // These are typically statically initialized tensors containing shapes. For more efficient execution we
                 // move these static values to attributes.
@@ -356,7 +390,7 @@ impl<'model> Node<'model> {
                     // Create new node with extra attributes
                     new_proto.set_attribute(RepeatedField::from(attributes));
 
-                    let new_node: Self = Self {
+                    let new_node = Self {
                         inputs: vec![inputs[0].clone()],
                         definition: NodeDefinition::Operator(
                             op_index,
