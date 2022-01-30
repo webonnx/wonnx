@@ -22,6 +22,7 @@ fn test_relu() {
 
 #[test]
 fn test_mnist() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let image = load_image("0.jpg");
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap());

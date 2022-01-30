@@ -27,21 +27,52 @@ pub enum OptimizerError {
     AttributeNotFound(#[from] AttributeNotFoundError),
 }
 
+struct Sequence<'model> {
+    node: Arc<Node<'model>>,
+    skip: usize,
+}
+
 impl<'model> Node<'model> {
     /// Optimize a graph
     pub fn optimize(self: Arc<Self>) -> Result<Arc<Self>, OptimizerError> {
         let mut path = vec![];
-        self.optimize_sequence(&mut path)
+        let seq = self.optimize_branch(&mut path)?;
+        if seq.skip != 0 {
+            panic!("sequencing gone wrong");
+        }
+        Ok(seq.node)
     }
 
-    /// Optimize a branch of a graph
-    fn optimize_sequence(
+    /// Optimize a branch of a graph. This function is recursively called on inputs. The 'chain' parameter is a list of
+    /// operations that follow the node on which optimize_branch is called, and that have exactly one 'dynamic' input
+    /// (either inference input or output of the previous operator). For instance, if the model is A->B->C, then the
+    /// following calls will happen:
+    ///
+    /// - C.optimize_branch(chain = [])
+    ///   - B.optimize_branch(chain = ["C"])
+    ///     - A.optimize_branch(chain = ["C", "B"])
+    ///
+    /// If the model were A -> B+X -> C instead, then the chain would be 'broken' as 'B' has more than one input. The
+    /// 'chain' information can be used to fuse multiple steps. When optimize_branch detects that a chain can be fused,
+    /// it will generate the fused operation and return a Sequence struct with 'skip' set to a positive number.
+    /// This number equals the number of operations that have been fused, and  which  should be omitted from the DAG.
+    /// In the above example, suppose B->C can be fused. This can be detected in the last call:
+    ///
+    /// - C.optimize_branch(chain = []) receives BC(skip=1) from B.optimize_branch, will omit C and return BC(skip=0)
+    ///   - B.optimize_branch(chain = ["C"]) receives BC(skip=2) from A.optimize_branch, will omit B and return BC(skip=1)
+    ///     - A.optimize_branch(chain = ["C", "B"]) detects B->C fusable, returns BC node with skip=2
+    fn optimize_branch(
         self: Arc<Self>,
-        path: &mut Vec<String>,
-    ) -> Result<Arc<Self>, OptimizerError> {
-        log::info!("Optimize {:?} path={:?}", self.definition, path);
+        chain: &mut Vec<(String, Arc<Self>)>,
+    ) -> Result<Sequence<'model>, OptimizerError> {
+        log::info!(
+            "Optimize {:?} chain length={:?}",
+            self.definition,
+            chain.len()
+        );
 
         if let NodeDefinition::Operator(_, op_def) = &self.definition {
+            // Specific operators can be spliced out of the DAG
             match op_def.proto.get_op_type() {
                 // Identity: we just remove these nodes and connect the input of the destination node to our input's output
                 // A -> Identity -> B => A -> B
@@ -49,7 +80,7 @@ impl<'model> Node<'model> {
                     if self.inputs.len() != 1 {
                         return Err(OptimizerError::NoInputs);
                     }
-                    return self.inputs[0].source_node.clone().optimize_sequence(path);
+                    return self.inputs[0].source_node.clone().optimize_branch(chain);
                 }
                 // The Dropout operation does nothing when its training_mode is set to 0. We do not support training_mode=1
                 "Dropout" => {
@@ -65,31 +96,141 @@ impl<'model> Node<'model> {
                         )));
                     }
 
-                    return self.inputs[0].source_node.clone().optimize_sequence(path);
+                    return self.inputs[0].source_node.clone().optimize_branch(chain);
                 }
                 _ => {}
             }
 
-            path.push(op_def.proto.get_op_type().to_string());
+            // Optimize chains of operators. A chain can only be formed for operations that each have at most one 'dynamic'
+            // input (e.g. inference input or the input from another operation)
+            let dynamic_input_count = self
+                .inputs
+                .iter()
+                .filter(|input| {
+                    matches!(
+                        input.source_node.definition,
+                        NodeDefinition::Operator(..) | NodeDefinition::Input(..)
+                    )
+                })
+                .count();
+
+            if dynamic_input_count == 1 {
+                chain.push((op_def.proto.get_op_type().to_string(), self.clone()));
+
+                if let Some(seq) = optimize_chain(chain)? {
+                    log::info!(
+                        "chain optimization: fuse {} operators to {:?}",
+                        seq.skip,
+                        seq.node.definition
+                    );
+                    return Ok(seq);
+                }
+
+                // Continue optimizing inputs, making the chain longer for one input
+                let mut new_inputs = Vec::with_capacity(self.inputs.len());
+
+                for input in &self.inputs {
+                    let source_sequence = input.source_node.clone().optimize_branch(chain)?;
+
+                    if source_sequence.skip > 0 {
+                        log::info!("operator is optimized away: {:?}", self.definition);
+                        return Ok(Sequence {
+                            node: source_sequence.node,
+                            skip: source_sequence.skip - 1,
+                        });
+                    }
+
+                    new_inputs.push(Input {
+                        source_node: source_sequence.node,
+                        output_index: input.output_index,
+                    });
+                }
+
+                return Ok(Sequence {
+                    node: Self::new_optimized(self.definition.clone(), new_inputs)?,
+                    skip: 0,
+                });
+            }
         }
 
-        // Optimize inputs
+        // This node has multiple inputs; optimize each input as a new chain
         let new_inputs = self
             .inputs
             .iter()
             .map(|input| {
+                let mut input_chain = vec![];
+                let source_sequence = input
+                    .source_node
+                    .clone()
+                    .optimize_branch(&mut input_chain)?;
+
+                assert!(
+                    source_sequence.skip == 0,
+                    "cannot skip items in a chain that has multiple inputs for a single op"
+                );
+
                 Ok(Input {
-                    source_node: input.source_node.clone().optimize_sequence(path)?,
+                    source_node: source_sequence.node,
                     output_index: input.output_index,
                 })
             })
             .collect::<Result<Vec<Input>, OptimizerError>>()?;
 
-        if let NodeDefinition::Operator(_, _) = &self.definition {
-            path.pop();
-        }
+        Ok(Sequence {
+            node: Self::new_optimized(self.definition.clone(), new_inputs)?,
+            skip: 0,
+        })
+    }
+}
 
-        Self::new_optimized(self.definition.clone(), new_inputs)
+/// Attempt to fuse several operators in a chain of operators with no other dynamic inputs.
+fn optimize_chain<'model>(
+    chain: &[(String, Arc<Node<'model>>)],
+) -> Result<Option<Sequence<'model>>, OptimizerError> {
+    let path_slices: Vec<&str> = chain.iter().rev().map(|x| x.0.as_str()).collect();
+    match &path_slices[..] {
+        // Conv+Relu or Conv+LeakyRelu: combine into ConvRelu/ConvLeakyRelu
+        ["Conv", "Relu", ..] | ["Conv", "LeakyRelu", ..] => {
+            log::info!("can fuse chain to Conv[Leaky]Relu: {:?}", path_slices);
+
+            let conv = chain[chain.len() - 1].1.clone();
+            let relu = chain[chain.len() - 2].1.clone();
+
+            if let (
+                NodeDefinition::Operator(conv_index, conv_def),
+                NodeDefinition::Operator(_relu_index, relu_def),
+            ) = (&conv.definition, &relu.definition)
+            {
+                // Use the Conv node as template for the new fused Conv[Leaky]Relu node
+                let mut convrelu_def = *conv_def.clone();
+                let mut convrelu_proto = conv_def.proto.clone().into_owned();
+                let new_op_type = match relu_def.proto.get_op_type() {
+                    "LeakyRelu" => "ConvLeakyRelu",
+                    "Relu" => "ConvRelu",
+                    _ => unreachable!(),
+                };
+                convrelu_proto.set_op_type(new_op_type.to_string());
+
+                // Copy all Relu attributes over
+                let mut attributes = conv_def.proto.get_attribute().to_vec();
+                attributes.extend(relu_def.proto.get_attribute().iter().cloned());
+                convrelu_proto.set_attribute(RepeatedField::from(attributes));
+                convrelu_def.proto = Cow::Owned(convrelu_proto);
+
+                let node = Node {
+                    inputs: conv.inputs.clone(),
+                    definition: NodeDefinition::Operator(*conv_index, Box::new(convrelu_def)),
+                };
+
+                Ok(Some(Sequence {
+                    node: Arc::new(node).optimize()?,
+                    skip: 1,
+                }))
+            } else {
+                unreachable!();
+            }
+        }
+        _ => Ok(None),
     }
 }
 
@@ -228,6 +369,7 @@ impl<'model> Node<'model> {
 
                     Ok(Arc::new(new_node))
                 }
+
                 _ => Ok(Arc::new(Self {
                     inputs,
                     definition: NodeDefinition::Operator(op_index, op_def),
