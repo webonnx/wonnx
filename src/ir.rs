@@ -33,23 +33,14 @@ impl<'model> OperatorDefinition<'model> {
 
 #[derive(Clone)]
 pub enum NodeDefinition<'model> {
-    Operator(usize, Box<OperatorDefinition<'model>>),
-    Tensor(usize, Box<Cow<'model, TensorProto>>),
-    Input(usize, &'model ValueInfoProto),
+    Operator(Box<OperatorDefinition<'model>>),
+    Tensor(Box<Cow<'model, TensorProto>>),
+    Input(&'model ValueInfoProto),
     Outputs { names: Vec<&'model str> },
     Missing, // A missing input (optional)
 }
 
 static MISSING_OPTIONAL_INPUT: NodeDefinition<'static> = NodeDefinition::Missing;
-
-#[derive(PartialEq, Eq, Hash, Copy, Clone)]
-pub enum NodeIdentifier {
-    Op(usize),
-    Tensor(usize),
-    Input(usize),
-    Outputs,
-    Missing,
-}
 
 #[derive(Clone)]
 pub struct Input<'model> {
@@ -75,21 +66,11 @@ pub enum IrError {
 }
 
 impl<'m> NodeDefinition<'m> {
-    pub fn get_identifier(&self) -> NodeIdentifier {
-        match self {
-            NodeDefinition::Operator(idx, _) => NodeIdentifier::Op(*idx),
-            NodeDefinition::Tensor(idx, _) => NodeIdentifier::Tensor(*idx),
-            NodeDefinition::Input(idx, _) => NodeIdentifier::Input(*idx),
-            NodeDefinition::Outputs { .. } => NodeIdentifier::Outputs,
-            NodeDefinition::Missing => NodeIdentifier::Missing,
-        }
-    }
-
     pub fn get_name(&self) -> Cow<'_, str> {
         match self {
-            NodeDefinition::Operator(_, op_def) => Cow::from(op_def.proto.get_name()),
-            NodeDefinition::Tensor(_, t) => Cow::from(t.get_name()),
-            NodeDefinition::Input(_, i) => Cow::from(i.get_name()),
+            NodeDefinition::Operator(op_def) => Cow::from(op_def.proto.get_name()),
+            NodeDefinition::Tensor(t) => Cow::from(t.get_name()),
+            NodeDefinition::Input(i) => Cow::from(i.get_name()),
             NodeDefinition::Outputs { .. } => Cow::from(" "),
             NodeDefinition::Missing => Cow::from(""),
         }
@@ -97,11 +78,11 @@ impl<'m> NodeDefinition<'m> {
 
     pub fn output_name(&self, output_index: usize) -> Cow<'_, str> {
         match self {
-            NodeDefinition::Operator(_, op_def) => {
+            NodeDefinition::Operator(op_def) => {
                 Cow::Borrowed(&op_def.proto.get_output()[output_index])
             }
-            NodeDefinition::Tensor(_, proto) => Cow::from(proto.get_name()),
-            NodeDefinition::Input(_, proto) => Cow::from(proto.get_name()),
+            NodeDefinition::Tensor(proto) => Cow::from(proto.get_name()),
+            NodeDefinition::Input(proto) => Cow::from(proto.get_name()),
             NodeDefinition::Outputs { .. } => panic!("can't get output name for outputs node"),
             NodeDefinition::Missing => panic!("can't get output name for missing node"),
         }
@@ -124,7 +105,6 @@ impl<'model> Node<'model> {
     pub fn from_node<'a>(
         model: &'model ModelProto,
         node: Cow<'model, NodeProto>,
-        node_index: usize,
         value_shapes: &HashMap<&'model str, Shape>,
         node_definitions_by_output: &'a HashMap<String, NodeDefinition<'model>>,
         nodes_by_name: &mut HashMap<String, Arc<Node<'model>>>,
@@ -146,11 +126,10 @@ impl<'model> Node<'model> {
 
                 Ok(match source_node_definition {
                     // The source is another op - continue translating that node
-                    NodeDefinition::Operator(index, source_node_proto) => Input {
+                    NodeDefinition::Operator(source_node_proto) => Input {
                         source_node: Node::from_node(
                             model,
                             source_node_proto.proto.clone(),
-                            *index,
                             value_shapes,
                             node_definitions_by_output,
                             nodes_by_name,
@@ -184,10 +163,10 @@ impl<'model> Node<'model> {
             .collect();
 
         let translated = Arc::new(Node {
-            definition: NodeDefinition::Operator(
-                node_index,
-                Box::new(OperatorDefinition::from(node.clone(), value_shapes)?),
-            ),
+            definition: NodeDefinition::Operator(Box::new(OperatorDefinition::from(
+                node.clone(),
+                value_shapes,
+            )?)),
             inputs: inputs?,
         });
         nodes_by_name.insert(node_name.to_string(), translated.clone());
@@ -211,14 +190,11 @@ impl<'model> Node<'model> {
 
         // Sort nodes by output nodes
         let mut node_definitions_by_output = HashMap::<String, NodeDefinition<'model>>::new();
-        for (index, node) in model.get_graph().get_node().iter().enumerate() {
-            let node_def = NodeDefinition::Operator(
-                index,
-                Box::new(OperatorDefinition::from(
-                    Cow::Borrowed(node),
-                    &value_shapes,
-                )?),
-            );
+        for node in model.get_graph().get_node().iter() {
+            let node_def = NodeDefinition::Operator(Box::new(OperatorDefinition::from(
+                Cow::Borrowed(node),
+                &value_shapes,
+            )?));
             for output in node.get_output() {
                 if !output.is_empty() {
                     node_definitions_by_output.insert(output.to_string(), node_def.clone());
@@ -227,22 +203,20 @@ impl<'model> Node<'model> {
         }
 
         // Collect intializer info
-        for (index, initializer) in model.get_graph().get_initializer().iter().enumerate() {
+        for initializer in model.get_graph().get_initializer().iter() {
             log::info!("Initializer {}", initializer.get_name());
             node_definitions_by_output.insert(
                 initializer.get_name().to_string(),
-                NodeDefinition::Tensor(index, Box::new(Cow::Borrowed(initializer))),
+                NodeDefinition::Tensor(Box::new(Cow::Borrowed(initializer))),
             );
         }
 
         // Collect input name
-        for (index, input) in model.get_graph().get_input().iter().enumerate() {
+        for input in model.get_graph().get_input().iter() {
             if !node_definitions_by_output.contains_key(input.get_name()) {
                 log::info!("Input {}", input.get_name());
-                node_definitions_by_output.insert(
-                    input.get_name().to_string(),
-                    NodeDefinition::Input(index, input),
-                );
+                node_definitions_by_output
+                    .insert(input.get_name().to_string(), NodeDefinition::Input(input));
             } else {
                 log::info!(
                     "Skipping input definition {}: already defined",
@@ -259,18 +233,16 @@ impl<'model> Node<'model> {
             .iter()
             .map(|output_def| {
                 let output_name_string = output_def.get_name().to_string();
-                let (output_node_index, output_node) = model
+                let output_node = model
                     .get_graph()
                     .get_node()
                     .iter()
-                    .enumerate()
-                    .find(|(_index, x)| -> bool { x.get_output().contains(&output_name_string) })
+                    .find(|x| -> bool { x.get_output().contains(&output_name_string) })
                     .ok_or(IrError::OutputNodeNotFound(output_name_string))?;
 
                 let source_node = Node::<'model>::from_node(
                     model,
                     Cow::Borrowed(output_node),
-                    output_node_index,
                     &value_shapes,
                     &node_definitions_by_output,
                     &mut nodes_by_name,
@@ -308,9 +280,9 @@ impl<'model> Node<'model> {
 
     pub fn output_shape(&self, output_index: usize) -> Shape {
         match (&self.definition, output_index) {
-            (NodeDefinition::Operator(_, op_def), index) => op_def.output_shapes[index].clone(),
-            (NodeDefinition::Tensor(_, tensor_proto), 0) => Shape::from(tensor_proto.get_dims()),
-            (NodeDefinition::Input(_, input_proto), 0) => input_proto.get_shape(),
+            (NodeDefinition::Operator(op_def), index) => op_def.output_shapes[index].clone(),
+            (NodeDefinition::Tensor(tensor_proto), 0) => Shape::from(tensor_proto.get_dims()),
+            (NodeDefinition::Input(input_proto), 0) => input_proto.get_shape(),
             (NodeDefinition::Outputs { .. }, _) => panic!("output node has no outputs!"),
             (_, _) => panic!("node has no output at index {}", output_index),
         }
@@ -320,27 +292,18 @@ impl<'model> Node<'model> {
 impl<'model> Debug for NodeDefinition<'model> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NodeDefinition::Operator(idx, def) => {
+            NodeDefinition::Operator(def) => {
                 write!(
                     f,
-                    "Op #{}: {} ({})",
-                    idx,
+                    "Op: {} ({})",
                     def.proto.get_name(),
                     def.proto.get_op_type()
                 )
             }
-            NodeDefinition::Tensor(idx, def) => write!(f, "Tensor #{}: {}", idx, def.get_name()),
-            NodeDefinition::Input(idx, def) => write!(f, "Input #{}: {}", idx, def.get_name()),
+            NodeDefinition::Tensor(def) => write!(f, "Tensor {}", def.get_name()),
+            NodeDefinition::Input(def) => write!(f, "Input {}", def.get_name()),
             NodeDefinition::Outputs { .. } => write!(f, "Outputs"),
             NodeDefinition::Missing => write!(f, "Missing (optional)"),
         }
-    }
-}
-
-impl<'model> PartialEq for Node<'model> {
-    fn eq(&self, other: &Self) -> bool {
-        self.definition
-            .get_identifier()
-            .eq(&other.definition.get_identifier())
     }
 }

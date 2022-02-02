@@ -1,6 +1,8 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    hash::Hash,
+    ptr,
     sync::Arc,
 };
 
@@ -9,7 +11,7 @@ use wgpu::{Buffer, BufferUsages, CommandEncoder};
 
 use crate::{
     compiler::{compile, CompileError, CompiledNode},
-    ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
+    ir::{Node, NodeDefinition, OperatorDefinition},
     onnx::TensorProto,
     resource::{self, resize},
     utils::{ceil, Shape, MINIMUM_BUFFER_SIZE_BYTES},
@@ -23,7 +25,6 @@ pub struct GpuModel {
     queue: wgpu::Queue,
     onnx_opset_version: i64,
     steps: Vec<GpuStep>,
-    node_outputs: HashMap<NodeIdentifier, Vec<GpuTensor>>,
     inference_outputs: HashMap<String, InferenceOutput>,
 }
 
@@ -74,6 +75,29 @@ enum InferenceOutput {
     Tensor(GpuTensor),
 }
 
+/// Wrap an Arc<Node> in a struct so we can implement pointer-based comparison for it, and use them as keys in a HashSet/HashMap
+struct NodeIdentifier<'model>(Arc<Node<'model>>);
+
+impl<'model> Hash for NodeIdentifier<'model> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        ptr::hash(Arc::as_ptr(&self.0), state)
+    }
+}
+
+impl<'model> PartialEq for NodeIdentifier<'model> {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl<'model> Eq for NodeIdentifier<'model> {}
+
+impl<'model> Node<'model> {
+    fn identifier(self: &Arc<Self>) -> NodeIdentifier<'model> {
+        NodeIdentifier(self.clone())
+    }
+}
+
 impl GpuModel {
     /// Create a version of the specified model for which inference can be performed using the powers of the GPU
     pub fn from(
@@ -87,13 +111,13 @@ impl GpuModel {
             queue,
             onnx_opset_version,
             steps: vec![],
-            node_outputs: HashMap::new(),
             inference_outputs: HashMap::new(),
         };
 
         // Walk the IR DAG and encode into GPU execution steps
         let mut readable_nodes: HashSet<NodeIdentifier> = HashSet::new();
-        gpu_model.sequence(root.clone(), &mut readable_nodes)?;
+        let mut node_outputs = HashMap::<NodeIdentifier, Vec<GpuTensor>>::new();
+        gpu_model.sequence(root.clone(), &mut readable_nodes, &mut node_outputs)?;
 
         // Find out which outputs we should return as inference outputs
         if let NodeDefinition::Outputs { names } = &root.definition {
@@ -102,13 +126,13 @@ impl GpuModel {
                 gpu_model.inference_outputs.insert(
                     output_name.to_string(),
                     match &input.source_node.definition {
-                        NodeDefinition::Operator(_, _) | NodeDefinition::Tensor(_, _) => {
-                            let source_identifier = input.source_node.definition.get_identifier();
-                            let outputs = &gpu_model.node_outputs[&source_identifier];
+                        NodeDefinition::Operator(_) | NodeDefinition::Tensor(_) => {
+                            let source_identifier = input.source_node.identifier();
+                            let outputs = &node_outputs[&source_identifier];
                             let tensor = outputs[input.output_index].clone();
                             InferenceOutput::Tensor(tensor)
                         }
-                        NodeDefinition::Input(_, proto) => {
+                        NodeDefinition::Input(proto) => {
                             InferenceOutput::InferenceInput(proto.get_name().to_string())
                         }
                         NodeDefinition::Outputs { .. } => {
@@ -139,9 +163,10 @@ impl GpuModel {
     fn sequence<'model>(
         &mut self,
         node: Arc<Node<'model>>,
-        nodes_readable: &mut HashSet<NodeIdentifier>,
+        nodes_readable: &mut HashSet<NodeIdentifier<'model>>,
+        node_outputs: &mut HashMap<NodeIdentifier<'model>, Vec<GpuTensor>>,
     ) -> Result<(), GpuError> {
-        let node_identifier = node.definition.get_identifier();
+        let node_identifier = node.identifier();
         let outputs_readable = nodes_readable.contains(&node_identifier);
 
         // Sequence inputs
@@ -149,23 +174,23 @@ impl GpuModel {
         for node_input in &node.inputs {
             // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
             if let NodeDefinition::Outputs { .. } = &node.definition {
-                nodes_readable.insert(node_input.source_node.definition.get_identifier());
+                nodes_readable.insert(node_input.source_node.identifier());
             }
 
-            if let NodeDefinition::Operator(_, op_def) = &node.definition {
+            if let NodeDefinition::Operator(op_def) = &node.definition {
                 // For these ops we just forward the buffer (so we should also forward readability)
                 if op_def.proto.get_op_type() == "Reshape" {
-                    nodes_readable.insert(node_input.source_node.definition.get_identifier());
+                    nodes_readable.insert(node_input.source_node.identifier());
                 }
             }
 
             // Sequence the source node
-            self.sequence(node_input.source_node.clone(), nodes_readable)?;
+            self.sequence(node_input.source_node.clone(), nodes_readable, node_outputs)?;
 
             // Select the tensor we want for our input
-            let source_identifier = node_input.source_node.definition.get_identifier();
+            let source_identifier = node_input.source_node.identifier();
             let input_tensor = {
-                let source_outputs = &self.node_outputs[&source_identifier];
+                let source_outputs = &node_outputs[&source_identifier];
                 source_outputs
                     .get(node_input.output_index)
                     .ok_or(GpuError::OutputMissing(node_input.output_index))?
@@ -175,9 +200,7 @@ impl GpuModel {
         }
 
         // Sequence self
-        if let std::collections::hash_map::Entry::Vacant(e) =
-            self.node_outputs.entry(node_identifier)
-        {
+        if let std::collections::hash_map::Entry::Vacant(e) = node_outputs.entry(node_identifier) {
             log::info!(
                 "sequence {:?} (outputs readable={:?})",
                 node.definition,
@@ -186,7 +209,7 @@ impl GpuModel {
 
             let mut output_tensors = vec![];
             let gpu_op: GpuStep = match &node.definition {
-                NodeDefinition::Operator(_, op_def) => {
+                NodeDefinition::Operator(op_def) => {
                     log::info!(
                         "- operator {} type={}",
                         op_def.proto.get_name(),
@@ -215,7 +238,7 @@ impl GpuModel {
 
                     gpu_op
                 }
-                NodeDefinition::Tensor(_, tensor_def) => {
+                NodeDefinition::Tensor(tensor_def) => {
                     log::info!("- tensor {}", tensor_def.get_name());
                     let tensor_buffer = Arc::new(tensor_def.buffer(&self.device, outputs_readable));
                     output_tensors.push(GpuTensor {
@@ -224,7 +247,7 @@ impl GpuModel {
                     });
                     GpuStep::Initializer(tensor_buffer)
                 }
-                NodeDefinition::Input(_, input_def) => {
+                NodeDefinition::Input(input_def) => {
                     let input_shape = input_def.get_shape();
                     log::info!("- input {} shape {}", input_def.get_name(), input_shape);
 

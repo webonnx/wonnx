@@ -72,7 +72,7 @@ impl<'model> Node<'model> {
             chain.len()
         );
 
-        if let NodeDefinition::Operator(_, op_def) = &self.definition {
+        if let NodeDefinition::Operator(op_def) = &self.definition {
             // Specific operators can be spliced out of the DAG
             match op_def.proto.get_op_type() {
                 // Identity: we just remove these nodes and connect the input of the destination node to our input's output
@@ -197,10 +197,8 @@ fn optimize_chain<'model>(
             let conv = chain[chain.len() - 1].1.clone();
             let relu = chain[chain.len() - 2].1.clone();
 
-            if let (
-                NodeDefinition::Operator(conv_index, conv_def),
-                NodeDefinition::Operator(_relu_index, relu_def),
-            ) = (&conv.definition, &relu.definition)
+            if let (NodeDefinition::Operator(conv_def), NodeDefinition::Operator(relu_def)) =
+                (&conv.definition, &relu.definition)
             {
                 // Use the Conv node as template for the new fused Conv[Leaky]Relu node
                 let mut convrelu_def = *conv_def.clone();
@@ -220,7 +218,7 @@ fn optimize_chain<'model>(
 
                 let node = Node {
                     inputs: conv.inputs.clone(),
-                    definition: NodeDefinition::Operator(*conv_index, Box::new(convrelu_def)),
+                    definition: NodeDefinition::Operator(Box::new(convrelu_def)),
                 };
 
                 Ok(Some(Sequence {
@@ -247,7 +245,7 @@ impl<'model> Node<'model> {
         definition: NodeDefinition<'model>,
         mut inputs: Vec<Input<'model>>,
     ) -> Result<Arc<Self>, OptimizerError> {
-        if let NodeDefinition::Operator(op_index, op_def) = definition {
+        if let NodeDefinition::Operator(op_def) = definition {
             match op_def.proto.get_op_type() {
                 "Conv" | "ConvRelu" | "ConvLeakyRelu" => {
                     // This optimization inserts some padding to convolution between kernels with kernel 3x3, because of
@@ -263,9 +261,7 @@ impl<'model> Node<'model> {
                             )? == "SAME_UPPER")
                         && get_attribute("strides", Some(vec![1, 1]), &op_def.proto)? == [1, 1]
                     {
-                        if let NodeDefinition::Tensor(idx, tensor) =
-                            &inputs[1].source_node.definition
-                        {
+                        if let NodeDefinition::Tensor(tensor) = &inputs[1].source_node.definition {
                             let data = tensor.get_float_data();
                             let raw_data = if !data.is_empty() {
                                 bytemuck::cast_slice(data)
@@ -288,10 +284,9 @@ impl<'model> Node<'model> {
                             let new_input = Input {
                                 output_index: 0,
                                 source_node: Arc::new(Node {
-                                    definition: NodeDefinition::Tensor(
-                                        *idx,
-                                        Box::new(Cow::Owned(new_tensor)),
-                                    ),
+                                    definition: NodeDefinition::Tensor(Box::new(Cow::Owned(
+                                        new_tensor,
+                                    ))),
                                     inputs: vec![],
                                 }),
                             };
@@ -301,7 +296,7 @@ impl<'model> Node<'model> {
 
                     let new_node = Self {
                         inputs,
-                        definition: NodeDefinition::Operator(op_index, op_def),
+                        definition: NodeDefinition::Operator(op_def),
                     };
 
                     Ok(Arc::new(new_node))
@@ -333,7 +328,7 @@ impl<'model> Node<'model> {
                         let source_node = &inputs[input_index].source_node;
                         match &source_node.definition {
                             // If the input is an initializer (Tensor) we can obtain the data from the definition and move it to an attribute
-                            NodeDefinition::Tensor(_, tensor_proto) => {
+                            NodeDefinition::Tensor(tensor_proto) => {
                                 let attr_name = attr_names[input_index];
                                 let data_type =
                                     TensorProto_DataType::from_i32(tensor_proto.get_data_type())
@@ -417,13 +412,10 @@ impl<'model> Node<'model> {
 
                     let new_node = Self {
                         inputs: vec![inputs[0].clone()],
-                        definition: NodeDefinition::Operator(
-                            op_index,
-                            Box::new(OperatorDefinition {
-                                proto: Cow::Owned(new_proto),
-                                output_shapes: op_def.output_shapes.clone(),
-                            }),
-                        ),
+                        definition: NodeDefinition::Operator(Box::new(OperatorDefinition {
+                            proto: Cow::Owned(new_proto),
+                            output_shapes: op_def.output_shapes.clone(),
+                        })),
                     };
 
                     Ok(Arc::new(new_node))
@@ -431,7 +423,7 @@ impl<'model> Node<'model> {
 
                 _ => Ok(Arc::new(Self {
                     inputs,
-                    definition: NodeDefinition::Operator(op_index, op_def),
+                    definition: NodeDefinition::Operator(op_def),
                 })),
             }
         } else {
