@@ -1,5 +1,5 @@
 use protobuf::{ProtobufEnum, RepeatedField};
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 use crate::{
@@ -33,11 +33,24 @@ struct Sequence<'model> {
     skip: usize,
 }
 
-impl<'model> Node<'model> {
+pub struct Optimizer<'model> {
+    padded_tensors: HashMap<String, Arc<Node<'model>>>,
+}
+
+impl<'model> Optimizer<'model> {
+    pub fn new() -> Self {
+        Self {
+            padded_tensors: HashMap::new(),
+        }
+    }
+
     /// Optimize a graph
-    pub fn optimize(self: Arc<Self>) -> Result<Arc<Self>, OptimizerError> {
+    pub fn optimize(
+        &mut self,
+        node: Arc<Node<'model>>,
+    ) -> Result<Arc<Node<'model>>, OptimizerError> {
         let mut path = vec![];
-        let seq = self.optimize_branch(&mut path)?;
+        let seq = self.optimize_branch(node, &mut path)?;
         if seq.skip != 0 {
             panic!("sequencing gone wrong");
         }
@@ -63,29 +76,30 @@ impl<'model> Node<'model> {
     ///   - B.optimize_branch(chain = ["C"]) receives BC(skip=2) from A.optimize_branch, will omit B and return BC(skip=1)
     ///     - A.optimize_branch(chain = ["C", "B"]) detects B->C fusable, returns BC node with skip=2
     fn optimize_branch(
-        self: Arc<Self>,
-        chain: &mut Vec<(String, Arc<Self>)>,
+        &mut self,
+        node: Arc<Node<'model>>,
+        chain: &mut Vec<(String, Arc<Node<'model>>)>,
     ) -> Result<Sequence<'model>, OptimizerError> {
         log::info!(
             "Optimize {:?} chain length={:?}",
-            self.definition,
+            node.definition,
             chain.len()
         );
 
-        if let NodeDefinition::Operator(op_def) = &self.definition {
+        if let NodeDefinition::Operator(op_def) = &node.definition {
             // Specific operators can be spliced out of the DAG
             match op_def.proto.get_op_type() {
                 // Identity: we just remove these nodes and connect the input of the destination node to our input's output
                 // A -> Identity -> B => A -> B
                 "Identity" => {
-                    if self.inputs.len() != 1 {
+                    if node.inputs.len() != 1 {
                         return Err(OptimizerError::NoInputs);
                     }
-                    return self.inputs[0].source_node.clone().optimize_branch(chain);
+                    return self.optimize_branch(node.inputs[0].source_node.clone(), chain);
                 }
                 // The Dropout operation does nothing when its training_mode is set to 0. We do not support training_mode=1
                 "Dropout" => {
-                    if self.inputs.is_empty() {
+                    if node.inputs.is_empty() {
                         return Err(OptimizerError::NoInputs);
                     }
                     let training_mode =
@@ -97,14 +111,14 @@ impl<'model> Node<'model> {
                         )));
                     }
 
-                    return self.inputs[0].source_node.clone().optimize_branch(chain);
+                    return self.optimize_branch(node.inputs[0].source_node.clone(), chain);
                 }
                 _ => {}
             }
 
             // Optimize chains of operators. A chain can only be formed for operations that each have at most one 'dynamic'
             // input (e.g. inference input or the input from another operation)
-            let dynamic_input_count = self
+            let dynamic_input_count = node
                 .inputs
                 .iter()
                 .filter(|input| {
@@ -116,9 +130,9 @@ impl<'model> Node<'model> {
                 .count();
 
             if dynamic_input_count == 1 {
-                chain.push((op_def.proto.get_op_type().to_string(), self.clone()));
+                chain.push((op_def.proto.get_op_type().to_string(), node.clone()));
 
-                if let Some(seq) = optimize_chain(chain)? {
+                if let Some(seq) = self.optimize_chain(chain)? {
                     log::info!(
                         "chain optimization: fuse {} operators to {:?}",
                         seq.skip,
@@ -128,13 +142,13 @@ impl<'model> Node<'model> {
                 }
 
                 // Continue optimizing inputs, making the chain longer for one input
-                let mut new_inputs = Vec::with_capacity(self.inputs.len());
+                let mut new_inputs = Vec::with_capacity(node.inputs.len());
 
-                for input in &self.inputs {
-                    let source_sequence = input.source_node.clone().optimize_branch(chain)?;
+                for input in &node.inputs {
+                    let source_sequence = self.optimize_branch(input.source_node.clone(), chain)?;
 
                     if source_sequence.skip > 0 {
-                        log::info!("operator is optimized away: {:?}", self.definition);
+                        log::info!("operator is optimized away: {:?}", node.definition);
                         return Ok(Sequence {
                             node: source_sequence.node,
                             skip: source_sequence.skip - 1,
@@ -148,22 +162,20 @@ impl<'model> Node<'model> {
                 }
 
                 return Ok(Sequence {
-                    node: Self::new_optimized(self.definition.clone(), new_inputs)?,
+                    node: self.optimized_with(&node, new_inputs)?,
                     skip: 0,
                 });
             }
         }
 
         // This node has multiple inputs; optimize each input as a new chain
-        let new_inputs = self
+        let new_inputs = node
             .inputs
             .iter()
             .map(|input| {
                 let mut input_chain = vec![];
-                let source_sequence = input
-                    .source_node
-                    .clone()
-                    .optimize_branch(&mut input_chain)?;
+                let source_sequence =
+                    self.optimize_branch(input.source_node.clone(), &mut input_chain)?;
 
                 assert!(
                     source_sequence.skip == 0,
@@ -178,58 +190,288 @@ impl<'model> Node<'model> {
             .collect::<Result<Vec<Input>, OptimizerError>>()?;
 
         Ok(Sequence {
-            node: Self::new_optimized(self.definition.clone(), new_inputs)?,
+            node: self.optimized_with(&node, new_inputs)?,
             skip: 0,
         })
     }
+
+    /// Create a new node from an existing definition, applying optimizations local to a single node
+    fn optimized_with(
+        &mut self,
+        node: &Arc<Node<'model>>,
+        mut new_inputs: Vec<Input<'model>>,
+    ) -> Result<Arc<Node<'model>>, OptimizerError> {
+        match &node.definition {
+            NodeDefinition::Operator(op_def) => {
+                match op_def.proto.get_op_type() {
+                    "Conv" | "ConvRelu" | "ConvLeakyRelu" => {
+                        // This optimization inserts some padding to convolution between kernels with kernel 3x3, because of
+                        // the stride of matrix3x3 is 16 in wgsl. It makes the computation matrixable and increases the performance.
+                        if new_inputs.len() > 2
+                            && get_attribute::<Vec<i64>>("kernel_shape", None, &op_def.proto)?
+                                == [3, 3]
+                            && (get_attribute("pads", Some(vec![0, 0, 0, 0]), &op_def.proto)?
+                                == [1, 1, 1, 1]
+                                || get_attribute(
+                                    "auto_pad",
+                                    Some("SAME_UPPER".to_string()),
+                                    &op_def.proto,
+                                )? == "SAME_UPPER")
+                            && get_attribute("strides", Some(vec![1, 1]), &op_def.proto)? == [1, 1]
+                        {
+                            if let NodeDefinition::Tensor(tensor) =
+                                &new_inputs[1].source_node.definition
+                            {
+                                new_inputs[1] = Input {
+                                    output_index: 0,
+                                    source_node: match self.padded_tensors.get(tensor.get_name()) {
+                                        Some(padded_tensor_node) => padded_tensor_node.clone(),
+                                        None => {
+                                            let data = tensor.get_float_data();
+                                            let raw_data = if !data.is_empty() {
+                                                bytemuck::cast_slice(data)
+                                            } else {
+                                                tensor.get_raw_data()
+                                            };
+
+                                            let padded_raw_data = padding(raw_data, 12, 4);
+
+                                            log::info!(
+                                                "applying padding optimization to tensor {}: strides data is {} bytes before, {} bytes after",
+                                                tensor.get_name(),
+                                                raw_data.len(),
+                                                padded_raw_data.len()
+                                            );
+
+                                            // Create a new tensor with the padded data
+                                            let mut new_tensor = tensor.clone().into_owned();
+                                            new_tensor.set_float_data(vec![]);
+                                            new_tensor.set_raw_data(padded_raw_data);
+                                            let new_node = Arc::new(Node {
+                                                definition: NodeDefinition::Tensor(Box::new(
+                                                    Cow::Owned(new_tensor),
+                                                )),
+                                                inputs: vec![],
+                                            });
+                                            self.padded_tensors.insert(
+                                                tensor.get_name().to_string(),
+                                                new_node.clone(),
+                                            );
+                                            new_node
+                                        }
+                                    },
+                                }
+                            }
+                        }
+
+                        let new_node = Node {
+                            inputs: new_inputs,
+                            definition: NodeDefinition::Operator(op_def.clone()),
+                        };
+
+                        Ok(Arc::new(new_node))
+                    }
+
+                    // The Clip, Split, Resize and Reshape operator each take optional inputs that influence the operation.
+                    // These are typically statically initialized tensors containing shapes. For more efficient execution we
+                    // move these static values to attributes.
+                    op @ ("Clip" | "Split" | "Resize" | "Reshape") => {
+                        if new_inputs.is_empty() {
+                            return Err(OptimizerError::NoInputs);
+                        }
+
+                        // Names of the inputs (see ONNX operator spec)
+                        let attr_names = match op {
+                            "Split" => SPLIT_INPUT_NAMES,
+                            "Resize" => RESIZE_INPUT_NAMES,
+                            "Reshape" => RESHAPE_INPUT_NAMES,
+                            "Clip" => CLIP_INPUT_NAMES,
+                            _ => unreachable!(),
+                        };
+
+                        // Make a new copy of the attributes list (we're going to add attributes)
+                        let mut new_proto = op_def.proto.clone().into_owned();
+                        let mut attributes = op_def.proto.get_attribute().to_vec();
+
+                        // Loop over the inputs (skipping the first one - that's going to be the data input)
+                        for input_index in 1..(new_inputs.len().min(attr_names.len())) {
+                            let source_node = &new_inputs[input_index].source_node;
+                            match &source_node.definition {
+                                // If the input is an initializer (Tensor) we can obtain the data from the definition and move it to an attribute
+                                NodeDefinition::Tensor(tensor_proto) => {
+                                    let attr_name = attr_names[input_index];
+                                    let data_type = TensorProto_DataType::from_i32(
+                                        tensor_proto.get_data_type(),
+                                    )
+                                    .unwrap_or(TensorProto_DataType::UNDEFINED);
+
+                                    match (op, attr_name) {
+                                        // Inputs that need to be converted to an i64 attribute
+                                        ("Split", "split")
+                                        | ("Resize", "roi")
+                                        | ("Resize", "sizes")
+                                        | ("Reshape", "shape") => match data_type {
+                                            TensorProto_DataType::INT64
+                                            | TensorProto_DataType::UNDEFINED => {
+                                                log::info!(
+                                                        "transferring input {} for op {} to i64 attribute (initializer data type: {:?})",
+                                                        attr_name,
+                                                        op,
+                                                        data_type
+                                                    );
+                                                let value = tensor_proto.get_int64_data().to_vec();
+                                                attributes.push(attribute(
+                                                    attr_names[input_index],
+                                                    value,
+                                                ));
+                                            }
+                                            _ => {
+                                                return Err(OptimizerError::InvalidDataType {
+                                                    data_type,
+                                                    input: attr_name.to_string(),
+                                                    op: op.to_string(),
+                                                })
+                                            }
+                                        },
+                                        // Inputs that need to be converted to an f32 attribute
+                                        ("Resize", "scales") => match data_type {
+                                            TensorProto_DataType::FLOAT
+                                            | TensorProto_DataType::UNDEFINED => {
+                                                log::info!(
+                                                        "transferring input {} for op {} to f32 attribute (initializer data type: {:?})",
+                                                        attr_name,
+                                                        op,
+                                                        data_type
+                                                    );
+                                                let value: Vec<f32> =
+                                                    tensor_proto.get_float_data().to_vec();
+                                                attributes.push(attribute(
+                                                    attr_names[input_index],
+                                                    value,
+                                                ));
+                                            }
+                                            _ => {
+                                                return Err(OptimizerError::InvalidDataType {
+                                                    data_type,
+                                                    input: attr_name.to_string(),
+                                                    op: op.to_string(),
+                                                })
+                                            }
+                                        },
+                                        _ => {
+                                            // Some other unspecified input that we do not support yet
+                                            return Err(OptimizerError::Unsupported(format!(
+                                                "data_type {} for input {} to op {}",
+                                                tensor_proto.get_data_type(),
+                                                attr_name,
+                                                op
+                                            )));
+                                        }
+                                    }
+                                }
+                                NodeDefinition::Missing => {
+                                    // Just remove it
+                                }
+                                _ => {
+                                    // One of the inputs (except the first) is something other than a tensor (e.g. 'dynamic')
+                                    return Err(OptimizerError::Unsupported(format!(
+                                        "{} operation with dynamic input for {}",
+                                        op, attr_names[input_index]
+                                    )));
+                                }
+                            }
+                        }
+
+                        // Create new node with extra attributes
+                        new_proto.set_attribute(RepeatedField::from(attributes));
+
+                        let new_node = Node {
+                            inputs: vec![new_inputs[0].clone()],
+                            definition: NodeDefinition::Operator(Box::new(OperatorDefinition {
+                                proto: Cow::Owned(new_proto),
+                                output_shapes: op_def.output_shapes.clone(),
+                            })),
+                        };
+
+                        Ok(Arc::new(new_node))
+                    }
+
+                    _ => Ok(Arc::new(Node {
+                        inputs: new_inputs,
+                        definition: NodeDefinition::Operator(op_def.clone()),
+                    })),
+                }
+            }
+            NodeDefinition::Tensor(..) | NodeDefinition::Input(..) => {
+                assert!(
+                    new_inputs.is_empty(),
+                    "non-operator node cannot have inputs"
+                );
+                // No need to do anything with the provided new inputs
+                Ok(node.clone())
+            }
+            &NodeDefinition::Outputs { .. } => Ok(Arc::new(Node {
+                inputs: new_inputs,
+                definition: node.definition().clone(),
+            })),
+            NodeDefinition::Missing => Ok(node.clone()),
+        }
+    }
+
+    /// Attempt to fuse several operators in a chain of operators with no other dynamic inputs.
+    fn optimize_chain(
+        &mut self,
+        chain: &[(String, Arc<Node<'model>>)],
+    ) -> Result<Option<Sequence<'model>>, OptimizerError> {
+        let path_slices: Vec<&str> = chain.iter().rev().map(|x| x.0.as_str()).collect();
+        match &path_slices[..] {
+            // Conv+Relu or Conv+LeakyRelu: combine into ConvRelu/ConvLeakyRelu
+            ["Conv", "Relu", ..] | ["Conv", "LeakyRelu", ..] => {
+                log::info!("can fuse chain to Conv[Leaky]Relu: {:?}", path_slices);
+
+                let conv = chain[chain.len() - 1].1.clone();
+                let relu = chain[chain.len() - 2].1.clone();
+
+                if let (NodeDefinition::Operator(conv_def), NodeDefinition::Operator(relu_def)) =
+                    (&conv.definition, &relu.definition)
+                {
+                    // Use the Conv node as template for the new fused Conv[Leaky]Relu node
+                    let mut convrelu_def = *conv_def.clone();
+                    let mut convrelu_proto = conv_def.proto.clone().into_owned();
+                    let new_op_type = match relu_def.proto.get_op_type() {
+                        "LeakyRelu" => "ConvLeakyRelu",
+                        "Relu" => "ConvRelu",
+                        _ => unreachable!(),
+                    };
+                    convrelu_proto.set_op_type(new_op_type.to_string());
+
+                    // Copy all Relu attributes over
+                    let mut attributes = conv_def.proto.get_attribute().to_vec();
+                    attributes.extend(relu_def.proto.get_attribute().iter().cloned());
+                    convrelu_proto.set_attribute(RepeatedField::from(attributes));
+                    convrelu_def.proto = Cow::Owned(convrelu_proto);
+
+                    let node = Arc::new(Node {
+                        inputs: conv.inputs.clone(),
+                        definition: NodeDefinition::Operator(Box::new(convrelu_def)),
+                    });
+
+                    Ok(Some(Sequence {
+                        node: self.optimize(node)?,
+                        skip: 1,
+                    }))
+                } else {
+                    unreachable!();
+                }
+            }
+            _ => Ok(None),
+        }
+    }
 }
 
-/// Attempt to fuse several operators in a chain of operators with no other dynamic inputs.
-fn optimize_chain<'model>(
-    chain: &[(String, Arc<Node<'model>>)],
-) -> Result<Option<Sequence<'model>>, OptimizerError> {
-    let path_slices: Vec<&str> = chain.iter().rev().map(|x| x.0.as_str()).collect();
-    match &path_slices[..] {
-        // Conv+Relu or Conv+LeakyRelu: combine into ConvRelu/ConvLeakyRelu
-        ["Conv", "Relu", ..] | ["Conv", "LeakyRelu", ..] => {
-            log::info!("can fuse chain to Conv[Leaky]Relu: {:?}", path_slices);
-
-            let conv = chain[chain.len() - 1].1.clone();
-            let relu = chain[chain.len() - 2].1.clone();
-
-            if let (NodeDefinition::Operator(conv_def), NodeDefinition::Operator(relu_def)) =
-                (&conv.definition, &relu.definition)
-            {
-                // Use the Conv node as template for the new fused Conv[Leaky]Relu node
-                let mut convrelu_def = *conv_def.clone();
-                let mut convrelu_proto = conv_def.proto.clone().into_owned();
-                let new_op_type = match relu_def.proto.get_op_type() {
-                    "LeakyRelu" => "ConvLeakyRelu",
-                    "Relu" => "ConvRelu",
-                    _ => unreachable!(),
-                };
-                convrelu_proto.set_op_type(new_op_type.to_string());
-
-                // Copy all Relu attributes over
-                let mut attributes = conv_def.proto.get_attribute().to_vec();
-                attributes.extend(relu_def.proto.get_attribute().iter().cloned());
-                convrelu_proto.set_attribute(RepeatedField::from(attributes));
-                convrelu_def.proto = Cow::Owned(convrelu_proto);
-
-                let node = Node {
-                    inputs: conv.inputs.clone(),
-                    definition: NodeDefinition::Operator(Box::new(convrelu_def)),
-                };
-
-                Ok(Some(Sequence {
-                    node: Arc::new(node).optimize()?,
-                    skip: 1,
-                }))
-            } else {
-                unreachable!();
-            }
-        }
-        _ => Ok(None),
+impl<'model> Default for Optimizer<'model> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -238,196 +480,3 @@ static SPLIT_INPUT_NAMES: &[&str] = &["input", "split"];
 static RESIZE_INPUT_NAMES: &[&str] = &["X", "roi", "scales", "sizes"];
 static RESHAPE_INPUT_NAMES: &[&str] = &["data", "shape"];
 static CLIP_INPUT_NAMES: &[&str] = &["input", "min", "max"];
-
-impl<'model> Node<'model> {
-    /// Create a new node from an existing definition, applying optimizations local to a single node
-    fn new_optimized(
-        definition: NodeDefinition<'model>,
-        mut inputs: Vec<Input<'model>>,
-    ) -> Result<Arc<Self>, OptimizerError> {
-        if let NodeDefinition::Operator(op_def) = definition {
-            match op_def.proto.get_op_type() {
-                "Conv" | "ConvRelu" | "ConvLeakyRelu" => {
-                    // This optimization inserts some padding to convolution between kernels with kernel 3x3, because of
-                    // the stride of matrix3x3 is 16 in wgsl. It makes the computation matrixable and increases the performance.
-                    if inputs.len() > 2
-                        && get_attribute::<Vec<i64>>("kernel_shape", None, &op_def.proto)? == [3, 3]
-                        && (get_attribute("pads", Some(vec![0, 0, 0, 0]), &op_def.proto)?
-                            == [1, 1, 1, 1]
-                            || get_attribute(
-                                "auto_pad",
-                                Some("SAME_UPPER".to_string()),
-                                &op_def.proto,
-                            )? == "SAME_UPPER")
-                        && get_attribute("strides", Some(vec![1, 1]), &op_def.proto)? == [1, 1]
-                    {
-                        if let NodeDefinition::Tensor(tensor) = &inputs[1].source_node.definition {
-                            let data = tensor.get_float_data();
-                            let raw_data = if !data.is_empty() {
-                                bytemuck::cast_slice(data)
-                            } else {
-                                tensor.get_raw_data()
-                            };
-
-                            let padded_raw_data = padding(raw_data, 12, 4);
-
-                            log::debug!(
-                                "applying optimization: strides data is {} bytes before, {} bytes after",
-                                raw_data.len(),
-                                padded_raw_data.len()
-                            );
-
-                            // Create a new tensor with the padded data
-                            let mut new_tensor = tensor.clone().into_owned();
-                            new_tensor.set_float_data(vec![]);
-                            new_tensor.set_raw_data(padded_raw_data);
-                            let new_input = Input {
-                                output_index: 0,
-                                source_node: Arc::new(Node {
-                                    definition: NodeDefinition::Tensor(Box::new(Cow::Owned(
-                                        new_tensor,
-                                    ))),
-                                    inputs: vec![],
-                                }),
-                            };
-                            inputs[1] = new_input;
-                        }
-                    }
-
-                    let new_node = Self {
-                        inputs,
-                        definition: NodeDefinition::Operator(op_def),
-                    };
-
-                    Ok(Arc::new(new_node))
-                }
-
-                // The Clip, Split, Resize and Reshape operator each take optional inputs that influence the operation.
-                // These are typically statically initialized tensors containing shapes. For more efficient execution we
-                // move these static values to attributes.
-                op @ ("Clip" | "Split" | "Resize" | "Reshape") => {
-                    if inputs.is_empty() {
-                        return Err(OptimizerError::NoInputs);
-                    }
-
-                    // Names of the inputs (see ONNX operator spec)
-                    let attr_names = match op {
-                        "Split" => SPLIT_INPUT_NAMES,
-                        "Resize" => RESIZE_INPUT_NAMES,
-                        "Reshape" => RESHAPE_INPUT_NAMES,
-                        "Clip" => CLIP_INPUT_NAMES,
-                        _ => unreachable!(),
-                    };
-
-                    // Make a new copy of the attributes list (we're going to add attributes)
-                    let mut new_proto = op_def.proto.clone().into_owned();
-                    let mut attributes = op_def.proto.get_attribute().to_vec();
-
-                    // Loop over the inputs (skipping the first one - that's going to be the data input)
-                    for input_index in 1..(inputs.len().min(attr_names.len())) {
-                        let source_node = &inputs[input_index].source_node;
-                        match &source_node.definition {
-                            // If the input is an initializer (Tensor) we can obtain the data from the definition and move it to an attribute
-                            NodeDefinition::Tensor(tensor_proto) => {
-                                let attr_name = attr_names[input_index];
-                                let data_type =
-                                    TensorProto_DataType::from_i32(tensor_proto.get_data_type())
-                                        .unwrap_or(TensorProto_DataType::UNDEFINED);
-
-                                match (op, attr_name) {
-                                    // Inputs that need to be converted to an i64 attribute
-                                    ("Split", "split")
-                                    | ("Resize", "roi")
-                                    | ("Resize", "sizes")
-                                    | ("Reshape", "shape") => match data_type {
-                                        TensorProto_DataType::INT64
-                                        | TensorProto_DataType::UNDEFINED => {
-                                            log::info!(
-                                                    "transferring input {} for op {} to i64 attribute (initializer data type: {:?})",
-                                                    attr_name,
-                                                    op,
-                                                    data_type
-                                                );
-                                            let value = tensor_proto.get_int64_data().to_vec();
-                                            attributes
-                                                .push(attribute(attr_names[input_index], value));
-                                        }
-                                        _ => {
-                                            return Err(OptimizerError::InvalidDataType {
-                                                data_type,
-                                                input: attr_name.to_string(),
-                                                op: op.to_string(),
-                                            })
-                                        }
-                                    },
-                                    // Inputs that need to be converted to an f32 attribute
-                                    ("Resize", "scales") => match data_type {
-                                        TensorProto_DataType::FLOAT
-                                        | TensorProto_DataType::UNDEFINED => {
-                                            log::info!(
-                                                    "transferring input {} for op {} to f32 attribute (initializer data type: {:?})",
-                                                    attr_name,
-                                                    op,
-                                                    data_type
-                                                );
-                                            let value: Vec<f32> =
-                                                tensor_proto.get_float_data().to_vec();
-                                            attributes
-                                                .push(attribute(attr_names[input_index], value));
-                                        }
-                                        _ => {
-                                            return Err(OptimizerError::InvalidDataType {
-                                                data_type,
-                                                input: attr_name.to_string(),
-                                                op: op.to_string(),
-                                            })
-                                        }
-                                    },
-                                    _ => {
-                                        // Some other unspecified input that we do not support yet
-                                        return Err(OptimizerError::Unsupported(format!(
-                                            "data_type {} for input {} to op {}",
-                                            tensor_proto.get_data_type(),
-                                            attr_name,
-                                            op
-                                        )));
-                                    }
-                                }
-                            }
-                            NodeDefinition::Missing => {
-                                // Just remove it
-                            }
-                            _ => {
-                                // One of the inputs (except the first) is something other than a tensor (e.g. 'dynamic')
-                                return Err(OptimizerError::Unsupported(format!(
-                                    "{} operation with dynamic input for {}",
-                                    op, attr_names[input_index]
-                                )));
-                            }
-                        }
-                    }
-
-                    // Create new node with extra attributes
-                    new_proto.set_attribute(RepeatedField::from(attributes));
-
-                    let new_node = Self {
-                        inputs: vec![inputs[0].clone()],
-                        definition: NodeDefinition::Operator(Box::new(OperatorDefinition {
-                            proto: Cow::Owned(new_proto),
-                            output_shapes: op_def.output_shapes.clone(),
-                        })),
-                    };
-
-                    Ok(Arc::new(new_node))
-                }
-
-                _ => Ok(Arc::new(Self {
-                    inputs,
-                    definition: NodeDefinition::Operator(op_def),
-                })),
-            }
-        } else {
-            Ok(Arc::new(Self { definition, inputs }))
-        }
-    }
-}

@@ -12,7 +12,7 @@ extern crate lazy_static;
 use compiler::CompileError;
 use gpu::GpuError;
 use ir::IrError;
-use optimizer::OptimizerError;
+use optimizer::{Optimizer, OptimizerError};
 use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::result::Result;
@@ -125,7 +125,8 @@ impl Session {
         // Optimize and compile the model graph to a set of buffers and 'builders' which can basically run GPU shader code referencing these buffers
         let onnx_opset_version = onnx_opset_version.ok_or(SessionError::UnknownOnnxOpsetVersion)?;
 
-        let ir = ir::Node::from_model(&model)?.optimize()?;
+        let mut optimizer = Optimizer::new();
+        let ir = optimizer.optimize(ir::Node::from_model(&model)?)?;
         let gpu_model = GpuModel::from(ir, device, queue, onnx_opset_version)?;
 
         Ok(Session { gpu_model })
