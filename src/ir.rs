@@ -34,7 +34,7 @@ impl<'model> OperatorDefinition<'model> {
 #[derive(Clone)]
 pub enum NodeDefinition<'model> {
     Operator(usize, Box<OperatorDefinition<'model>>),
-    Tensor(usize, &'model TensorProto),
+    Tensor(usize, Box<Cow<'model, TensorProto>>),
     Input(usize, &'model ValueInfoProto),
     Outputs { names: Vec<&'model str> },
     Missing, // A missing input (optional)
@@ -231,7 +231,7 @@ impl<'model> Node<'model> {
             log::info!("Initializer {}", initializer.get_name());
             node_definitions_by_output.insert(
                 initializer.get_name().to_string(),
-                NodeDefinition::Tensor(index, initializer),
+                NodeDefinition::Tensor(index, Box::new(Cow::Borrowed(initializer))),
             );
         }
 

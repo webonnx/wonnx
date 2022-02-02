@@ -5,6 +5,7 @@ use thiserror::Error;
 use crate::{
     ir::{Input, Node, NodeDefinition, OperatorDefinition},
     onnx::TensorProto_DataType,
+    resource::padding,
     utils::{attribute, get_attribute, AttributeNotFoundError},
 };
 
@@ -248,7 +249,9 @@ impl<'model> Node<'model> {
     ) -> Result<Arc<Self>, OptimizerError> {
         if let NodeDefinition::Operator(op_index, op_def) = definition {
             match op_def.proto.get_op_type() {
-                "Conv" => {
+                "Conv" | "ConvRelu" | "ConvLeakyRelu" => {
+                    // This optimization inserts some padding to convolution between kernels with kernel 3x3, because of
+                    // the stride of matrix3x3 is 16 in wgsl. It makes the computation matrixable and increases the performance.
                     if inputs.len() > 2
                         && get_attribute::<Vec<i64>>("kernel_shape", None, &op_def.proto)? == [3, 3]
                         && (get_attribute("pads", Some(vec![0, 0, 0, 0]), &op_def.proto)?
@@ -261,7 +264,7 @@ impl<'model> Node<'model> {
                         && get_attribute("strides", Some(vec![1, 1]), &op_def.proto)? == [1, 1]
                     {
                         if let NodeDefinition::Tensor(idx, tensor) =
-                            inputs[1].source_node.definition
+                            &inputs[1].source_node.definition
                         {
                             let data = tensor.get_float_data();
                             let raw_data = if !data.is_empty() {
@@ -270,7 +273,29 @@ impl<'model> Node<'model> {
                                 tensor.get_raw_data()
                             };
 
-                            // Set data of tensor = padding(data, 12, 4)
+                            let padded_raw_data = padding(raw_data, 12, 4);
+
+                            log::debug!(
+                                "applying optimization: strides data is {} bytes before, {} bytes after",
+                                raw_data.len(),
+                                padded_raw_data.len()
+                            );
+
+                            // Create a new tensor with the padded data
+                            let mut new_tensor = tensor.clone().into_owned();
+                            new_tensor.set_float_data(vec![]);
+                            new_tensor.set_raw_data(padded_raw_data);
+                            let new_input = Input {
+                                output_index: 0,
+                                source_node: Arc::new(Node {
+                                    definition: NodeDefinition::Tensor(
+                                        *idx,
+                                        Box::new(Cow::Owned(new_tensor)),
+                                    ),
+                                    inputs: vec![],
+                                }),
+                            };
+                            inputs[1] = new_input;
                         }
                     }
 
