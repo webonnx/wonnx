@@ -93,7 +93,8 @@ fn test_mnist() {
     assert_eq!(result.0, 7);
 }
 
-#[ignore] // Ignore for now because of: https://github.com/gfx-rs/wgpu/issues/2285
+// Ignore on Windows now because of: https://github.com/gfx-rs/wgpu/issues/2285
+#[cfg(not(target_os = "windows"))]
 #[test]
 fn test_squeeze() {
     let mut input_data = HashMap::new();
