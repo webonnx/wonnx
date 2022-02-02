@@ -295,15 +295,15 @@ impl<'model> Debug for NodeDefinition<'model> {
             NodeDefinition::Operator(def) => {
                 write!(
                     f,
-                    "Op: {} ({})",
+                    "op: {} ({})",
                     def.proto.get_name(),
                     def.proto.get_op_type()
                 )
             }
-            NodeDefinition::Tensor(def) => write!(f, "Tensor {}", def.get_name()),
-            NodeDefinition::Input(def) => write!(f, "Input {}", def.get_name()),
-            NodeDefinition::Outputs { .. } => write!(f, "Outputs"),
-            NodeDefinition::Missing => write!(f, "Missing (optional)"),
+            NodeDefinition::Tensor(def) => write!(f, "tensor {}", def.get_name()),
+            NodeDefinition::Input(def) => write!(f, "input {}", def.get_name()),
+            NodeDefinition::Outputs { .. } => write!(f, "outputs"),
+            NodeDefinition::Missing => write!(f, "missing (optional)"),
         }
     }
 }

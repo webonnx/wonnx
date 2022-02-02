@@ -210,12 +210,6 @@ impl GpuModel {
             let mut output_tensors = vec![];
             let gpu_op: GpuStep = match &node.definition {
                 NodeDefinition::Operator(op_def) => {
-                    log::info!(
-                        "- operator {} type={}",
-                        op_def.proto.get_name(),
-                        op_def.proto.get_op_type()
-                    );
-
                     let gpu_op = op_def.gpu_op(
                         &self.device,
                         outputs_readable,
@@ -239,7 +233,6 @@ impl GpuModel {
                     gpu_op
                 }
                 NodeDefinition::Tensor(tensor_def) => {
-                    log::info!("- tensor {}", tensor_def.get_name());
                     let tensor_buffer = Arc::new(tensor_def.buffer(&self.device, outputs_readable));
                     output_tensors.push(GpuTensor {
                         shape: Shape::from(tensor_def.get_dims()),
@@ -248,13 +241,13 @@ impl GpuModel {
                     GpuStep::Initializer(tensor_buffer)
                 }
                 NodeDefinition::Input(input_def) => {
-                    let input_shape = input_def.get_shape();
-                    log::info!("- input {} shape {}", input_def.get_name(), input_shape);
-
                     if outputs_readable {
-                        log::info!("note: input buffer should also be readable. We'll read back CPU buffer later!");
+                        log::warn!(
+                            "it looks like you will be reading back an inference input as output"
+                        );
                     }
 
+                    let input_shape = input_def.get_shape();
                     let input_buffer = Arc::new(resource::buffer(
                         &self.device,
                         input_shape.buffer_len() as _,
@@ -280,7 +273,7 @@ impl GpuModel {
             Ok(())
         } else {
             // This node is already sequenced
-            log::info!("not sequencing (already seen) {:?}", node.definition);
+            log::debug!("not sequencing (already seen) {:?}", node.definition);
             Ok(())
         }
     }
@@ -335,7 +328,7 @@ impl TensorProtoExtra for TensorProto {
     fn buffer(&self, device: &wgpu::Device, readable: bool) -> Buffer {
         let input_shape = Shape::from(self.get_dims());
         log::info!(
-            "Creating tensor buffer {} shape {}",
+            "creating tensor buffer {} shape {}",
             self.get_name(),
             input_shape
         );
