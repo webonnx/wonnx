@@ -1,8 +1,6 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    hash::Hash,
-    ptr,
     sync::Arc,
 };
 
@@ -11,7 +9,7 @@ use wgpu::{Buffer, BufferUsages, CommandEncoder};
 
 use crate::{
     compiler::{compile, CompileError, CompiledNode},
-    ir::{Node, NodeDefinition, OperatorDefinition},
+    ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
     onnx::TensorProto,
     resource::{self, resize},
     utils::{ceil, Shape, MINIMUM_BUFFER_SIZE_BYTES},
@@ -73,29 +71,6 @@ pub enum GpuError {
 enum InferenceOutput {
     InferenceInput(String),
     Tensor(GpuTensor),
-}
-
-/// Wrap an Arc<Node> in a struct so we can implement pointer-based comparison for it, and use them as keys in a HashSet/HashMap
-struct NodeIdentifier<'model>(Arc<Node<'model>>);
-
-impl<'model> Hash for NodeIdentifier<'model> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        ptr::hash(Arc::as_ptr(&self.0), state)
-    }
-}
-
-impl<'model> PartialEq for NodeIdentifier<'model> {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl<'model> Eq for NodeIdentifier<'model> {}
-
-impl<'model> Node<'model> {
-    fn identifier(self: &Arc<Self>) -> NodeIdentifier<'model> {
-        NodeIdentifier(self.clone())
-    }
 }
 
 impl GpuModel {

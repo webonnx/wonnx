@@ -2,6 +2,8 @@ use crate::onnx::{ModelProto, NodeProto, TensorProto, ValueInfoProto};
 use crate::utils::Shape;
 use std::borrow::Cow;
 use std::fmt::Debug;
+use std::hash::Hash;
+use std::ptr;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
@@ -305,5 +307,28 @@ impl<'model> Debug for NodeDefinition<'model> {
             NodeDefinition::Outputs { .. } => write!(f, "outputs"),
             NodeDefinition::Missing => write!(f, "missing (optional)"),
         }
+    }
+}
+
+/// Wrap an Arc<Node> in a struct so we can implement pointer-based comparison for it, and use them as keys in a HashSet/HashMap
+pub struct NodeIdentifier<'model>(Arc<Node<'model>>);
+
+impl<'model> Hash for NodeIdentifier<'model> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        ptr::hash(Arc::as_ptr(&self.0), state)
+    }
+}
+
+impl<'model> PartialEq for NodeIdentifier<'model> {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl<'model> Eq for NodeIdentifier<'model> {}
+
+impl<'model> Node<'model> {
+    pub fn identifier(self: &Arc<Self>) -> NodeIdentifier<'model> {
+        NodeIdentifier(self.clone())
     }
 }

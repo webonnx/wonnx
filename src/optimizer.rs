@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 use crate::{
-    ir::{Input, Node, NodeDefinition, OperatorDefinition},
+    ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
     onnx::TensorProto_DataType,
     resource::padding,
     utils::{attribute, get_attribute, AttributeNotFoundError},
@@ -28,6 +28,7 @@ pub enum OptimizerError {
     AttributeNotFound(#[from] AttributeNotFoundError),
 }
 
+#[derive(Clone)]
 struct Sequence<'model> {
     node: Arc<Node<'model>>,
     skip: usize,
@@ -35,12 +36,14 @@ struct Sequence<'model> {
 
 pub struct Optimizer<'model> {
     padded_tensors: HashMap<String, Arc<Node<'model>>>,
+    optimized: HashMap<NodeIdentifier<'model>, Sequence<'model>>,
 }
 
 impl<'model> Optimizer<'model> {
     pub fn new() -> Self {
         Self {
             padded_tensors: HashMap::new(),
+            optimized: HashMap::new(),
         }
     }
 
@@ -50,11 +53,26 @@ impl<'model> Optimizer<'model> {
         node: Arc<Node<'model>>,
     ) -> Result<Arc<Node<'model>>, OptimizerError> {
         let mut path = vec![];
-        let seq = self.optimize_branch(node, &mut path)?;
+        let seq = self.optimize_branch_cached(node, &mut path)?;
         if seq.skip != 0 {
             panic!("sequencing gone wrong");
         }
         Ok(seq.node)
+    }
+
+    fn optimize_branch_cached(
+        &mut self,
+        node: Arc<Node<'model>>,
+        chain: &mut Vec<(String, Arc<Node<'model>>)>,
+    ) -> Result<Sequence<'model>, OptimizerError> {
+        if let Some(optimized) = self.optimized.get(&node.identifier()) {
+            Ok(optimized.clone())
+        } else {
+            let identifier = node.identifier();
+            let optimized = self.optimize_branch(node, chain)?;
+            self.optimized.insert(identifier, optimized.clone());
+            Ok(optimized)
+        }
     }
 
     /// Optimize a branch of a graph. This function is recursively called on inputs. The 'chain' parameter is a list of
@@ -95,7 +113,7 @@ impl<'model> Optimizer<'model> {
                     if node.inputs.len() != 1 {
                         return Err(OptimizerError::NoInputs);
                     }
-                    return self.optimize_branch(node.inputs[0].source_node.clone(), chain);
+                    return self.optimize_branch_cached(node.inputs[0].source_node.clone(), chain);
                 }
                 // The Dropout operation does nothing when its training_mode is set to 0. We do not support training_mode=1
                 "Dropout" => {
@@ -111,7 +129,7 @@ impl<'model> Optimizer<'model> {
                         )));
                     }
 
-                    return self.optimize_branch(node.inputs[0].source_node.clone(), chain);
+                    return self.optimize_branch_cached(node.inputs[0].source_node.clone(), chain);
                 }
                 _ => {}
             }
@@ -145,7 +163,8 @@ impl<'model> Optimizer<'model> {
                 let mut new_inputs = Vec::with_capacity(node.inputs.len());
 
                 for input in &node.inputs {
-                    let source_sequence = self.optimize_branch(input.source_node.clone(), chain)?;
+                    let source_sequence =
+                        self.optimize_branch_cached(input.source_node.clone(), chain)?;
 
                     if source_sequence.skip > 0 {
                         log::info!("operator is optimized away: {:?}", node.definition);
@@ -175,7 +194,7 @@ impl<'model> Optimizer<'model> {
             .map(|input| {
                 let mut input_chain = vec![];
                 let source_sequence =
-                    self.optimize_branch(input.source_node.clone(), &mut input_chain)?;
+                    self.optimize_branch_cached(input.source_node.clone(), &mut input_chain)?;
 
                 assert!(
                     source_sequence.skip == 0,
@@ -427,8 +446,6 @@ impl<'model> Optimizer<'model> {
         match &path_slices[..] {
             // Conv+Relu or Conv+LeakyRelu: combine into ConvRelu/ConvLeakyRelu
             ["Conv", "Relu", ..] | ["Conv", "LeakyRelu", ..] => {
-                log::info!("can fuse chain to Conv[Leaky]Relu: {:?}", path_slices);
-
                 let conv = chain[chain.len() - 1].1.clone();
                 let relu = chain[chain.len() - 2].1.clone();
 
@@ -445,11 +462,36 @@ impl<'model> Optimizer<'model> {
                     };
                     convrelu_proto.set_op_type(new_op_type.to_string());
 
-                    // Copy all Relu attributes over
+                    // Copy all Relu attributes over to the copy of the Conv node
                     let mut attributes = conv_def.proto.get_attribute().to_vec();
                     attributes.extend(relu_def.proto.get_attribute().iter().cloned());
                     convrelu_proto.set_attribute(RepeatedField::from(attributes));
+                    convrelu_proto.set_name(format!(
+                        "{}+{}",
+                        conv.definition.get_name(),
+                        relu.definition.get_name()
+                    ));
+
+                    log::debug!(
+                        "can fuse chain of Conv/[Leaky]Relu to Conv[Leaky]Relu: {:?}: {:?} + {:?} = {}",
+                        path_slices,
+                        conv.definition(),
+                        relu.definition(),
+                        convrelu_proto.get_name()
+                    );
+
                     convrelu_def.proto = Cow::Owned(convrelu_proto);
+
+                    let new_inputs = conv
+                        .inputs
+                        .iter()
+                        .map(|input| -> Result<Input, OptimizerError> {
+                            Ok(Input {
+                                source_node: self.optimize(input.source_node.clone())?,
+                                output_index: input.output_index,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
 
                     let node = Arc::new(Node {
                         inputs: conv.inputs.clone(),
@@ -457,7 +499,7 @@ impl<'model> Optimizer<'model> {
                     });
 
                     Ok(Some(Sequence {
-                        node: self.optimize(node)?,
+                        node: self.optimized_with(&node, new_inputs)?,
                         skip: 1,
                     }))
                 } else {
