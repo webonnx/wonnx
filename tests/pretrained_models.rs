@@ -94,7 +94,8 @@ fn test_mnist() {
 }
 
 // Ignore on Windows now because of: https://github.com/gfx-rs/wgpu/issues/2285
-#[cfg(not(target_os = "windows"))]
+// Ignore on Linux because for some reason this does not seem to work properly using Lavapipe
+#[cfg(target_os = "macos")]
 #[test]
 fn test_squeeze() {
     let mut input_data = HashMap::new();
