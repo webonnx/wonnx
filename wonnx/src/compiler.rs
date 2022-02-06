@@ -177,6 +177,12 @@ pub fn compile(
     context.insert("op_type", &node.get_op_type());
     context.insert("opset_version", &opset_version);
 
+    context.insert("scalar_type", "f32");
+    context.insert("scalar_stride", &4);
+    context.insert("vec4_stride", &(4 * 4));
+    context.insert("mat4x4_stride", &(4 * 4 * 4));
+    context.insert("mat3x3_stride", &(48));
+
     let (template, x, y, z) = match node.get_op_type() {
         op @ ("Reshape" | "Dropout" | "Identity" | "Flatten" | "Squeeze" | "Unsqueeze") => {
             // These ops should all be optimized away earlier

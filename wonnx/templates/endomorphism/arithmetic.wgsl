@@ -20,10 +20,13 @@ var<storage, write> output_0: ArrayVector;
 
 [[stage(compute), workgroup_size({{ workgroup_size_x }}, 1, 1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
-    let gidx = global_id.x;
-{% if i_lens | length == 2 %}
-    output_0.data[gidx] = input_0.data[gidx] {{ op_type }} input_1.data[gidx];
-{% else %}
-    output_0.data[gidx] = input_0.data[gidx] {{ op_type }} vec4<f32>({{ coefficient }}., {{ coefficient }}., {{ coefficient }}., {{ coefficient }}.);
-{% endif %}
+	let gidx = global_id.x;
+
+	{% if i_lens | length == 2 %}
+		output_0.data[gidx] = input_0.data[gidx] {{ op_type }} input_1.data[gidx];
+
+	{% else %}
+		output_0.data[gidx] = input_0.data[gidx] {{ op_type }} Vec4({{ coefficient }}., {{ coefficient }}., {{ coefficient }}., {{ coefficient }}.);
+		
+	{% endif %}
 }
