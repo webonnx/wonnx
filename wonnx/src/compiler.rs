@@ -148,6 +148,11 @@ pub enum CompileError {
     ComputeLimitExceeded(String, u32, u32),
 }
 
+struct NodeTemplate {
+    template: &'static str,
+    threads: (u32, u32, u32),
+}
+
 pub fn compile(
     node: &crate::onnx::NodeProto,
     input_shapes: &[&Shape],
@@ -183,7 +188,7 @@ pub fn compile(
     context.insert("mat4x4_stride", &(4 * 4 * 4));
     context.insert("mat3x3_stride", &(48));
 
-    let (template, x, y, z) = match node.get_op_type() {
+    let node_template: NodeTemplate = match node.get_op_type() {
         op @ ("Reshape" | "Dropout" | "Identity" | "Flatten" | "Squeeze" | "Unsqueeze") => {
             // These ops should all be optimized away earlier
             return Err(CompileError::InvalidOperation(op.to_string()));
@@ -198,7 +203,10 @@ pub fn compile(
                 MAX_WORKGROUP_SIZE_X,
             )?;
             context.insert("workgroup_size_x", &workgroup_size_x);
-            ("endomorphism/map.wgsl".to_string(), x_threads, 1, 1)
+            NodeTemplate {
+                template: "endomorphism/map.wgsl",
+                threads: (x_threads, 1, 1),
+            }
         }
 
         "Softmax" => {
@@ -243,7 +251,10 @@ pub fn compile(
                 });
             }
 
-            ("endomorphism/softmax.wgsl".to_string(), 1, 1, 1)
+            NodeTemplate {
+                template: "endomorphism/softmax.wgsl",
+                threads: (1, 1, 1),
+            }
         }
 
         // Arithmetic operation
@@ -281,7 +292,10 @@ pub fn compile(
             )?;
             context.insert("workgroup_size_x", &workgroup_size_x);
 
-            ("endomorphism/arithmetic.wgsl".to_string(), x_threads, 1, 1)
+            NodeTemplate {
+                template: "endomorphism/arithmetic.wgsl",
+                threads: (x_threads, 1, 1),
+            }
         }
         // Not taking into account attributes
         "BatchNormalization" => {
@@ -357,12 +371,14 @@ pub fn compile(
                 &ceil(input_w * input_h, elem_type.elements() as u64),
             );
 
-            (
-                "endomorphism/batchnormalization.wgsl".to_string(),
-                ceil(input_w * input_h, elem_type.elements() as u64) as _,
-                input_channels as _,
-                input_batches as _,
-            )
+            NodeTemplate {
+                template: "endomorphism/batchnormalization.wgsl",
+                threads: (
+                    ceil(input_w * input_h, elem_type.elements() as u64) as _,
+                    input_channels as _,
+                    input_batches as _,
+                ),
+            }
         }
         "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu" | "LeakyRelu" => {
             let alpha = get_attribute("alpha", Some(1.0), node)?;
@@ -376,12 +392,10 @@ pub fn compile(
 
             context.insert("workgroup_size_x", &workgroup_size_x);
 
-            (
-                "endomorphism/activation.wgsl".to_string(),
-                x_threads as _,
-                1,
-                1,
-            )
+            NodeTemplate {
+                template: "endomorphism/activation.wgsl",
+                threads: (x_threads, 1, 1),
+            }
         }
         "Concat" => {
             let mut input_cumulative_len = vec![];
@@ -391,12 +405,11 @@ pub fn compile(
                 input_cumulative_len.push(sum);
             }
             context.insert("cum_len", &input_cumulative_len);
-            (
-                "matrix/concat.wgsl".to_string(),
-                ceil(output_lengths[0], 256) as u32,
-                1,
-                1,
-            )
+
+            NodeTemplate {
+                template: "matrix/concat.wgsl",
+                threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
+            }
         }
         op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
         | "GlobalAveragePool") => {
@@ -481,12 +494,10 @@ pub fn compile(
 
             // GLSL shader for convolution computation
             match op {
-                "MaxPool" | "AveragePool" | "GlobalAveragePool" => (
-                    "pool/aggregate.wgsl".to_string(),
-                    ceil(output_lengths[0], 1024) as _,
-                    1,
-                    1,
-                ),
+                "MaxPool" | "AveragePool" | "GlobalAveragePool" => NodeTemplate {
+                    template: "pool/aggregate.wgsl",
+                    threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
+                },
                 "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish" => {
                     // Alpha is the Leaky Relu attribute
                     let alpha = get_attribute("alpha", Some(0.01), node)?;
@@ -499,30 +510,24 @@ pub fn compile(
                         && (input_shape.dim(1) % 16 == 0)
                         && (output_shape.dim(1) % 4 == 0)
                     {
-                        (
-                            "pool/conv_kernel_1.wgsl".to_string(),
-                            ceil(output_lengths[0], 1024) as _,
-                            1,
-                            1,
-                        )
+                        NodeTemplate {
+                            template: "pool/conv_kernel_1.wgsl",
+                            threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
+                        }
                     } else if (strides == [1, 1])
                         && (kernel_shape == [3, 3])
                         && (dilations == [1, 1])
                         && (output_shape.dim(1) % 4 == 0)
                     {
-                        (
-                            "pool/conv_kernel_3.wgsl".to_string(),
-                            ceil(output_lengths[0], 1024) as _,
-                            1,
-                            1,
-                        )
+                        NodeTemplate {
+                            template: "pool/conv_kernel_3.wgsl",
+                            threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
+                        }
                     } else {
-                        (
-                            "pool/conv.wgsl".to_string(),
-                            ceil(output_lengths[0], 256) as _,
-                            1,
-                            1,
-                        )
+                        NodeTemplate {
+                            template: "pool/conv.wgsl",
+                            threads: (ceil(output_lengths[0], 256) as _, 1, 1),
+                        }
                     }
                 }
                 _ => return Err(CompileError::InvalidOperation(op.to_string())),
@@ -564,11 +569,19 @@ pub fn compile(
             }
 
             if input_shapes[0].dim(0) == 1 {
-                let threads = output_shapes[0].dim(1);
-                ("matrix/gemm_1.wgsl".to_string(), threads as _, 1, 1)
+                NodeTemplate {
+                    template: "matrix/gemm_1.wgsl",
+                    threads: (output_shapes[0].dim(1) as _, 1, 1),
+                }
             } else {
-                let threads = input_shapes[0].dim(0) * input_shapes[1].dim(1) / 16;
-                ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
+                NodeTemplate {
+                    template: "matrix/gemm.wgsl",
+                    threads: (
+                        (input_shapes[0].dim(0) * input_shapes[1].dim(1) / 16) as _,
+                        1,
+                        1,
+                    ),
+                }
             }
         }
         "Resize" => {
@@ -661,12 +674,10 @@ pub fn compile(
             let exclude_outside = get_attribute("exclude_outside", Some(0), node)?;
             context.insert("exclude_outside", &exclude_outside);
 
-            (
-                "matrix/resize.wgsl".to_string(),
-                ceil(output_lengths[0], 256) as u32,
-                1,
-                1,
-            )
+            NodeTemplate {
+                template: "matrix/resize.wgsl",
+                threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
+            }
         }
         "Sum" => return Err(CompileError::UnimplementedOp(String::from("Sum"))),
         "Split" => {
@@ -684,12 +695,10 @@ pub fn compile(
             let split = get_attribute::<Vec<i64>>("split", Some(default_split), node)?;
             context.insert("split", &split);
 
-            (
-                "matrix/split.wgsl".to_string(),
-                ceil(output_lengths[0], 256) as u32,
-                1,
-                1,
-            )
+            NodeTemplate {
+                template: "matrix/split.wgsl",
+                threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
+            }
         }
         "Transpose" => {
             let default = ((input_lengths[0] as i64)..0).collect::<Vec<_>>();
@@ -707,46 +716,44 @@ pub fn compile(
 
             context.insert("permuted_chunks", &chunks);
 
-            (
-                "matrix/transpose.wgsl".to_string(),
-                ceil(output_lengths[0], 256) as _,
-                1,
-                1,
-            )
+            NodeTemplate {
+                template: "matrix/transpose.wgsl",
+                threads: (ceil(output_lengths[0], 256) as _, 1, 1),
+            }
         }
         op => return Err(CompileError::UnimplementedOp(op.to_string())),
     };
 
     let shader = TEMPLATES
-        .render(&template, &context)
+        .render(node_template.template, &context)
         .expect("failed to render shader");
 
     // Check if we remain within the limits of the thread count allowed by WebGPU
-    if x > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
+    if node_template.threads.0 > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
         return Err(CompileError::ComputeLimitExceeded(
             String::from("X threads"),
-            x as _,
+            node_template.threads.0 as _,
             MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
         ));
     }
-    if y > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
+    if node_template.threads.1 > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
         return Err(CompileError::ComputeLimitExceeded(
             String::from("Y threads"),
-            y as _,
+            node_template.threads.1 as _,
             MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
         ));
     }
-    if z > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
+    if node_template.threads.2 > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
         return Err(CompileError::ComputeLimitExceeded(
             String::from("Z threads"),
-            z as _,
+            node_template.threads.2 as _,
             MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
         ));
     }
 
     Ok(CompiledNode {
         shader,
-        threads: (x, y, z),
+        threads: node_template.threads,
     })
 }
 
