@@ -1,5 +1,8 @@
 use std::collections::HashMap;
-use wonnx::utils::{graph, model, node, tensor, tensor_of_type, InputTensor};
+use wonnx::{
+    onnx::TensorProto_DataType,
+    utils::{graph, model, node, tensor, tensor_of_type, InputTensor},
+};
 
 #[test]
 fn test_cos() {
@@ -38,8 +41,8 @@ fn test_integer() {
 
     // Model: X -> Cos -> Y
     let model = model(graph(
-        vec![tensor_of_type("X", &shape, 6 /* INT32 */)],
-        vec![tensor_of_type("Y", &shape, 6 /* INT32 */)],
+        vec![tensor_of_type("X", &shape, TensorProto_DataType::INT32)],
+        vec![tensor_of_type("Y", &shape, TensorProto_DataType::INT32)],
         vec![],
         vec![],
         vec![node(vec!["X", "X"], vec!["Y"], "add_ints", "Add", vec![])],

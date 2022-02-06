@@ -256,12 +256,17 @@ impl ValueInfoProto {
     }
 }
 
-// TODO: Make dimension optional
+/// Shorthand method to define an ONNX tensor with the specified name and shape (data type is f32)
 pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
-    tensor_of_type(name, dimensions, 1 /* FLOAT */)
+    tensor_of_type(name, dimensions, TensorProto_DataType::FLOAT)
 }
 
-pub fn tensor_of_type(name: &str, dimensions: &[i64], data_type: i32) -> onnx::ValueInfoProto {
+/// Shorthand method to define an ONNX tensor with the specified name, shape and data type
+pub fn tensor_of_type(
+    name: &str,
+    dimensions: &[i64],
+    data_type: TensorProto_DataType,
+) -> onnx::ValueInfoProto {
     let mut dim_value = vec![];
     for dimension in dimensions {
         let mut dim_channel = onnx::TensorShapeProto_Dimension::new();
@@ -273,7 +278,7 @@ pub fn tensor_of_type(name: &str, dimensions: &[i64], data_type: i32) -> onnx::V
     shape_tensor_proto.set_dim(protobuf::RepeatedField::from(dim_value));
 
     let mut type_proto_tensor = onnx::TypeProto_Tensor::new();
-    type_proto_tensor.set_elem_type(data_type);
+    type_proto_tensor.set_elem_type(data_type.value());
     type_proto_tensor.set_shape(shape_tensor_proto);
 
     let mut type_proto = onnx::TypeProto::new();
