@@ -286,7 +286,7 @@ pub fn compile(
             );
 
             let (x_threads, workgroup_size_x) = workgroup_size(
-                ceil(output_lengths[0], 1024) as _,
+                ceil(output_lengths[0], 4) as _,
                 MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
                 MAX_WORKGROUP_SIZE_X,
             )?;
