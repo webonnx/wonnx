@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use log::info;
 use ndarray::s;
-use wonnx::utils::InputTensor;
 use std::time::Instant;
 use std::{
     fs,
@@ -12,6 +11,7 @@ use std::{
     path::Path,
     time::Duration,
 };
+use wonnx::utils::InputTensor;
 use wonnx::WonnxError;
 
 // Args Management

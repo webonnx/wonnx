@@ -3,9 +3,9 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
-use wonnx::utils::InputTensor;
 use std::path::Path;
 use std::time::Instant;
+use wonnx::utils::InputTensor;
 
 // Args Management
 async fn run() {
