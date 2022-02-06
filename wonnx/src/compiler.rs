@@ -1,4 +1,6 @@
-use crate::utils::{ceil, get_attribute, AttributeNotFoundError, MultiType, ScalarType, Shape};
+use crate::utils::{
+    ceil, get_attribute, AttributeNotFoundError, DataTypeError, MultiType, ScalarType, Shape,
+};
 use tera::{Context, Tera};
 use thiserror::Error;
 
@@ -38,6 +40,11 @@ lazy_static! {
         tera.add_raw_template(
             "endomorphism/map.wgsl",
             include_str!("../templates/endomorphism/map.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
+            "endomorphism/cast.wgsl",
+            include_str!("../templates/endomorphism/cast.wgsl"),
         )
         .unwrap();
         tera.add_raw_template(
@@ -152,6 +159,9 @@ pub enum CompileError {
 
     #[error("cannot infer data type to use")]
     TypeUnderspecified,
+
+    #[error("invalid type encountered: {0}")]
+    InvalidType(#[from] DataTypeError),
 }
 
 struct NodeTemplate {
@@ -243,6 +253,24 @@ pub fn compile(
             NodeTemplate {
                 scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "endomorphism/map.wgsl",
+                threads: (x_threads, 1, 1),
+            }
+        }
+
+        "Cast" => {
+            let cast_to_type =
+                ScalarType::from_i32(get_attribute::<i64>("to", None, node)? as i32)?;
+            context.insert("cast_to_type", cast_to_type.wgsl_type_name());
+
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                ceil(output_lengths[0], 4),
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+            context.insert("workgroup_size_x", &workgroup_size_x);
+            NodeTemplate {
+                scalar_type: agreed_type(input_shapes, &[])?,
+                template: "endomorphism/cast.wgsl",
                 threads: (x_threads, 1, 1),
             }
         }
