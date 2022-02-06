@@ -30,6 +30,32 @@ fn test_cos() {
 }
 
 #[test]
+fn test_reciprocal() {
+    let n: usize = 16;
+    let mut input_data = HashMap::new();
+
+    let data: Vec<f32> = (1..=n).map(|x| x as f32).collect();
+    let reciprocal_data: Vec<f32> = (1..=n).map(|x| 1.0 / (x as f32)).collect();
+    let shape = vec![n as i64];
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
+
+    // Model: X -> Reciprocal -> Y
+    let model = model(graph(
+        vec![tensor("X", &shape)],
+        vec![tensor("Y", &shape)],
+        vec![],
+        vec![],
+        vec![node(vec!["X"], vec!["Y"], "rec", "Reciprocal", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    assert_eq!(result["Y"], reciprocal_data);
+}
+
+#[test]
 fn test_integer() {
     let _ = env_logger::builder().is_test(true).try_init();
     let n: usize = 16;
