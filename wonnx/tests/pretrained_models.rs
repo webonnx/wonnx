@@ -4,12 +4,13 @@ use std::collections::HashMap;
 use std::path::Path;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::*;
+use wonnx::utils::InputTensor;
 
 #[test]
 fn test_relu() {
     let mut input_data = HashMap::new();
     let data = vec![-1.0f32, 1.0];
-    input_data.insert("x".to_string(), data.as_slice());
+    input_data.insert("x".to_string(), InputTensor::F32(data.as_slice()));
 
     let session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/single_relu.onnx",
@@ -25,7 +26,10 @@ fn test_mnist() {
     let _ = env_logger::builder().is_test(true).try_init();
     let image = load_image("0.jpg");
     let mut input_data = HashMap::new();
-    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
+    input_data.insert(
+        "Input3".to_string(),
+        InputTensor::F32(image.as_slice().unwrap()),
+    );
     let session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/opt-mnist.onnx",
     ))
@@ -46,7 +50,10 @@ fn test_mnist() {
 
     let image = load_image("3.jpg");
     let mut input_data = HashMap::new();
-    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
+    input_data.insert(
+        "Input3".to_string(),
+        InputTensor::F32(image.as_slice().unwrap()),
+    );
     let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
@@ -62,7 +69,10 @@ fn test_mnist() {
 
     let image = load_image("5.jpg");
     let mut input_data = HashMap::new();
-    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
+    input_data.insert(
+        "Input3".to_string(),
+        InputTensor::F32(image.as_slice().unwrap()),
+    );
     let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
@@ -78,7 +88,10 @@ fn test_mnist() {
 
     let image = load_image("7.jpg");
     let mut input_data = HashMap::new();
-    input_data.insert("Input3".to_string(), image.as_slice().unwrap());
+    input_data.insert(
+        "Input3".to_string(),
+        InputTensor::F32(image.as_slice().unwrap()),
+    );
     let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
         .iter()
         .enumerate()
@@ -100,7 +113,10 @@ fn test_mnist() {
 fn test_squeeze() {
     let mut input_data = HashMap::new();
     let image = load_squeezenet_image();
-    input_data.insert("data".to_string(), image.as_slice().unwrap());
+    input_data.insert(
+        "data".to_string(),
+        InputTensor::F32(image.as_slice().unwrap()),
+    );
 
     let session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/opt-squeeze.onnx",

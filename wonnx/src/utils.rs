@@ -1,8 +1,9 @@
+use protobuf::ProtobufEnum;
 use protobuf::RepeatedField;
-use serde_derive::Serialize;
 
 use crate::onnx;
 use crate::onnx::OperatorSetIdProto;
+use crate::onnx::TensorProto_DataType;
 use crate::onnx::ValueInfoProto;
 use std::convert::From;
 use std::convert::Into;
@@ -14,16 +15,17 @@ use thiserror::Error;
 * error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
 pub const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 
-#[derive(Debug, Serialize, Clone)]
-#[serde(transparent)]
+#[derive(Debug, Clone)]
 pub struct Shape {
     pub dims: Vec<u64>,
+    pub data_type: ScalarType,
 }
 
 impl Shape {
-    pub fn from(ds: &[i64]) -> Shape {
+    pub fn from(data_type: ScalarType, dims: &[i64]) -> Shape {
         Shape {
-            dims: ds.iter().map(|x| *x as u64).collect(),
+            data_type,
+            dims: dims.iter().map(|x| *x as u64).collect(),
         }
     }
 
@@ -39,9 +41,9 @@ impl Shape {
         self.dims.iter().product()
     }
 
-    pub fn buffer_len(&self) -> u64 {
+    pub fn buffer_bytes(&self) -> usize {
         // Dividing by 4 since that is the size of an f32 in bytes
-        self.element_count().max(MINIMUM_BUFFER_SIZE_BYTES / 4)
+        (self.element_count() as usize) * self.data_type.stride()
     }
 
     pub fn dim(&self, idx: usize) -> u64 {
@@ -59,27 +61,92 @@ impl Shape {
     }
 }
 
-/** Represents a WGSL data type that can be used in a shader. The larger the data type, the more efficiently the GPU can
- * perform operations. However, large data types require the size of the data that is being worked on to be a multiple
- * of the data type (e.g. a vec4 can be used to work on a vector of 256 elements, but when used on a vector of 255 elements
- * calculation would overflow if the shader doesn't take this into account). The WGSL declaration looks like:
- *
- * struct Block {
- *    data: [[stride( dt.size_bytes() )]] dt.wgsl_type_name();
- * };
- */
-pub enum DataType {
-    F32,
-    Vec(usize),
+pub enum InputTensor<'a> {
+    F32(&'a [f32]),
+    I32(&'a [i32]),
 }
 
-impl DataType {
+#[derive(Error, Debug)]
+pub enum DataTypeError {
+    #[error("the ONNX scalar data type '{0:?}' is not supported")]
+    NotSupported(TensorProto_DataType),
+
+    #[error("the ONNX data type '{0}' is not recognized")]
+    NotRecognized(i32),
+
+    #[error("type is undefined")]
+    Undefined,
+}
+
+/// Data type for a single number
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ScalarType {
+    F32,
+    I64,
+    I32,
+}
+
+impl ScalarType {
+    pub fn from_i32(onnx: i32) -> Result<ScalarType, DataTypeError> {
+        let onnx_dt =
+            TensorProto_DataType::from_i32(onnx).ok_or(DataTypeError::NotRecognized(onnx))?;
+        Self::from(onnx_dt)
+    }
+
+    pub fn from(onnx: TensorProto_DataType) -> Result<ScalarType, DataTypeError> {
+        Ok(match onnx {
+            TensorProto_DataType::FLOAT => ScalarType::F32,
+            TensorProto_DataType::INT64 => ScalarType::I64,
+            TensorProto_DataType::INT32 => ScalarType::I32,
+            _ => return Err(DataTypeError::NotSupported(onnx)),
+        })
+    }
+
+    pub fn stride(&self) -> usize {
+        match self {
+            ScalarType::F32 => 4,
+            ScalarType::I32 => 4,
+            ScalarType::I64 => 8,
+        }
+    }
+
+    pub fn wgsl_type_name(&self) -> &'static str {
+        match self {
+            ScalarType::F32 => "f32",
+            ScalarType::I32 => "i32",
+            ScalarType::I64 => "i64",
+        }
+    }
+}
+
+impl Display for ScalarType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.wgsl_type_name())
+    }
+}
+
+/// Represents a WGSL data type that can be used in a shader to perform an operation on multiple scalars at once. The
+/// larger the data type, the more efficiently the GPU can perform operations. However, large data types require the size
+/// of the data that is being worked on to be a multiple of the data type (e.g. a vec4 can be used to work on a vector of
+/// 256 elements, but when used on a vector of 255 elements calculation would overflow if the shader doesn't take this
+/// into account). The WGSL declaration looks like:
+///
+/// struct Block {
+///     data: [[stride( dt.size_bytes() )]] dt.wgsl_type_name();
+/// };
+pub enum MultiType {
+    Scalar(ScalarType),
+    Vec(ScalarType, usize),
+    Mat(ScalarType, usize, usize),
+}
+
+impl MultiType {
     /// Determine the appropriate data type given the data size
-    pub fn for_size(n: usize) -> DataType {
+    pub fn for_size(n: usize, scalar: ScalarType) -> MultiType {
         let d = num::integer::gcd(n, 4);
         match d {
-            1 => DataType::F32,
-            2 | 4 => DataType::Vec(d),
+            1 => MultiType::Scalar(scalar),
+            2 | 4 => MultiType::Vec(scalar, d),
             /* 3 can't occur here because it is not a divisor of 4. Even so, we wouldn't be able to use vec3, because
             its stride is 16 instead of the expected 12, which would require padding to work properly. */
             _ => unreachable!(),
@@ -87,26 +154,33 @@ impl DataType {
     }
 
     /// Size (in bytes) of the data type (useful for setting the 'stride' in WGSL)
-    pub fn size_bytes(&self) -> usize {
+    pub fn stride(&self) -> usize {
         match self {
-            DataType::F32 => 4,
-            DataType::Vec(n) => 4 * n,
+            MultiType::Scalar(s) => s.stride(),
+
+            // FIXME: this may not always be right!
+            MultiType::Vec(st, n) => st.stride() * n,
+            MultiType::Mat(st, w, h) => st.stride() * w * h,
         }
     }
 
     /// Name of this data type in WGSL
     pub fn wgsl_type_name(&self) -> String {
         match self {
-            DataType::F32 => "f32".to_string(),
-            DataType::Vec(n) => format!("vec{}<f32>", n),
+            MultiType::Scalar(s) => s.wgsl_type_name().to_string(),
+            MultiType::Vec(st, n) => format!("vec{}<{}>", n, st.wgsl_type_name()),
+            MultiType::Mat(st, w, h) => format!("mat{}x{}<{}>", w, h, st.wgsl_type_name()),
         }
     }
 
     /// The number of elements in this data type
     pub fn elements(&self) -> usize {
         match self {
-            DataType::F32 => 1,
-            DataType::Vec(n) => *n,
+            MultiType::Scalar(_) => 1,
+
+            // FIXME: this may not always be right
+            MultiType::Vec(_, n) => *n,
+            &MultiType::Mat(_, w, h) => w * h,
         }
     }
 }
@@ -158,22 +232,36 @@ pub fn ceil(num: u64, div: u64) -> u64 {
 }
 
 impl ValueInfoProto {
-    pub fn get_shape(&self) -> Shape {
-        Shape::from(
-            self.get_field_type()
-                .get_tensor_type()
-                .get_shape()
-                .get_dim()
-                .iter()
-                .map(|x| x.get_dim_value() as i64)
-                .collect::<Vec<i64>>()
-                .as_slice(),
-        )
+    pub fn get_shape(&self) -> Result<Shape, DataTypeError> {
+        Ok(match &self.get_field_type().value {
+            Some(t) => match t {
+                onnx::TypeProto_oneof_value::tensor_type(tensor_proto) => Shape::from(
+                    ScalarType::from_i32(tensor_proto.get_elem_type())?,
+                    self.get_field_type()
+                        .get_tensor_type()
+                        .get_shape()
+                        .get_dim()
+                        .iter()
+                        .map(|x| x.get_dim_value() as i64)
+                        .collect::<Vec<i64>>()
+                        .as_slice(),
+                ),
+                onnx::TypeProto_oneof_value::sequence_type(_) => todo!(),
+                onnx::TypeProto_oneof_value::map_type(_) => todo!(),
+                onnx::TypeProto_oneof_value::optional_type(_) => todo!(),
+                onnx::TypeProto_oneof_value::sparse_tensor_type(_) => todo!(),
+            },
+            None => return Err(DataTypeError::Undefined),
+        })
     }
 }
 
 // TODO: Make dimension optional
 pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
+    tensor_of_type(name, dimensions, 1 /* FLOAT */)
+}
+
+pub fn tensor_of_type(name: &str, dimensions: &[i64], data_type: i32) -> onnx::ValueInfoProto {
     let mut dim_value = vec![];
     for dimension in dimensions {
         let mut dim_channel = onnx::TensorShapeProto_Dimension::new();
@@ -185,7 +273,7 @@ pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
     shape_tensor_proto.set_dim(protobuf::RepeatedField::from(dim_value));
 
     let mut type_proto_tensor = onnx::TypeProto_Tensor::new();
-    type_proto_tensor.set_elem_type(1);
+    type_proto_tensor.set_elem_type(data_type);
     type_proto_tensor.set_shape(shape_tensor_proto);
 
     let mut type_proto = onnx::TypeProto::new();
@@ -202,6 +290,7 @@ pub fn tensor(name: &str, dimensions: &[i64]) -> onnx::ValueInfoProto {
 pub fn initializer(name: &str, data: Vec<f32>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
     initializer.set_name(name.to_string());
+    initializer.set_data_type(1); // FLOAT
     initializer.set_float_data(data);
     initializer
 }
@@ -345,7 +434,7 @@ impl From<onnx::AttributeProto> for String {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{attribute, graph, initializer, model, node, tensor};
+    use crate::utils::{attribute, graph, initializer, model, node, tensor, InputTensor};
 
     #[test]
     fn test_model() {
@@ -356,7 +445,7 @@ mod tests {
         let mut input_data = std::collections::HashMap::new();
 
         let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
-        input_data.insert("X".to_string(), data.as_slice());
+        input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
         // ONNX INPUTS
         let shape = vec![1, c, n, n];

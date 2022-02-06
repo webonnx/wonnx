@@ -1,6 +1,6 @@
 use approx::assert_ulps_eq;
 use std::collections::HashMap;
-use wonnx::utils::{graph, model, node, tensor};
+use wonnx::utils::{graph, model, node, tensor, InputTensor};
 
 fn abs_eq_vector(xs: &[f32], ys: &[f32]) {
     assert_eq!(xs.len(), ys.len());
@@ -27,7 +27,7 @@ fn global_average_pool() {
         width_height as i64,
     ];
     let output_shape = vec![batches as i64, channels as i64, 1, 1];
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // Model: X -> GlobalAveragePool -> Y
     let bn_model = model(graph(

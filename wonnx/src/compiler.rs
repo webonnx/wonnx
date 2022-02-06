@@ -1,4 +1,4 @@
-use crate::utils::{ceil, get_attribute, AttributeNotFoundError, DataType, Shape};
+use crate::utils::{ceil, get_attribute, AttributeNotFoundError, MultiType, ScalarType, Shape};
 use tera::{Context, Tera};
 use thiserror::Error;
 
@@ -146,11 +146,52 @@ pub enum CompileError {
 
     #[error("the model exceeds the limit for {0}: {1} > {2}")]
     ComputeLimitExceeded(String, u32, u32),
+
+    #[error("cannot determine data type to use: {0} or {1}")]
+    TypesDisagree(ScalarType, ScalarType),
+
+    #[error("cannot infer data type to use")]
+    TypeUnderspecified,
 }
 
 struct NodeTemplate {
+    scalar_type: ScalarType,
     template: &'static str,
     threads: (u32, u32, u32),
+}
+
+/// Returns the data type of the input and output shapes, but error if these types differ or when no input/output was specified
+fn agreed_type(
+    input_shapes: &[&Shape],
+    output_shapes: &[&Shape],
+) -> Result<ScalarType, CompileError> {
+    let mut data_type: Option<ScalarType> = None;
+
+    for input_shape in input_shapes {
+        let input_type = input_shape.data_type;
+        match data_type {
+            Some(dt) => {
+                if dt != input_type {
+                    return Err(CompileError::TypesDisagree(dt, input_type));
+                }
+            }
+            None => data_type = Some(input_type),
+        }
+    }
+
+    for output_shape in output_shapes {
+        let output_type = output_shape.data_type;
+        match data_type {
+            Some(dt) => {
+                if dt != output_type {
+                    return Err(CompileError::TypesDisagree(dt, output_type));
+                }
+            }
+            None => data_type = Some(output_type),
+        }
+    }
+
+    data_type.ok_or(CompileError::TypeUnderspecified)
 }
 
 pub fn compile(
@@ -171,22 +212,18 @@ pub fn compile(
 
     let input_chunks: Vec<Vec<u64>> = input_shapes.iter().map(|d| d.chunks()).collect();
     let output_chunks: Vec<Vec<u64>> = output_shapes.iter().map(|d| d.chunks()).collect();
+    let i_dims: Vec<&Vec<u64>> = input_shapes.iter().map(|s| &s.dims).collect();
+    let o_dims: Vec<&Vec<u64>> = output_shapes.iter().map(|s| &s.dims).collect();
 
     let mut context = Context::new();
     context.insert("i_lens", &input_lengths);
     context.insert("o_lens", &output_lengths);
-    context.insert("i_shape", &input_shapes);
-    context.insert("o_shape", &output_shapes);
+    context.insert("i_shape", &i_dims);
+    context.insert("o_shape", &o_dims);
     context.insert("i_chunks", &input_chunks);
     context.insert("o_chunks", &output_chunks);
     context.insert("op_type", &node.get_op_type());
     context.insert("opset_version", &opset_version);
-
-    context.insert("scalar_type", "f32");
-    context.insert("scalar_stride", &4);
-    context.insert("vec4_stride", &(4 * 4));
-    context.insert("mat4x4_stride", &(4 * 4 * 4));
-    context.insert("mat3x3_stride", &(48));
 
     let node_template: NodeTemplate = match node.get_op_type() {
         op @ ("Reshape" | "Dropout" | "Identity" | "Flatten" | "Squeeze" | "Unsqueeze") => {
@@ -204,6 +241,7 @@ pub fn compile(
             )?;
             context.insert("workgroup_size_x", &workgroup_size_x);
             NodeTemplate {
+                scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "endomorphism/map.wgsl",
                 threads: (x_threads, 1, 1),
             }
@@ -252,6 +290,7 @@ pub fn compile(
             }
 
             NodeTemplate {
+                scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "endomorphism/softmax.wgsl",
                 threads: (1, 1, 1),
             }
@@ -293,6 +332,7 @@ pub fn compile(
             context.insert("workgroup_size_x", &workgroup_size_x);
 
             NodeTemplate {
+                scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "endomorphism/arithmetic.wgsl",
                 threads: (x_threads, 1, 1),
             }
@@ -351,10 +391,10 @@ pub fn compile(
             }
 
             // If w*h is a multiple of 4, we can use vec4 in our shader
-            let elem_type = DataType::for_size((input_w * input_h) as usize);
+            let elem_type = MultiType::for_size((input_w * input_h) as usize, ScalarType::F32);
 
             context.insert("elem_type", &elem_type.wgsl_type_name());
-            context.insert("elem_stride", &elem_type.size_bytes());
+            context.insert("elem_stride", &elem_type.stride());
 
             // The default for epsilon is 1e05, see https://github.com/onnx/onnx/blob/master/docs/Changelog.md#attributes-252
             let epsilon = get_attribute("epsilon", Some(1e-05), node)?;
@@ -372,6 +412,7 @@ pub fn compile(
             );
 
             NodeTemplate {
+                scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
                 template: "endomorphism/batchnormalization.wgsl",
                 threads: (
                     ceil(input_w * input_h, elem_type.elements() as u64) as _,
@@ -393,6 +434,7 @@ pub fn compile(
             context.insert("workgroup_size_x", &workgroup_size_x);
 
             NodeTemplate {
+                scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "endomorphism/activation.wgsl",
                 threads: (x_threads, 1, 1),
             }
@@ -407,6 +449,7 @@ pub fn compile(
             context.insert("cum_len", &input_cumulative_len);
 
             NodeTemplate {
+                scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "matrix/concat.wgsl",
                 threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
             }
@@ -495,6 +538,7 @@ pub fn compile(
             // GLSL shader for convolution computation
             match op {
                 "MaxPool" | "AveragePool" | "GlobalAveragePool" => NodeTemplate {
+                    scalar_type: agreed_type(input_shapes, &output_shapes[0..1])?,
                     template: "pool/aggregate.wgsl",
                     threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
                 },
@@ -511,6 +555,7 @@ pub fn compile(
                         && (output_shape.dim(1) % 4 == 0)
                     {
                         NodeTemplate {
+                            scalar_type: agreed_type(input_shapes, output_shapes)?,
                             template: "pool/conv_kernel_1.wgsl",
                             threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
                         }
@@ -520,11 +565,13 @@ pub fn compile(
                         && (output_shape.dim(1) % 4 == 0)
                     {
                         NodeTemplate {
+                            scalar_type: agreed_type(input_shapes, output_shapes)?,
                             template: "pool/conv_kernel_3.wgsl",
                             threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
                         }
                     } else {
                         NodeTemplate {
+                            scalar_type: agreed_type(input_shapes, output_shapes)?,
                             template: "pool/conv.wgsl",
                             threads: (ceil(output_lengths[0], 256) as _, 1, 1),
                         }
@@ -570,11 +617,13 @@ pub fn compile(
 
             if input_shapes[0].dim(0) == 1 {
                 NodeTemplate {
+                    scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm_1.wgsl",
                     threads: (output_shapes[0].dim(1) as _, 1, 1),
                 }
             } else {
                 NodeTemplate {
+                    scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm.wgsl",
                     threads: (
                         (input_shapes[0].dim(0) * input_shapes[1].dim(1) / 16) as _,
@@ -675,6 +724,7 @@ pub fn compile(
             context.insert("exclude_outside", &exclude_outside);
 
             NodeTemplate {
+                scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
                 template: "matrix/resize.wgsl",
                 threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
             }
@@ -696,6 +746,7 @@ pub fn compile(
             context.insert("split", &split);
 
             NodeTemplate {
+                scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
                 template: "matrix/split.wgsl",
                 threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
             }
@@ -717,16 +768,13 @@ pub fn compile(
             context.insert("permuted_chunks", &chunks);
 
             NodeTemplate {
+                scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "matrix/transpose.wgsl",
                 threads: (ceil(output_lengths[0], 256) as _, 1, 1),
             }
         }
         op => return Err(CompileError::UnimplementedOp(op.to_string())),
     };
-
-    let shader = TEMPLATES
-        .render(node_template.template, &context)
-        .expect("failed to render shader");
 
     // Check if we remain within the limits of the thread count allowed by WebGPU
     if node_template.threads.0 > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
@@ -750,6 +798,24 @@ pub fn compile(
             MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
         ));
     }
+
+    // Determine (default) scalar data type to use
+    context.insert("scalar_type", node_template.scalar_type.wgsl_type_name());
+    context.insert("scalar_stride", &node_template.scalar_type.stride());
+    context.insert(
+        "vec4_stride",
+        &(MultiType::Vec(node_template.scalar_type, 4).stride()),
+    );
+    context.insert(
+        "mat4x4_stride",
+        &(MultiType::Mat(node_template.scalar_type, 4, 4).stride()),
+    );
+    context.insert("mat3x3_stride", &(48));
+
+    // Render template
+    let shader = TEMPLATES
+        .render(node_template.template, &context)
+        .expect("failed to render shader");
 
     Ok(CompiledNode {
         shader,
