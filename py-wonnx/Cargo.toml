@@ -11,12 +11,11 @@ homepage = "https://github.com/haixuanTao/wonnx"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wonnx = { path = "../" }
+wonnx = { path = "../wonnx" }
 pyo3 = "0.15.1"
 protobuf = { version = "2", features = ["with-bytes"] }
 pollster = "0.2.4"
 
-[workspace]
 # prevents package from thinking it's in the workspace
 
 [lib]
