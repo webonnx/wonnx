@@ -7,7 +7,7 @@ on:
 
 env:
   RUST_BACKTRACE: 1
-  RUST_VERSION: 1.53
+  RUST_VERSION: 1.55
 
 # We distinguish the following kinds of builds:
 # - local: build for the same target as we compile on, and do local tests
@@ -159,7 +159,7 @@ jobs:
         if: matrix.kind == 'local' || matrix.kind == 'other'
         run: |
           # check with no features
-          cargo ${{matrix.tool}} --target ${{ matrix.target }} 
+          cargo ${{matrix.tool}} -p wonnx --target ${{ matrix.target }} 
       - name: local tests
         if: matrix.kind == 'local'
         shell: bash

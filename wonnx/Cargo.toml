@@ -16,8 +16,6 @@ exclude = [
     "target/**/*",
     "tests/**/*",
     "Cargo.lock",
-    "CODE_OF_CONDUCT.md",
-    "README.md"
 ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -42,8 +40,6 @@ ndarray = "0.15.4"
 ureq = "2.3.1"
 approx = "0.5.0"
 
-[profile.release]
-debug = true
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.6"
