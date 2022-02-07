@@ -5,21 +5,21 @@ struct ArrayMatrix3 {
 }; // this is used as both input and output for convenience
 
 [[group(0), binding(0)]]
-var<storage, read> {{ inputs[0] }}: Array;
+var<storage, read> input_0: Array;
 
 [[group(0), binding(1)]]
-var<storage, read> {{ inputs[1] }}: ArrayMatrix3;
+var<storage, read> input_1: ArrayMatrix3;
 
-{%- if inputs | length == 3 -%} // Bias
+{%- if i_lens | length == 3 -%} // Bias
 [[group(0), binding(2)]]
-var<storage, read> {{ inputs[2] }}: ArrayVector;
+var<storage, read> input_2: ArrayVector;
 
 [[group(0), binding(3)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 
 {%- else -%}
 [[group(0), binding(2)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 {%- endif %}  
 
 // conv_kernel_3.wgsl
@@ -46,10 +46,10 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
             let base_index = root_index + c * {{ i_chunks[0][1] }}u;
             let base_kernel_index = root_kernel_index + c;
 
-            var kernel_matrix_0 = {{ inputs[1] }}.data[base_kernel_index];
-            var kernel_matrix_1 = {{ inputs[1] }}.data[base_kernel_index + {{ channel }}u];
-            var kernel_matrix_2 = {{ inputs[1] }}.data[base_kernel_index + {{ 2 * channel }}u];
-            var kernel_matrix_3 = {{ inputs[1] }}.data[base_kernel_index + {{ 3 * channel }}u];
+            var kernel_matrix_0 = input_1.data[base_kernel_index];
+            var kernel_matrix_1 = input_1.data[base_kernel_index + {{ channel }}u];
+            var kernel_matrix_2 = input_1.data[base_kernel_index + {{ 2 * channel }}u];
+            var kernel_matrix_3 = input_1.data[base_kernel_index + {{ 3 * channel }}u];
 
             for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
 
@@ -68,7 +68,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                                 let tmp_index = base_index + tmp_y * {{ original_width }}u + tmp_x;
                                 let index_kernel = base_kernel_index + i * {{ kernel_shape[1] }}u + j;
                                 
-                                tmp_vec[j] = {{ inputs[0] }}.data[tmp_index];
+                                tmp_vec[j] = input_0.data[tmp_index];
 
                         }
   	        }
@@ -84,8 +84,8 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
         }       
 	
-        {% if inputs | length == 3 -%}
-        result = result + {{ inputs[2] }}.data[m];
+        {% if i_lens | length == 3 -%}
+        result = result + input_2.data[m];
         {%- endif %}
 
 {% set activation_input = "result" %}
@@ -97,7 +97,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {
                 let index = base_index + index_vec * {{ o_chunks[0][1] }}u;
 
-                {{ outputs[0] }}.data[index] = result[index_vec];
+                output_0.data[index] = result[index_vec];
         }
         }
 }

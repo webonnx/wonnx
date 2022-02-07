@@ -49,7 +49,7 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, SessionError> {
         .await
         .expect("Session did not create");
 
-    session.run(input_data).await
+    session.run(&input_data).await
 }
 
 // #[wasm_bindgen_test]

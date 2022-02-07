@@ -29,6 +29,7 @@ fn global_average_pool() {
     let output_shape = vec![batches as i64, channels as i64, 1, 1];
     input_data.insert("X".to_string(), data.as_slice());
 
+    // Model: X -> GlobalAveragePool -> Y
     let bn_model = model(graph(
         vec![tensor("X", &shape)],
         vec![tensor("Y", &output_shape)],
@@ -43,11 +44,10 @@ fn global_average_pool() {
         )],
     ));
 
-    // LOGIC
     let session =
         pollster::block_on(wonnx::Session::from_model(bn_model)).expect("Session did not create");
 
-    let result = pollster::block_on(session.run(input_data)).unwrap();
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
     let out_y = &result["Y"];
 
     // The GlobalAveragePool op simply averages all pixels in an image (NxCxWxH becomes NxCx1x1). In our test data pixels

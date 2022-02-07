@@ -1,21 +1,21 @@
 {%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> {{ inputs[0] }}: Array;
+var<storage, read> input_0: Array;
 
 [[group(0), binding(1)]]
-var<storage, read> {{ inputs[1] }}: Array;
+var<storage, read> input_1: Array;
 
-{%- if inputs | length == 3 -%} // Bias
+{%- if i_lens | length == 3 -%} // Bias
 [[group(0), binding(2)]]
-var<storage, read> {{ inputs[2] }}: Array;
+var<storage, read> input_2: Array;
 
 [[group(0), binding(3)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 
 {%- else -%}
 [[group(0), binding(2)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 {%- endif %}  
 
 // Conv.wgsl
@@ -58,7 +58,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
                                 let tmp_index = base_index + tmp_y * {{ original_width }}u + tmp_x;
                                 let index_kernel = base_kernel_index + i * {{ kernel_shape[1] }}u + j;
 
-                                result = {{ inputs[0] }}.data[tmp_index] * {{ inputs[1] }}.data[index_kernel] + result;
+                                result = input_0.data[tmp_index] * input_1.data[index_kernel] + result;
 				
                         }
   	        }
@@ -66,12 +66,12 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
             }
 	}
 
-        {%- if inputs | length == 3 -%}
-        result = result + {{ inputs[2] }}.data[m];
+        {%- if i_lens | length == 3 -%}
+        result = result + input_2.data[m];
         {%- endif -%}
 
 {% set activation_input = "result" %}
-{% set activation_output = [ outputs[0], ".data[gidx]"] | join(sep="") %}
+{% set activation_output = "output_0.data[gidx]" %}
 {% set activation_type = op_type | replace(from="Conv", to="") %}
 {%- include "snippets/activation_scalar.wgsl" -%}
 

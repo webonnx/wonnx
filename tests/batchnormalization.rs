@@ -65,7 +65,7 @@ fn batch_normalization() {
     let session =
         pollster::block_on(wonnx::Session::from_model(bn_model)).expect("Session did not create");
 
-    let result = pollster::block_on(session.run(input_data)).unwrap();
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
     let out_y = &result["Y"];
 
     abs_eq_vector(

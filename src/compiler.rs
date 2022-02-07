@@ -1,14 +1,15 @@
 use crate::utils::{ceil, get_attribute, AttributeNotFoundError, DataType, Shape};
-use std::collections::HashMap;
 use tera::{Context, Tera};
 use thiserror::Error;
 
-// Escaping special characters as well as adding `var_` in the beginning of the variable name to avoid collisions with wgsl syntax.
-// FIXME: this has the potential to cause collisions (i.e. "a/b" and "a.b" will both translate to "ab" and hence cannot be used simultaneously)
-fn to_wgsl_variable_name(input_or_output_name: &str) -> String {
-    String::from("var_")
-        + &input_or_output_name.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '/'][..], "")
-}
+/// The maximum number of threads that can be spawned in each dimension, according to the WebGPU specification. See
+// https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsperdimension
+pub const MAX_COMPUTE_WORKGROUPS_PER_DIMENSION: u32 = 65535;
+
+/// The maximum workgroup size per dimension (see https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsizex)
+pub const MAX_WORKGROUP_SIZE_X: u32 = 256;
+pub const MAX_WORKGROUP_SIZE_Y: u32 = 256;
+pub const MAX_WORKGROUP_SIZE_Z: u32 = 64;
 
 lazy_static! {
     // Templates for shader source code that we generate for nodes
@@ -27,11 +28,6 @@ lazy_static! {
         tera.add_raw_template(
             "endomorphism/batchnormalization.wgsl",
             include_str!("../templates/endomorphism/batchnormalization.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
-            "endomorphism/copy.wgsl",
-            include_str!("../templates/endomorphism/copy.wgsl"),
         )
         .unwrap();
         tera.add_raw_template(
@@ -147,91 +143,57 @@ pub enum CompileError {
         input_index: usize,
         input_shape: Shape,
     },
+
+    #[error("the model exceeds the limit for {0}: {1} > {2}")]
+    ComputeLimitExceeded(String, u32, u32),
 }
 
 pub fn compile(
     node: &crate::onnx::NodeProto,
-    shape_infos: &HashMap<String, Shape>,
+    input_shapes: &[&Shape],
+    output_shapes: &[&Shape],
     opset_version: i64,
 ) -> Result<CompiledNode, CompileError> {
-    // Escape unwanted characters
-    let mut inputs = node.get_input().to_vec();
-    let mut outputs = node.get_output().to_vec();
-
-    let input_shape = inputs
-        .iter()
-        .map(|input| match shape_infos.get(input.as_str()) {
-            Some(info) => Ok(info),
-            None => Err(CompileError::DimensionsMissing(
-                input.to_string(),
-                node.get_name().to_string(),
-            )),
-        })
-        .collect::<Result<Vec<_>, CompileError>>()?;
-
-    let output_shape = outputs
-        .iter()
-        .map(|output| match shape_infos.get(output.as_str()) {
-            Some(info) => Ok(info),
-            None => Err(CompileError::DimensionsMissing(
-                output.to_string(),
-                node.get_name().to_string(),
-            )),
-        })
-        .collect::<Result<Vec<_>, CompileError>>()?;
-
-    let input_lengths = input_shape
+    let input_lengths = input_shapes
         .iter()
         .map(|shape| shape.element_count())
         .collect::<Vec<u64>>();
 
-    let output_lengths = output_shape
+    let output_lengths = output_shapes
         .iter()
         .map(|shape| shape.element_count())
         .collect::<Vec<u64>>();
 
-    // Generate variable names from the input names (which may contain special characters we don't want)
-    inputs = inputs
-        .iter()
-        .map(|input| to_wgsl_variable_name(input))
-        .collect::<Vec<_>>();
-
-    outputs = outputs
-        .iter()
-        .map(|output| to_wgsl_variable_name(output))
-        .collect::<Vec<_>>();
-
-    let input_chunks: Vec<Vec<u64>> = input_shape.iter().map(|d| d.chunks()).collect();
-    let output_chunks: Vec<Vec<u64>> = output_shape.iter().map(|d| d.chunks()).collect();
+    let input_chunks: Vec<Vec<u64>> = input_shapes.iter().map(|d| d.chunks()).collect();
+    let output_chunks: Vec<Vec<u64>> = output_shapes.iter().map(|d| d.chunks()).collect();
 
     let mut context = Context::new();
-    context.insert("inputs", &inputs);
-    context.insert("outputs", &outputs);
     context.insert("i_lens", &input_lengths);
     context.insert("o_lens", &output_lengths);
-    context.insert("i_shape", &input_shape);
-    context.insert("o_shape", &output_shape);
+    context.insert("i_shape", &input_shapes);
+    context.insert("o_shape", &output_shapes);
     context.insert("i_chunks", &input_chunks);
     context.insert("o_chunks", &output_chunks);
     context.insert("op_type", &node.get_op_type());
     context.insert("opset_version", &opset_version);
 
     let (template, x, y, z) = match node.get_op_type() {
+        op @ ("Reshape" | "Dropout" | "Identity" | "Flatten" | "Squeeze" | "Unsqueeze") => {
+            // These ops should all be optimized away earlier
+            return Err(CompileError::InvalidOperation(op.to_string()));
+        }
+
         // Map simple function
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
-        | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => (
-            "endomorphism/map.wgsl".to_string(),
-            ceil(output_lengths[0], 4) as _,
-            1,
-            1,
-        ),
-        // Copy data
-        "Reshape" | "Dropout" | "Flatten" | "Squeeze" | "Unsqueeze" | "Identity" => (
-            "endomorphism/copy.wgsl".to_string(),
-            ceil(output_lengths[0], 16) as _,
-            1,
-            1,
-        ),
+        | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" => {
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                ceil(output_lengths[0], 4),
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+            context.insert("workgroup_size_x", &workgroup_size_x);
+            ("endomorphism/map.wgsl".to_string(), x_threads, 1, 1)
+        }
 
         "Softmax" => {
             let default_axis = match opset_version {
@@ -247,7 +209,7 @@ pub fn compile(
             let mut axis = get_attribute("axis", Some(default_axis), node)?;
             if axis < 0 {
                 if opset_version >= 13 {
-                    axis += input_shape[0].rank() as i64;
+                    axis += input_shapes[0].rank() as i64;
                 } else {
                     return Err(CompileError::InvalidAttributeValue {
                         attribute: "axis".to_string(),
@@ -257,7 +219,7 @@ pub fn compile(
                 }
             }
 
-            if axis >= (input_shape[0].rank() as i64) {
+            if axis >= (input_shapes[0].rank() as i64) {
                 return Err(CompileError::InvalidAttributeValue {
                     attribute: "axis".to_string(),
                     value: format!("{}", axis),
@@ -305,12 +267,15 @@ pub fn compile(
                     }
                 },
             );
-            (
-                "endomorphism/arithmetic.wgsl".to_string(),
+
+            let (x_threads, workgroup_size_x) = workgroup_size(
                 ceil(output_lengths[0], 1024) as _,
-                1,
-                1,
-            )
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+            context.insert("workgroup_size_x", &workgroup_size_x);
+
+            ("endomorphism/arithmetic.wgsl".to_string(), x_threads, 1, 1)
         }
         // Not taking into account attributes
         "BatchNormalization" => {
@@ -334,26 +299,26 @@ pub fn compile(
 
             // [N,C,w,h] => [N,C,w,h] where [w,h] is normalized using stats for each [N,C]
             // N and C are optional and assumed to be one for lower-rank inputs
-            if input_shape[0].rank() <= 2 || input_shape[0].rank() > 4 {
+            if input_shapes[0].rank() <= 2 || input_shapes[0].rank() > 4 {
                 return Err(CompileError::UnimplementedVariant {
                     op: "BatchNormalization".to_string(),
-                    variant: format!("with input {}", input_shape[0]),
+                    variant: format!("with input {}", input_shapes[0]),
                 });
             }
 
-            let (input_batches, input_channels, input_w, input_h) = match input_shape[0].rank() {
-                2 => (1, 1, input_shape[0].dim(0), input_shape[0].dim(1)), // WxH, C=1, N=1
+            let (input_batches, input_channels, input_w, input_h) = match input_shapes[0].rank() {
+                2 => (1, 1, input_shapes[0].dim(0), input_shapes[0].dim(1)), // WxH, C=1, N=1
                 3 => (
                     1,
-                    input_shape[0].dim(0),
-                    input_shape[0].dim(1),
-                    input_shape[0].dim(2),
+                    input_shapes[0].dim(0),
+                    input_shapes[0].dim(1),
+                    input_shapes[0].dim(2),
                 ), // CxWxH, single batch N=1
                 4 => (
-                    input_shape[0].dim(0),
-                    input_shape[0].dim(1),
-                    input_shape[0].dim(2),
-                    input_shape[0].dim(3),
+                    input_shapes[0].dim(0),
+                    input_shapes[0].dim(1),
+                    input_shapes[0].dim(2),
+                    input_shapes[0].dim(3),
                 ), // NxCxWxH
                 _ => unreachable!(),
             };
@@ -361,7 +326,7 @@ pub fn compile(
             if input_batches == 0 || input_channels == 0 {
                 return Err(CompileError::InvalidInputShape {
                     input_index: 0,
-                    input_shape: input_shape[0].clone(),
+                    input_shape: input_shapes[0].clone(),
                 });
             }
 
@@ -396,9 +361,18 @@ pub fn compile(
         "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu" | "LeakyRelu" => {
             let alpha = get_attribute("alpha", Some(1.0), node)?;
             context.insert("alpha", &alpha);
+
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                ceil(output_lengths[0], 4),
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+
+            context.insert("workgroup_size_x", &workgroup_size_x);
+
             (
                 "endomorphism/activation.wgsl".to_string(),
-                ceil(output_lengths[0], 4) as _,
+                x_threads as _,
                 1,
                 1,
             )
@@ -421,7 +395,7 @@ pub fn compile(
         op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
         | "GlobalAveragePool") => {
             // TODO: Conv only support NxCxHxW for the moment.
-            debug_assert!(input_shape[0].rank() == 4);
+            debug_assert!(input_shapes[0].rank() == 4);
 
             // GlobalAveragePool is equivalent to AveragePool, with the kernel shape set to the size of the input tensor
             // See https://github.com/onnx/onnx/blob/main/docs/Operators.md#globalaveragepool
@@ -435,7 +409,7 @@ pub fn compile(
             let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node)?;
             let dilations = get_attribute("dilations", Some(vec![1, 1]), node)?;
             let kernel_shape = if is_global_average_pool {
-                vec![input_shape[0].dim(2) as i64, input_shape[0].dim(3) as i64]
+                vec![input_shapes[0].dim(2) as i64, input_shapes[0].dim(3) as i64]
             } else {
                 get_attribute::<Vec<i64>>("kernel_shape", None, node)?
             };
@@ -480,8 +454,8 @@ pub fn compile(
                 }
             };
 
-            let input_shape = input_shape[0];
-            let output_shape = output_shape[0];
+            let input_shape = &input_shapes[0];
+            let output_shape = &output_shapes[0];
             assert!(kernel_shape.len() >= 2);
             assert!(kernel_shape[0] >= 0 && kernel_shape[1] >= 0);
 
@@ -554,11 +528,11 @@ pub fn compile(
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
-            if input_shape[0].dim(0) == 1 {
-                let threads = output_shape[0].dim(1);
+            if input_shapes[0].dim(0) == 1 {
+                let threads = output_shapes[0].dim(1);
                 ("matrix/gemm_1.wgsl".to_string(), threads as _, 1, 1)
             } else {
-                let threads = input_shape[0].dim(0) * input_shape[1].dim(1) / 16;
+                let threads = input_shapes[0].dim(0) * input_shapes[1].dim(1) / 16;
                 ("matrix/gemm.wgsl".to_string(), threads as _, 1, 1)
             }
         }
@@ -603,7 +577,7 @@ pub fn compile(
                     .iter()
                     .enumerate()
                     .map(|(i, x)| {
-                        let tmp = *x as f32 / input_shape[0].dim(i) as f32;
+                        let tmp = *x as f32 / input_shapes[0].dim(i) as f32;
                         format!("{:.2}", tmp)
                     })
                     .collect::<Vec<_>>()
@@ -663,12 +637,12 @@ pub fn compile(
         "Split" => {
             let mut axis = get_attribute("axis", Some(0), node)?;
             if axis < 0 {
-                axis += input_shape[0].element_count() as i64
+                axis += input_shapes[0].element_count() as i64
             }
             context.insert("axis", &axis);
 
-            let split_chunk = input_shape[0].dim(axis as usize) as usize / outputs.len();
-            let default_split = (1..=outputs.len())
+            let split_chunk = input_shapes[0].dim(axis as usize) as usize / output_shapes.len();
+            let default_split = (1..=output_shapes.len())
                 .map(|x| (x * split_chunk) as _)
                 .collect();
 
@@ -687,7 +661,7 @@ pub fn compile(
             let perms: Vec<i64> = get_attribute("perm", Some(default), node)?;
             let permuted_shapes = perms
                 .iter()
-                .map(|p| output_shape[0].dim(*p as usize))
+                .map(|p| output_shapes[0].dim(*p as usize))
                 .collect::<Vec<_>>();
 
             let mut chunks = vec![];
@@ -712,14 +686,78 @@ pub fn compile(
         .render(&template, &context)
         .expect("failed to render shader");
 
-    debug_assert!(
-        x < 16352,
-        "Node {} exceeds max compute by {}",
-        node.get_name(),
-        x - 16352
-    );
+    // Check if we remain within the limits of the thread count allowed by WebGPU
+    if x > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
+        return Err(CompileError::ComputeLimitExceeded(
+            String::from("X threads"),
+            x as _,
+            MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+        ));
+    }
+    if y > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
+        return Err(CompileError::ComputeLimitExceeded(
+            String::from("Y threads"),
+            y as _,
+            MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+        ));
+    }
+    if z > MAX_COMPUTE_WORKGROUPS_PER_DIMENSION {
+        return Err(CompileError::ComputeLimitExceeded(
+            String::from("Z threads"),
+            z as _,
+            MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+        ));
+    }
+
     Ok(CompiledNode {
         shader,
         threads: (x, y, z),
+    })
+}
+
+/// Determines the appropriate number of threads and workgroup size given a number of times the entry point of the shader should be run
+fn workgroup_size(
+    x: u64,
+    max_threads: u32,
+    max_workgroup_size: u32,
+) -> Result<(u32, u32), CompileError> {
+    let max_x = max_threads as u64;
+
+    Ok(if x > max_x {
+        let workgroup_size = ceil(x, max_x) as _;
+        let threads = ceil(x, workgroup_size as u64) as _;
+        log::info!(
+            "WGS: {} > {}, so workgroup size={} x threads={}",
+            x,
+            max_x,
+            workgroup_size,
+            threads
+        );
+
+        if threads > max_threads {
+            return Err(CompileError::ComputeLimitExceeded(
+                String::from("threads"),
+                threads,
+                max_threads,
+            ));
+        }
+
+        if workgroup_size > max_workgroup_size {
+            return Err(CompileError::ComputeLimitExceeded(
+                String::from("workgroup size"),
+                workgroup_size,
+                max_workgroup_size,
+            ));
+        }
+
+        log::info!(
+            "adjusting workgroup size to {}, threads to {} (was {})",
+            workgroup_size,
+            threads,
+            x
+        );
+        (threads, workgroup_size)
+    } else {
+        (x as u32, 1)
     })
 }

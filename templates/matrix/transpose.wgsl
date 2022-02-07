@@ -1,10 +1,10 @@
 {%- include "structs.wgsl" -%}
 
 [[group(0), binding(0)]]
-var<storage, read> {{ inputs[0] }}: Array;
+var<storage, read> input_0: Array;
 
 [[group(0), binding(1)]]
-var<storage, write> {{ outputs[0] }}: Array;
+var<storage, write> output_0: Array;
 
 
 [[stage(compute), workgroup_size(256, 1, 1)]]
@@ -30,6 +30,6 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
         d_{{ loop.index0 }} * {{ perm }}u
         {%- endfor %};
 
-        {{ outputs[0] }}.data[index] = {{ inputs[0] }}.data[gidx];
+        output_0.data[index] = input_0.data[gidx];
     }
 }
