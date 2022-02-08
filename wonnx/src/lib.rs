@@ -15,6 +15,7 @@ use ir::IrError;
 use optimizer::{Optimizer, OptimizerError};
 use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
+use std::path::Path;
 use std::result::Result;
 
 use crate::gpu::GpuModel;
@@ -83,7 +84,7 @@ pub enum SessionError {
 
 impl Session {
     // Read an ONNX model from a path and create a session.
-    pub async fn from_path(path: &str) -> Result<Session, SessionError> {
+    pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Session, SessionError> {
         let model = onnx::ModelProto::parse_from_bytes(&std::fs::read(path)?)?;
         Session::from_model(model).await
     }
