@@ -83,7 +83,7 @@ cargo run --example mnist --release
 fn main() -> HashMap<String, Vec<f32>> {
     let mut input_data = HashMap::new();
     let image = load_squeezenet_image(); // Load image
-    input_data.insert("data".to_string(), image.as_slice().unwrap());
+    input_data.insert("data".to_string(), InputTensor::F32(image.as_slice().unwrap()));
 
     let session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/opt-squeeze.onnx",
