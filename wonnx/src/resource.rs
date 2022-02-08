@@ -1,16 +1,12 @@
 use wgpu::{util::DeviceExt, BufferUsages};
 
-// Get a device and a queue
+// Get a device and a queue, honoring WGPU_ADAPTER_NAME and WGPU_BACKEND environment variables
 pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
-    // `()` indicates that the macro takes no argument.
-    // The macro will expand into the contents of this block.
-
     let instance = wgpu::Instance::new(wgpu::Backends::all());
-
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptionsBase::default())
+    let backends = wgpu::util::backend_bits_from_env().unwrap_or_else(wgpu::Backends::all);
+    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, backends, None)
         .await
-        .expect("No GPU found for referenced preference");
+        .expect("No GPU found given preference");
 
     // `request_device` instantiates the feature specific connection to the GPU, defining some parameters,
     //  `features` being the available features.
