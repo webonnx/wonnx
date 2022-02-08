@@ -1,0 +1,176 @@
+[package]
+name = "wonnx"
+version = "0.2.4"
+authors = ["haixuanTao <tao.xavier@outlook.com>", "Tommy van der Vorst <tommy@pixelspark.nl>"]
+edition = "2018"
+license = "MIT OR Apache-2.0"
+description = "Wonnx is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
+repository = "https://github.com/haixuanTao/wonnx.git"
+homepage = "https://github.com/haixuanTao/wonnx"
+readme = "README.md"
+exclude = [
+    "etc/**/*",
+    ".github/**/**",
+    "coverage/**/**",
+    "examples/**/*", 
+    "target/**/*",
+    "tests/**/*",
+    "Cargo.lock",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wgpu = "0.12.0"
+bytemuck = "1.7.2"
+env_logger = "0.9.0"
+pollster = "0.2.4"
+log = "0.4.14" 
+protobuf = { version = "2", features = ["with-bytes"] }
+tera = "1.15.0"
+lazy_static = "1.4.0"
+thiserror = "^1.0.0"
+serde_derive = "1.0.133"
+serde = "1.0.133"
+num = "0.4.0"
+
+[dev-dependencies]
+image = "0.23.14"
+ndarray = "0.15.4"
+ureq = "2.3.1"
+approx = "0.5.0"
+
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+console_error_panic_hook = "0.1.6"
+getrandom = { version = "0.2", features = ["js"] }
+wasm-bindgen = "0.2.78" # remember to change version in wiki as well
+wasm-bindgen-futures = "0.4.23"
+wasm-bindgen-test = "0.3.28"
+js-sys = "0.3.50"
+web-sys = { version = "0.3.55", features = [
+    "Document",
+    "Navigator",
+    "Node",
+    "NodeList",
+    "Gpu",
+    "GpuAdapter",
+    "GpuAddressMode",
+    "GpuBindGroup",
+    "GpuBindGroupDescriptor",
+    "GpuBindGroupEntry",
+    "GpuBindGroupLayout",
+    "GpuBindGroupLayoutDescriptor",
+    "GpuBindGroupLayoutEntry",
+    "GpuBlendComponent",
+    "GpuBlendFactor",
+    "GpuBlendOperation",
+    "GpuBlendState",
+    "GpuBuffer",
+    "GpuBufferBinding",
+    "GpuBufferBindingLayout",
+    "GpuBufferBindingType",
+    "GpuBufferDescriptor",
+    "GpuBufferUsage",
+    "GpuCanvasContext",
+    "GpuCanvasConfiguration",
+    "GpuColorDict",
+    "GpuColorTargetState",
+    "GpuColorWrite",
+    "GpuCommandBuffer",
+    "GpuCommandBufferDescriptor",
+    "GpuCommandEncoder",
+    "GpuCommandEncoderDescriptor",
+    "GpuCompareFunction",
+    "GpuCompilationInfo",
+    "GpuCompilationMessage",
+    "GpuCompilationMessageType",
+    "GpuComputePassDescriptor",
+    "GpuComputePassEncoder",
+    "GpuComputePipeline",
+    "GpuComputePipelineDescriptor",
+    "GpuCullMode",
+    "GpuDepthStencilState",
+    "GpuDevice",
+    "GpuDeviceDescriptor",
+    "GpuDeviceLostInfo",
+    "GpuDeviceLostReason",
+    "GpuErrorFilter",
+    "GpuExtent3dDict",
+    "GpuFeatureName",
+    "GpuFilterMode",
+    "GpuFragmentState",
+    "GpuFrontFace",
+    "GpuImageCopyBuffer",
+    "GpuImageCopyTexture",
+    "GpuImageDataLayout",
+    "GpuIndexFormat",
+    "GpuLoadOp",
+    "GpuMapMode",
+    "GpuMultisampleState",
+    "GpuObjectDescriptorBase",
+    "GpuOrigin2dDict",
+    "GpuOrigin3dDict",
+    "GpuOutOfMemoryError",
+    "GpuPipelineDescriptorBase",
+    "GpuPipelineLayout",
+    "GpuPipelineLayoutDescriptor",
+    "GpuPipelineStatisticName",
+    "GpuPowerPreference",
+    "GpuPrimitiveState",
+    "GpuPrimitiveTopology",
+    "GpuProgrammableStage",
+    "GpuQuerySet",
+    "GpuQuerySetDescriptor",
+    "GpuQueryType",
+    "GpuQueue",
+    "GpuRenderBundle",
+    "GpuRenderBundleDescriptor",
+    "GpuRenderBundleEncoder",
+    "GpuRenderBundleEncoderDescriptor",
+    "GpuRenderPassColorAttachment",
+    "GpuRenderPassDepthStencilAttachment",
+    "GpuRenderPassDescriptor",
+    "GpuRenderPassEncoder",
+    "GpuRenderPipeline",
+    "GpuRenderPipelineDescriptor",
+    "GpuRequestAdapterOptions",
+    "GpuSampler",
+    "GpuSamplerBindingLayout",
+    "GpuSamplerBindingType",
+    "GpuSamplerDescriptor",
+    "GpuShaderModule",
+    "GpuShaderModuleDescriptor",
+    "GpuShaderStage",
+    "GpuStencilFaceState",
+    "GpuStencilOperation",
+    "GpuStorageTextureAccess",
+    "GpuStorageTextureBindingLayout",
+    "GpuStoreOp",
+    "GpuSupportedFeatures",
+    "GpuSupportedLimits",
+    "GpuTexture",
+    "GpuTextureAspect",
+    "GpuTextureBindingLayout",
+    "GpuTextureDescriptor",
+    "GpuTextureDimension",
+    "GpuTextureFormat",
+    "GpuTextureSampleType",
+    "GpuTextureUsage",
+    "GpuTextureView",
+    "GpuTextureViewDescriptor",
+    "GpuTextureViewDimension",
+    "GpuUncapturedErrorEvent",
+    "GpuUncapturedErrorEventInit",
+    "GpuValidationError",
+    "GpuVertexAttribute",
+    "GpuVertexBufferLayout",
+    "GpuVertexFormat",
+    "GpuVertexState",
+    "GpuVertexStepMode",
+    "HtmlCanvasElement",
+    "OffscreenCanvas",
+    "Window",
+]}
+parking_lot = { version = "0.11", features = ["wasm-bindgen"] }
+console_log = "0.2.0"

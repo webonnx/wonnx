@@ -36,7 +36,10 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, WonnxError> {
     let image = load_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap());
 
-    let session = wonnx::Session::from_path("examples/data/models/opt-squeeze.onnx").await?;
+    let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/data/models")
+        .join("opt-squeeze.onnx");
+    let session = wonnx::Session::from_path(model_path).await?;
     let time_pre_compute = Instant::now();
     info!("Start Compute");
     let result = session.run(&input_data).await?;
