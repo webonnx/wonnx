@@ -29,13 +29,15 @@ Wonnx aims for running blazing Fast AI on any device.
 git clone https://github.com/haixuanTao/wonnx.git
 ```
 
-- Then with git lfs installed: 
+### From Rust
+
+Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then to run an example:
 
 ```bash
 cargo run --example squeeze --release
 ```
 
-or with python. 
+### From Python 
 
 ```bash
 pip install wonnx
@@ -75,7 +77,7 @@ python -m onnxsim mnist-8.onnx opt-mnist.onnx
 cargo run --example mnist --release
 ```
 
-## Usage in rust
+## Usage in Rust
 
 ```rust
 fn main() -> HashMap<String, Vec<f32>> {
@@ -100,11 +102,18 @@ fn main() -> HashMap<String, Vec<f32>> {
 > Examples are available in the `examples` folder
 
 
-## Tested Model
+## Tested Models
 
 - Squeezenet
 - MNIST
 
+## GPU selection
+
+You may set the following environment variables to influence GPU selection by WGPU:
+
+* `WGPU_ADAPTER_NAME` with a substring of the name of the adapter you want to use (e.g. `1080` will match `NVIDIA GeForce 1080ti`).
+* `WGPU_BACKEND` with a comma separated list of the backends you want to use (`vulkan`, `metal`, `dx12`, `dx11`, or `gl`).
+* `WGPU_POWER_PREFERENCE` with the power preference to choose when a specific adapter name isn't specified (`high` or `low`)
 
 ## Contribution: On implementing a new Operator
 
