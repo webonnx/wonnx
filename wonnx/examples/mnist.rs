@@ -32,8 +32,8 @@ async fn execute_gpu() -> Option<HashMap<String, Vec<f32>>> {
     );
 
     let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("examples/data/models")
-        .join("opt-squeeze.onnx");
+        .join("../data/models")
+        .join("opt-mnist.onnx");
     let session = wonnx::Session::from_path(model_path).await.unwrap();
 
     let time_pre_compute = Instant::now();
@@ -65,7 +65,7 @@ fn main() {
 pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("examples/data/images")
+            .join("../data/images")
             .join("7.jpg"),
     )
     .unwrap()

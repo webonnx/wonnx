@@ -3,5 +3,4 @@ target
 coverage
 *.profraw
 .DS_Store
-examples/data/
 synset.txt

@@ -1,6 +1,9 @@
 [workspace]
 members = [
 	"wonnx",
-	"py-wonnx"
+	"py-wonnx",
+	"wonnx-cli"
 ]
+
+default-members = ["wonnx", "wonnx-cli"]
 resolver = "2"

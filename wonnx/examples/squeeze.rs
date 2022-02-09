@@ -41,7 +41,7 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, WonnxError> {
     );
 
     let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("examples/data/models")
+        .join("../data/models")
         .join("opt-squeeze.onnx");
     let session = wonnx::Session::from_path(model_path).await?;
     let time_pre_compute = Instant::now();
@@ -79,7 +79,7 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
         Path::new(&args[1]).to_path_buf()
     } else {
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("examples/data/images")
+            .join("../data/images")
             .join("pelican.jpeg")
     };
 
@@ -120,7 +120,7 @@ pub fn load_image() -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<
 fn get_imagenet_labels() -> Vec<String> {
     // Download the ImageNet class labels, matching SqueezeNet's classes.
     let labels_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("examples/data/models")
+        .join("../data/models")
         .join("synset.txt");
     if !labels_path.exists() {
         let url = "https://s3.amazonaws.com/onnx-model-zoo/synset.txt";
