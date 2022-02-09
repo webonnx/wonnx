@@ -7,7 +7,7 @@ on:
 
 env:
   RUST_BACKTRACE: 1
-  RUST_VERSION: 1.55
+  RUST_VERSION: 1.58
 
 # We distinguish the following kinds of builds:
 # - local: build for the same target as we compile on, and do local tests
@@ -33,7 +33,7 @@ jobs:
             target: x86_64-pc-windows-msvc
             tool: check
             kind: other
-          
+
           # MacOS
           - name: MacOS x86_64
             os: macos-10.15
@@ -48,14 +48,13 @@ jobs:
             tool: check
             # Mac has no software runners, so don't run tests
             kind: other
-          
+
           # IOS
           - name: IOS aarch64
             os: macos-10.15
             target: aarch64-apple-ios
             tool: clippy
             kind: other
-
 
           # Linux
           - name: Linux x86_64
@@ -77,7 +76,6 @@ jobs:
             tool: check
             kind: other
 
-          
           # Android
           - name: Android aarch64
             os: ubuntu-20.04
@@ -85,7 +83,6 @@ jobs:
             tool: clippy
             kind: other
 
-          
           # WebGPU/WebGL
           - name: WebAssembly
             os: ubuntu-20.04
@@ -151,15 +148,15 @@ jobs:
           mkdir .cargo
           echo """[profile.dev]
           debug = 1" > .cargo/config.toml
-    #  - name: check web
-    #    if: matrix.kind == 'web'
-    #    run: |
-    #      cargo ${{matrix.tool}} --target ${{ matrix.target }} 
+      #  - name: check web
+      #    if: matrix.kind == 'web'
+      #    run: |
+      #      cargo ${{matrix.tool}} --target ${{ matrix.target }}
       - name: check native
         if: matrix.kind == 'local' || matrix.kind == 'other'
         run: |
           # check with no features
-          cargo ${{matrix.tool}} -p wonnx --target ${{ matrix.target }} 
+          cargo ${{matrix.tool}} -p wonnx --target ${{ matrix.target }}
       - name: local tests
         if: matrix.kind == 'local'
         shell: bash
