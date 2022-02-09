@@ -1,6 +1,4 @@
 target
-**/*.onnx
 coverage
 *.profraw
 .DS_Store
-synset.txt
