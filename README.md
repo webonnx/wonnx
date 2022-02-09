@@ -56,8 +56,9 @@ pip install wonnx
 And then:
 
 ```python
-session = wonnx.PySession.from_path(
-    "../examples/data/models/single_relu.onnx"
+from wonnx import PySession
+session = PySession.from_path(
+    "../data/models/single_relu.onnx"
 )
 inputs = {"x": [-1.0, 2.0]}
 assert session.run(inputs) == {"y": [0.0, 2.0]}
@@ -66,13 +67,16 @@ assert session.run(inputs) == {"y": [0.0, 2.0]}
 To build the Python module for development:
 
 ````sh
+cd wonnx-py
 python3 -m venv .env
 source .env/bin/activate
 pip install maturin
 maturin develop
 ````
 
-## From Rust
+Then run `python3` with the above Python code!
+
+## Running a model from scratch
 
 - To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
 

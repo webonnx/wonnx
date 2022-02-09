@@ -2270,16 +2270,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "py-wonnx"
-version = "0.1.1"
-dependencies = [
- "pollster",
- "protobuf",
- "pyo3",
- "wonnx",
-]
-
-[[package]]
 name = "pyo3"
 version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3717,6 +3707,16 @@ dependencies = [
  "tokenizers",
  "tract-onnx",
  "wgpu",
+ "wonnx",
+]
+
+[[package]]
+name = "wonnx-py"
+version = "0.1.1"
+dependencies = [
+ "pollster",
+ "protobuf",
+ "pyo3",
  "wonnx",
 ]
 

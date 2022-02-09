@@ -1,7 +1,7 @@
 [workspace]
 members = [
 	"wonnx",
-	"py-wonnx",
+	"wonnx-py",
 	"wonnx-cli"
 ]
 
