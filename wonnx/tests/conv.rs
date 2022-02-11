@@ -2,7 +2,7 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 use wonnx::*;
 // Indicates a f32 overflow in an intermediate Collatz value
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
+use wonnx::utils::{attribute, graph, initializer, model, node, tensor, InputTensor};
 
 async fn run() {
     //    let conv_asymetric_stride = conv_kernel_3().await.unwrap();
@@ -26,7 +26,7 @@ fn conv_pad() {
 
     let data: Vec<f32> = (0..50).map(|x| x as f32).collect();
     let shape = vec![2, c as i64, n as i64, n as i64];
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // ONNX INPUTS
 
@@ -81,7 +81,7 @@ fn conv_without_pad() {
 
     let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
     let shape = vec![1, c as i64, n as i64, n as i64];
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // ONNX INPUTS
 
@@ -122,7 +122,7 @@ fn conv_stride() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..35).map(|x| x as f32).collect();
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // ONNX INPUTS
 
@@ -176,7 +176,7 @@ fn conv_asymetric_stride() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..35).map(|x| x as f32).collect();
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // ONNX INPUTS
     let kernel_n = 3;
@@ -222,7 +222,7 @@ fn _conv_kernel_3() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..16).map(|x| x as f32).collect();
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // ONNX INPUTS
 

@@ -83,7 +83,7 @@ cargo run --example mnist --release
 fn main() -> HashMap<String, Vec<f32>> {
     let mut input_data = HashMap::new();
     let image = load_squeezenet_image(); // Load image
-    input_data.insert("data".to_string(), image.as_slice().unwrap());
+    input_data.insert("data".to_string(), InputTensor::F32(image.as_slice().unwrap()));
 
     let session = pollster::block_on(wonnx::Session::from_path(
         "examples/data/models/opt-squeeze.onnx",
@@ -197,7 +197,7 @@ fn test_matmul_square_matrix() {
 |<a href="#AveragePool">AveragePool</a>|<a href="Changelog.md#AveragePool-11">11</a>, <a href="Changelog.md#AveragePool-10">10</a>, <a href="Changelog.md#AveragePool-7">7</a>, <a href="Changelog.md#AveragePool-1">1</a>|✅|
 |<a href="#BatchNormalization">BatchNormalization</a>|<a href="Changelog.md#BatchNormalization-15">15</a>, <a href="Changelog.md#BatchNormalization-14">14</a>, <a href="Changelog.md#BatchNormalization-9">9</a>, <a href="Changelog.md#BatchNormalization-7">7</a>, <a href="Changelog.md#BatchNormalization-6">6</a>, <a href="Changelog.md#BatchNormalization-1">1</a>|✅|
 |<a href="#BitShift">BitShift</a>|<a href="Changelog.md#BitShift-11">11</a>|
-|<a href="#Cast">Cast</a>|<a href="Changelog.md#Cast-13">13</a>, <a href="Changelog.md#Cast-9">9</a>, <a href="Changelog.md#Cast-6">6</a>, <a href="Changelog.md#Cast-1">1</a>|
+|<a href="#Cast">Cast</a>|<a href="Changelog.md#Cast-13">13</a>, <a href="Changelog.md#Cast-9">9</a>, <a href="Changelog.md#Cast-6">6</a>, <a href="Changelog.md#Cast-1">1</a>|✅|
 |<a href="#Ceil">Ceil</a>|<a href="Changelog.md#Ceil-13">13</a>, <a href="Changelog.md#Ceil-6">6</a>, <a href="Changelog.md#Ceil-1">1</a>|✅|
 |<a href="#Clip">Clip</a>|<a href="Changelog.md#Clip-13">13</a>, <a href="Changelog.md#Clip-12">12</a>, <a href="Changelog.md#Clip-11">11</a>, <a href="Changelog.md#Clip-6">6</a>, <a href="Changelog.md#Clip-1">1</a>|✅|
 |<a href="#Compress">Compress</a>|<a href="Changelog.md#Compress-11">11</a>, <a href="Changelog.md#Compress-9">9</a>|
@@ -281,7 +281,7 @@ fn test_matmul_square_matrix() {
 |<a href="#RandomNormalLike">RandomNormalLike</a>|<a href="Changelog.md#RandomNormalLike-1">1</a>|
 |<a href="#RandomUniform">RandomUniform</a>|<a href="Changelog.md#RandomUniform-1">1</a>|
 |<a href="#RandomUniformLike">RandomUniformLike</a>|<a href="Changelog.md#RandomUniformLike-1">1</a>|
-|<a href="#Reciprocal">Reciprocal</a>|<a href="Changelog.md#Reciprocal-13">13</a>, <a href="Changelog.md#Reciprocal-6">6</a>, <a href="Changelog.md#Reciprocal-1">1</a>|
+|<a href="#Reciprocal">Reciprocal</a>|<a href="Changelog.md#Reciprocal-13">13</a>, <a href="Changelog.md#Reciprocal-6">6</a>, <a href="Changelog.md#Reciprocal-1">1</a>|✅|
 |<a href="#ReduceL1">ReduceL1</a>|<a href="Changelog.md#ReduceL1-13">13</a>, <a href="Changelog.md#ReduceL1-11">11</a>, <a href="Changelog.md#ReduceL1-1">1</a>|
 |<a href="#ReduceL2">ReduceL2</a>|<a href="Changelog.md#ReduceL2-13">13</a>, <a href="Changelog.md#ReduceL2-11">11</a>, <a href="Changelog.md#ReduceL2-1">1</a>|
 |<a href="#ReduceLogSum">ReduceLogSum</a>|<a href="Changelog.md#ReduceLogSum-13">13</a>, <a href="Changelog.md#ReduceLogSum-11">11</a>, <a href="Changelog.md#ReduceLogSum-1">1</a>|

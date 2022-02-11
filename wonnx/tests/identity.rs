@@ -2,7 +2,7 @@ use std::collections::HashMap;
 // use wasm_bindgen_test::*;
 // Indicates a f32 overflow in an intermediate Collatz value
 
-use wonnx::utils::{graph, model, node, tensor};
+use wonnx::utils::{graph, model, node, tensor, InputTensor};
 
 #[test]
 fn test_identity() {
@@ -11,7 +11,7 @@ fn test_identity() {
 
     let data: Vec<f32> = (0..n).map(|x| x as f32).collect();
     let dims = vec![n as i64];
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // Model: X -> Identity -> Y; Y==Z
     let model = model(graph(
@@ -36,7 +36,7 @@ fn test_double_identity() {
 
     let data: Vec<f32> = (0..n).map(|x| x as f32).collect();
     let dims = vec![n as i64];
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // Model: X -> Identity -> Y -> Identity -> Z. X==Z
     let model = model(graph(

@@ -8,11 +8,10 @@ var<storage, write> output_0: ArrayVector;
 
 [[stage(compute), workgroup_size({{ workgroup_size_x }})]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
-    let gidx = global_id.x;
+	let gidx = global_id.x;
 
-{% set activation_input = "input_0.data[gidx]" %}
-{% set activation_output = "output_0.data[gidx]" %}
-{% set activation_type = op_type %}
-{%- include "snippets/activation_vec.wgsl" -%}
-
+	{% set activation_input = "input_0.data[gidx]" %}
+	{% set activation_output = "output_0.data[gidx]" %}
+	{% set activation_type = op_type %}
+	{%- include "snippets/activation_vec.wgsl" -%}
 }

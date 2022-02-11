@@ -1,6 +1,6 @@
 use approx::assert_ulps_eq;
 use std::collections::HashMap;
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
+use wonnx::utils::{attribute, graph, initializer, model, node, tensor, InputTensor};
 
 fn abs_eq_vector(xs: &[f32], ys: &[f32]) {
     assert_eq!(xs.len(), ys.len());
@@ -25,7 +25,7 @@ fn batch_normalization() {
         width_height as i64,
         width_height as i64,
     ];
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     let mean: Vec<f32> = vec![100.0, -100.0];
     let var: Vec<f32> = vec![10.0, 10.0];

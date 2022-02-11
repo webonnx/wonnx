@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
+use wonnx::utils::{attribute, graph, initializer, model, node, tensor, InputTensor};
 
 #[test]
 fn test_matmul_square_matrix() {
@@ -20,8 +20,14 @@ fn test_matmul_square_matrix() {
 
     let sum = data_a.dot(&data_b);
 
-    input_data.insert("A".to_string(), data_a.as_slice().unwrap());
-    input_data.insert("B".to_string(), data_b.as_slice().unwrap());
+    input_data.insert(
+        "A".to_string(),
+        InputTensor::F32(data_a.as_slice().unwrap()),
+    );
+    input_data.insert(
+        "B".to_string(),
+        InputTensor::F32(data_b.as_slice().unwrap()),
+    );
 
     let n = n as i64;
     let model = model(graph(
@@ -44,7 +50,7 @@ fn test_matmul_square_matrix() {
 fn test_two_transposes() {
     let mut input_data = HashMap::new();
     let data = (0..2 * 3 * 4).map(|x| x as f32).collect::<Vec<f32>>();
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     // Model: X -> Transpose -> Y -> Transpose -> Z; X==Z
     let model = model(graph(
@@ -81,7 +87,7 @@ fn test_two_transposes() {
 fn test_split() {
     let mut input_data = HashMap::new();
     let data = (1..=2 * 6).map(|x| x as f32).collect::<Vec<f32>>();
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     let model = model(graph(
         vec![tensor("X", &[2, 6])],
@@ -112,7 +118,7 @@ fn test_resize() {
     let _ = env_logger::builder().is_test(true).try_init();
     let mut input_data = HashMap::new();
     let data = (1..=2 * 4).map(|x| x as f32).collect::<Vec<f32>>();
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     let downsampling_model = model(graph(
         vec![tensor("X", &[1, 1, 2, 4])],
@@ -137,7 +143,7 @@ fn test_resize() {
 
     let mut input_data = HashMap::new();
     let data = (1..=4).map(|x| x as f32).collect::<Vec<f32>>();
-    input_data.insert("X".to_string(), data.as_slice());
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
 
     let upsampling_model = model(graph(
         vec![tensor("X", &[1, 1, 2, 2])],
@@ -145,7 +151,7 @@ fn test_resize() {
         vec![],
         vec![initializer("scales", vec![1., 1., 2., 3.])],
         vec![node(
-            vec!["X", "scales"],
+            vec!["X", "" /* roi */, "scales"],
             vec!["Y"],
             "Resize",
             "Resize",

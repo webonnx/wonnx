@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::collections::HashMap;
 
+use wonnx::utils::InputTensor;
 use wonnx::Session;
 #[pyclass]
 #[repr(transparent)]
@@ -27,7 +28,7 @@ impl PySession {
         let map: HashMap<String, Vec<f32>> = dict.extract().unwrap();
         let mut inputs = HashMap::new();
         for (key, value) in map.iter() {
-            inputs.insert(key.clone(), value.as_slice());
+            inputs.insert(key.clone(), InputTensor::F32(value.as_slice()));
         }
         let result = pollster::block_on(self.session.run(&inputs)).unwrap();
 

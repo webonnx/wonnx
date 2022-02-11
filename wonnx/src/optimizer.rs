@@ -1,12 +1,11 @@
-use protobuf::{ProtobufEnum, RepeatedField};
+use protobuf::RepeatedField;
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 use crate::{
     ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
-    onnx::TensorProto_DataType,
     resource::padding,
-    utils::{attribute, get_attribute, AttributeNotFoundError},
+    utils::{attribute, get_attribute, AttributeNotFoundError, DataTypeError, ScalarType},
 };
 
 #[derive(Debug, Error)]
@@ -18,11 +17,14 @@ pub enum OptimizerError {
     Unsupported(String),
 
     #[error("invalid data type {data_type:?} for input {input} of op {op}")]
-    InvalidDataType {
-        data_type: TensorProto_DataType,
+    InvalidInputDataType {
+        data_type: ScalarType,
         input: String,
         op: String,
     },
+
+    #[error("error with data type: {0}")]
+    InvalidDataType(#[from] DataTypeError),
 
     #[error("required attribute not found: {0}")]
     AttributeNotFound(#[from] AttributeNotFoundError),
@@ -319,10 +321,8 @@ impl<'model> Optimizer<'model> {
                                 // If the input is an initializer (Tensor) we can obtain the data from the definition and move it to an attribute
                                 NodeDefinition::Tensor(tensor_proto) => {
                                     let attr_name = attr_names[input_index];
-                                    let data_type = TensorProto_DataType::from_i32(
-                                        tensor_proto.get_data_type(),
-                                    )
-                                    .unwrap_or(TensorProto_DataType::UNDEFINED);
+                                    let data_type =
+                                        ScalarType::from_i32(tensor_proto.get_data_type())?;
 
                                     match (op, attr_name) {
                                         // Inputs that need to be converted to an i64 attribute
@@ -330,8 +330,7 @@ impl<'model> Optimizer<'model> {
                                         | ("Resize", "roi")
                                         | ("Resize", "sizes")
                                         | ("Reshape", "shape") => match data_type {
-                                            TensorProto_DataType::INT64
-                                            | TensorProto_DataType::UNDEFINED => {
+                                            ScalarType::I64 => {
                                                 log::info!(
                                                         "transferring input {} for op {} to i64 attribute (initializer data type: {:?})",
                                                         attr_name,
@@ -345,7 +344,7 @@ impl<'model> Optimizer<'model> {
                                                 ));
                                             }
                                             _ => {
-                                                return Err(OptimizerError::InvalidDataType {
+                                                return Err(OptimizerError::InvalidInputDataType {
                                                     data_type,
                                                     input: attr_name.to_string(),
                                                     op: op.to_string(),
@@ -354,8 +353,7 @@ impl<'model> Optimizer<'model> {
                                         },
                                         // Inputs that need to be converted to an f32 attribute
                                         ("Resize", "scales") => match data_type {
-                                            TensorProto_DataType::FLOAT
-                                            | TensorProto_DataType::UNDEFINED => {
+                                            ScalarType::F32 => {
                                                 log::info!(
                                                         "transferring input {} for op {} to f32 attribute (initializer data type: {:?})",
                                                         attr_name,
@@ -370,7 +368,7 @@ impl<'model> Optimizer<'model> {
                                                 ));
                                             }
                                             _ => {
-                                                return Err(OptimizerError::InvalidDataType {
+                                                return Err(OptimizerError::InvalidInputDataType {
                                                     data_type,
                                                     input: attr_name.to_string(),
                                                     op: op.to_string(),

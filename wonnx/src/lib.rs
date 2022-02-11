@@ -17,6 +17,7 @@ use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::path::Path;
 use std::result::Result;
+use utils::{DataTypeError, InputTensor};
 
 use crate::gpu::GpuModel;
 use thiserror::Error;
@@ -28,6 +29,12 @@ pub enum WonnxError {
 
     #[error("error executing the model: {0}")]
     SessionError(#[from] SessionError),
+
+    #[error("error in intermediate representation: {0}")]
+    IrError(#[from] IrError),
+
+    #[error("error in data types: {0}")]
+    TypeError(#[from] DataTypeError),
 }
 
 /// Creates a new session connected to the GPU.
@@ -134,9 +141,9 @@ impl Session {
     }
 
     /// Perform inference given the inputs provided and return all the outputs the model was compiled to return.
-    pub async fn run(
+    pub async fn run<'a>(
         &self,
-        inputs: &HashMap<String, &[f32]>,
+        inputs: &HashMap<String, InputTensor<'a>>,
     ) -> Result<HashMap<String, Vec<f32>>, SessionError> {
         Ok(self.gpu_model.infer(inputs).await?)
     }

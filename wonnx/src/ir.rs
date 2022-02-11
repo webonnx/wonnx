@@ -1,5 +1,5 @@
 use crate::onnx::{ModelProto, NodeProto, TensorProto, ValueInfoProto};
-use crate::utils::Shape;
+use crate::utils::{DataTypeError, ScalarType, Shape};
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -65,6 +65,9 @@ pub enum IrError {
         target_node_name: String,
         input_name: String,
     },
+
+    #[error("issue with data types: {0}")]
+    Type(#[from] DataTypeError),
 }
 
 impl<'m> NodeDefinition<'m> {
@@ -180,13 +183,13 @@ impl<'model> Node<'model> {
         // Collect value shapes
         let mut value_shapes: HashMap<&'model str, Shape> = HashMap::new();
         for vi in model.get_graph().get_value_info() {
-            value_shapes.insert(vi.get_name(), vi.get_shape());
+            value_shapes.insert(vi.get_name(), vi.get_shape()?);
         }
 
         for vi in model.get_graph().get_output() {
             let output_name = vi.get_name();
             if !output_name.is_empty() {
-                value_shapes.insert(output_name, vi.get_shape());
+                value_shapes.insert(output_name, vi.get_shape()?);
             }
         }
 
@@ -280,14 +283,17 @@ impl<'model> Node<'model> {
         }))
     }
 
-    pub fn output_shape(&self, output_index: usize) -> Shape {
-        match (&self.definition, output_index) {
+    pub fn output_shape(&self, output_index: usize) -> Result<Shape, IrError> {
+        Ok(match (&self.definition, output_index) {
             (NodeDefinition::Operator(op_def), index) => op_def.output_shapes[index].clone(),
-            (NodeDefinition::Tensor(tensor_proto), 0) => Shape::from(tensor_proto.get_dims()),
-            (NodeDefinition::Input(input_proto), 0) => input_proto.get_shape(),
+            (NodeDefinition::Tensor(tensor_proto), 0) => Shape::from(
+                ScalarType::from_i32(tensor_proto.get_data_type())?,
+                tensor_proto.get_dims(),
+            ),
+            (NodeDefinition::Input(input_proto), 0) => input_proto.get_shape()?,
             (NodeDefinition::Outputs { .. }, _) => panic!("output node has no outputs!"),
             (_, _) => panic!("node has no output at index {}", output_index),
-        }
+        })
     }
 }
 

@@ -11,6 +11,7 @@ use std::{
     path::Path,
     time::Duration,
 };
+use wonnx::utils::InputTensor;
 use wonnx::WonnxError;
 
 // Args Management
@@ -34,7 +35,10 @@ async fn run() {
 async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, WonnxError> {
     let mut input_data = HashMap::new();
     let image = load_image();
-    input_data.insert("data".to_string(), image.as_slice().unwrap());
+    input_data.insert(
+        "data".to_string(),
+        InputTensor::F32(image.as_slice().unwrap()),
+    );
 
     let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("examples/data/models")

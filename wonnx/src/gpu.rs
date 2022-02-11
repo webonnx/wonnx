@@ -12,7 +12,7 @@ use crate::{
     ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
     onnx::TensorProto,
     resource::{self, resize},
-    utils::{ceil, Shape, MINIMUM_BUFFER_SIZE_BYTES},
+    utils::{ceil, DataTypeError, InputTensor, ScalarType, Shape, MINIMUM_BUFFER_SIZE_BYTES},
 };
 
 /// The maximum number of bindings in a binding group (defined by wgpu)
@@ -66,6 +66,9 @@ pub enum GpuError {
 
     #[error("node output not found: index {0}")]
     OutputMissing(usize),
+
+    #[error("scalar type error: {0}")]
+    ScalarType(#[from] DataTypeError),
 }
 
 enum InferenceOutput {
@@ -208,9 +211,13 @@ impl GpuModel {
                     gpu_op
                 }
                 NodeDefinition::Tensor(tensor_def) => {
-                    let tensor_buffer = Arc::new(tensor_def.buffer(&self.device, outputs_readable));
+                    let tensor_buffer =
+                        Arc::new(tensor_def.buffer(&self.device, outputs_readable)?);
                     output_tensors.push(GpuTensor {
-                        shape: Shape::from(tensor_def.get_dims()),
+                        shape: Shape::from(
+                            ScalarType::from_i32(tensor_def.get_data_type())?,
+                            tensor_def.get_dims(),
+                        ),
                         buffer: tensor_buffer.clone(),
                     });
                     GpuStep::Initializer(tensor_buffer)
@@ -222,10 +229,16 @@ impl GpuModel {
                         );
                     }
 
-                    let input_shape = input_def.get_shape();
+                    let input_shape = input_def.get_shape()?;
+                    log::info!(
+                        "creating input buffer for {} shape {} size {}",
+                        input_def.get_name(),
+                        input_shape,
+                        input_shape.buffer_bytes()
+                    );
                     let input_buffer = Arc::new(resource::buffer(
                         &self.device,
-                        input_shape.buffer_len() as _,
+                        input_shape.buffer_bytes(),
                         input_def.get_name(),
                         BufferUsages::STORAGE | BufferUsages::COPY_DST,
                     ));
@@ -254,9 +267,9 @@ impl GpuModel {
     }
 
     /// Perform inference using this model and the specified inference inputs.
-    pub async fn infer(
+    pub async fn infer<'a>(
         &self,
-        inference_inputs: &HashMap<String, &[f32]>,
+        inference_inputs: &HashMap<String, InputTensor<'a>>,
     ) -> Result<HashMap<String, Vec<f32>>, GpuError> {
         log::info!("encode inference steps");
         let mut encoder = self
@@ -272,9 +285,9 @@ impl GpuModel {
     }
 
     /// Reads the relevant buffers for the requested inference outputs
-    async fn read_outputs(
+    async fn read_outputs<'a>(
         &self,
-        inference_inputs: &HashMap<String, &[f32]>,
+        inference_inputs: &HashMap<String, InputTensor<'a>>,
     ) -> Result<HashMap<String, Vec<f32>>, GpuError> {
         let mut output_data = HashMap::new();
 
@@ -283,7 +296,10 @@ impl GpuModel {
                 output_name.to_string(),
                 match output_source {
                     InferenceOutput::InferenceInput(input_name) => {
-                        inference_inputs[input_name].to_vec()
+                        match inference_inputs[input_name] {
+                            InputTensor::F32(v) => v.to_vec(),
+                            InputTensor::I32(v) => v.iter().map(|f| (*f) as f32).collect(),
+                        }
                     }
                     InferenceOutput::Tensor(tensor) => tensor.read_to_vec(&self.device).await?,
                 },
@@ -295,13 +311,13 @@ impl GpuModel {
 }
 
 trait TensorProtoExtra {
-    fn buffer(&self, device: &wgpu::Device, readable: bool) -> Buffer;
+    fn buffer(&self, device: &wgpu::Device, readable: bool) -> Result<Buffer, GpuError>;
 }
 
 impl TensorProtoExtra for TensorProto {
     /// Create a GPU buffer containing the data of this initializer
-    fn buffer(&self, device: &wgpu::Device, readable: bool) -> Buffer {
-        let input_shape = Shape::from(self.get_dims());
+    fn buffer(&self, device: &wgpu::Device, readable: bool) -> Result<Buffer, GpuError> {
+        let input_shape = Shape::from(ScalarType::from_i32(self.get_data_type())?, self.get_dims());
         log::info!(
             "creating tensor buffer {} shape {}",
             self.get_name(),
@@ -321,13 +337,13 @@ impl TensorProtoExtra for TensorProto {
         };
 
         // Do not create buffers that are too small
-        if raw_data.len() < MINIMUM_BUFFER_SIZE_BYTES as _ {
+        Ok(if raw_data.len() < MINIMUM_BUFFER_SIZE_BYTES as _ {
             let mut larger_raw_data = raw_data.to_vec();
             larger_raw_data.resize(MINIMUM_BUFFER_SIZE_BYTES as _, 0);
             resource::create_buffer_init(device, &larger_raw_data, self.get_name(), buffer_usage)
         } else {
             resource::create_buffer_init(device, raw_data, self.get_name(), buffer_usage)
-        }
+        })
     }
 }
 
@@ -380,7 +396,7 @@ impl<'model> OperatorDefinition<'model> {
 
                 let buffer = Arc::new(resource::buffer(
                     device,
-                    value_shape.buffer_len() as _,
+                    value_shape.buffer_bytes(),
                     output_name.as_str(),
                     buffer_usage,
                 ));
@@ -466,11 +482,11 @@ impl<'model> OperatorDefinition<'model> {
 impl GpuStep {
     /// Writes the necessary commands for the GPU to execute this step into the command queue. Among other things this means
     /// writing the inference input data to the appropriate (already created) buffers.
-    fn encode(
+    fn encode<'a>(
         &self,
         queue: &wgpu::Queue,
         encoder: &mut CommandEncoder,
-        inputs: &HashMap<String, &[f32]>,
+        inputs: &HashMap<String, InputTensor<'a>>,
     ) -> Result<(), GpuError> {
         match self {
             GpuStep::None | GpuStep::Forward(_) | GpuStep::Initializer(_) => {
@@ -484,11 +500,24 @@ impl GpuStep {
                     .get(input_name)
                     .ok_or_else(|| GpuError::InputMissing(input_name.to_string()))?;
                 log::info!("- write input data for {}", input_name);
-                queue.write_buffer(
-                    input_buffer,
-                    0,
-                    bytemuck::cast_slice(&resize(input_data.to_vec())),
-                );
+
+                match input_data {
+                    InputTensor::F32(float_input) => {
+                        queue.write_buffer(
+                            input_buffer,
+                            0,
+                            bytemuck::cast_slice(&resize(float_input.to_vec())),
+                        );
+                    }
+                    InputTensor::I32(int_input) => {
+                        queue.write_buffer(
+                            input_buffer,
+                            0,
+                            bytemuck::cast_slice(&resize(int_input.to_vec())),
+                        );
+                    }
+                }
+
                 Ok(())
             }
             GpuStep::Operator {
@@ -524,7 +553,19 @@ impl GpuTensor {
         // The actual buffer may be bigger than what we should return, because buffers have a minimum size in wgpu
         // Fetch the size we should expect so we can chop the buffer to the correct size
         let output_buffer_size = self.shape.element_count() as usize;
-        let result = bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec();
+        let result = match self.shape.data_type {
+            ScalarType::F32 => bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec(),
+            ScalarType::I32 => {
+                let result_ints: Vec<i32> =
+                    bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec();
+                result_ints.iter().map(|i| *i as f32).collect()
+            }
+            ScalarType::I64 => {
+                let result_ints: Vec<i64> =
+                    bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec();
+                result_ints.iter().map(|i| *i as f32).collect()
+            }
+        };
         drop(output_data);
         self.buffer.unmap();
         Ok(result)

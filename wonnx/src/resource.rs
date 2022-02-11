@@ -31,8 +31,13 @@ pub fn create_buffer_init<T: Clone + bytemuck::Pod>(
     })
 }
 
-pub fn buffer(device: &wgpu::Device, size: u64, name: &str, usage: BufferUsages) -> wgpu::Buffer {
-    let slice_size = usize::max(16, size as usize * std::mem::size_of::<f32>());
+pub fn buffer(
+    device: &wgpu::Device,
+    requested_size_bytes: usize,
+    name: &str,
+    usage: BufferUsages,
+) -> wgpu::Buffer {
+    let slice_size = usize::max(16, requested_size_bytes);
     let size = slice_size as wgpu::BufferAddress;
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(name),
