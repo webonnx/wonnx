@@ -1,6 +1,6 @@
 <center><img src="logo.svg" alt="WONNX" width="700"/></center>
 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/haixuantao/wonnx/CI)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/webonnx/wonnx/CI)
 ![Crates.io (latest)](https://img.shields.io/crates/dv/wonnx)
 ![Crates.io](https://img.shields.io/crates/l/wonnx)
 
@@ -26,7 +26,7 @@ Wonnx aims for running blazing Fast AI on any device.
 - git clone this repo.
 
 ```bash
-git clone https://github.com/haixuanTao/wonnx.git
+git clone https://github.com/webonnx/wonnx.git
 ```
 
 ### From Rust
