@@ -108,6 +108,14 @@ pub struct InferOptions {
     #[structopt(long)]
     pub output_name: Option<String>,
 
+    /// Vocab file for text encoding
+    #[structopt(
+        long = "vocab",
+        parse(from_os_str),
+        default_value = "./data/models/bertsquad-vocab.txt"
+    )]
+    pub vocab: PathBuf,
+
     /// Set an input to tokenized text (-t input_name="some text")
     #[structopt(short = "t", parse(try_from_str = parse_key_val), number_of_values = 1)]
     pub text: Vec<(String, String)>,

@@ -85,7 +85,7 @@ async fn run() -> Result<(), NNXError> {
 
             // Process text inputs
             if !infer_opt.text.is_empty() || !infer_opt.text_mask.is_empty() {
-                let tok = text::BertTokenizer::new(Path::new("./data/bertsquad-vocab.txt"));
+                let tok = text::BertTokenizer::new(Path::new(&infer_opt.vocab));
 
                 // Tokenized text input
                 for (text_input_name, text) in &infer_opt.text {
