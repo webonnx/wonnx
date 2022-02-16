@@ -3,12 +3,12 @@ use info::print_graph;
 use ndarray::Array;
 use prettytable::{cell, row, Table};
 use protobuf::{self, Message};
-use wonnx_preprocessing::text::get_lines;
 use std::{collections::HashMap, path::Path};
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::Shape;
 use wonnx_preprocessing::text;
+use wonnx_preprocessing::text::get_lines;
 use wonnx_preprocessing::Tensor;
 
 mod gpu;
@@ -235,6 +235,19 @@ async fn run() -> Result<(), NNXError> {
                     .backend
                     .for_model(&model_path, &input_shapes)
                     .await?;
+
+                if infer_opt.benchmark {
+                    let benchmark_start = std::time::Instant::now();
+                    for _ in 0..100 {
+                        let _ = backend.infer(&infer_opt, &inputs, &model).await?;
+                    }
+                    let benchmark_time = benchmark_start.elapsed();
+                    println!(
+                        "time for 100 inferences: {}ms ({}/s)",
+                        benchmark_time.as_millis(),
+                        1000 / benchmark_time.as_millis()
+                    );
+                }
                 backend.infer(&infer_opt, &inputs, &model).await
             };
 

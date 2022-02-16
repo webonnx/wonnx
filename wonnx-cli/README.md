@@ -94,6 +94,7 @@ this, nnx needs to be compiled with the `cpu` feature enabled. You can then spec
 *  `--backend cpu` to select the cpu backend
 * `--fallback` to select the cpu backend when the gpu backend cannot be used (e.g. because of an unsupported operation type)
 * `--compare` to run inference on both CPU and GPU backends and compare the output
+* `--benchmark` to run the specified inference a hundred times, then report the performance
 * `--compare --benchmark` to run inference on both CPU and GPU a hundred times each, and compare the performance
 
 A benchmarking example (the below result was obtained on an Apple M1 Max system):
