@@ -7,7 +7,7 @@ use wonnx::{
     WonnxError,
 };
 
-use crate::util::ValueInfoProtoUtil;
+use crate::utils::ValueInfoProtoUtil;
 
 fn dimensions_infos(graph_proto: &GraphProto) -> Result<HashMap<String, Shape>, wonnx::WonnxError> {
     let mut shapes_info = HashMap::new();

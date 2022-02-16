@@ -12,10 +12,10 @@ mod gpu;
 mod info;
 mod text;
 mod types;
-mod util;
+mod utils;
 
 use crate::types::*;
-use crate::util::*;
+use crate::utils::*;
 
 async fn run() -> Result<(), NNXError> {
     env_logger::init();
