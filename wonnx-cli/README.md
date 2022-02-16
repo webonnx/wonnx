@@ -26,25 +26,25 @@ run a model. Currently the following heuristics are applied:
 ## Usage
 
 ```sh
-$ nnx infer ./data/squeezenet.onnx -i data=./data/coffee.png --labels ./data/squeezenet-labels.txt
-n03063689 coffeepot: 22.261997
-n03297495 espresso maker: 20.724543
-n02791124 barber chair: 18.916985
-n02841315 binoculars, field glasses, opera glasses: 18.508638
-n04254120 soap dispenser: 17.940422
-n04560804 water jug: 17.76079
-n03764736 milk can: 17.60635
-n03976467 Polaroid camera, Polaroid Land camera: 17.103294
-n03532672 hook, claw: 16.791483
-n03584829 iron, smoothing iron: 16.715918
+$ nnx infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --labels ./data/models/squeeze-labels.txt --probabilities
+n01608432 kite: 21.820244
+n02051845 pelican: 21.112095
+n02018795 bustard: 20.359694
+n01622779 great grey owl, great gray owl, Strix nebulosa: 20.176003
+n04417672 thatch, thatched roof: 19.638676
+n02028035 redshank, Tringa totanus: 19.606218
+n02011460 bittern: 18.90648
+n02033041 dowitcher: 18.708323
+n01829413 hornbill: 18.595457
+n01616318 vulture: 17.508785
 
-$ nnx infer ./data/mnist.onnx -i Input3=./data/mnist-7.png
+$ nnx infer ./data/models/opt-mnist.onnx -i Input3=./data/images/7.jpg
 [-1.2942507, 0.5192305, 8.655695, 9.474595, -13.768464, -5.8907413, -23.467274, 28.252314, -6.7598896, 3.9513395]
 
-$ nnx infer ./data/mnist.onnx -i Input3=./data/mnist-7.png --labels ./data/mnist-labels.txt --top=1
+$ nnx infer ./data/models/opt-mnist.onnx -i Input3=./data/images/7.jpg --labels ./data/models/mnist-labels.txt --top=1
 Seven
 
-$ nnx info ./data/mnist.onnx
+$ nnx info ./data/models/opt-mnist.onnx
 +------------------+-----------------------------------------------------------------+
 | Model version    | 1                                                               |
 +------------------+-----------------------------------------------------------------+
@@ -100,7 +100,7 @@ A benchmarking example (the below result was obtained on an Apple M1 Max system)
 
 ```sh
 # Run from workspace root
-$ cargo run --release --features=cpu -- infer ./examples/data/models/opt-squeeze.onnx -i data=./examples/data/images/pelican.jpeg --compare --benchmark
+$ cargo run --release --features=cpu -- infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --compare --benchmark
 OK (gpu=572ms, cpu=1384ms, 2.42x)
 ```
 
@@ -157,7 +157,7 @@ onnx.save(inferred_model, "tymnist-inferred.onnx")
 4. Infer with NNX:
 
 ```sh
-nnx  ./tymnist-inferred.onnx infer -i input=./data/mnist-7.png --labels ./data/mnist-labels.txt
+nnx  ./tymnist-inferred.onnx infer -i input=./data/mnist-7.png --labels ./data/models/mnist-labels.txt
 ```
 
 5. compare inference result with what Keras would generate (`pip install numpy pillow matplotlib`):
