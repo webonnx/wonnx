@@ -14,7 +14,7 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1.52"
 env_logger = "0.9.0"
-image = "0.23.14"
+
 log = "0.4.14"
 ndarray = "0.15.4"
 pollster = "0.2.4"
@@ -22,7 +22,7 @@ prettytable-rs = "0.8.0"
 protobuf = { version = "2.25.2", features = ["with-bytes"] }
 structopt = { version = "0.3.25", features = [ "paw" ] }
 thiserror = "1.0.30"
-tokenizers = "0.11.0"
 tract-onnx = { version = "0.15.8", optional = true }
 wgpu = "*"
 wonnx = { path = "../wonnx" }
+wonnx-preprocessing = { path = "../wonnx-preprocessing" }

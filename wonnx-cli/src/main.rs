@@ -3,14 +3,16 @@ use info::print_graph;
 use ndarray::Array;
 use prettytable::{cell, row, Table};
 use protobuf::{self, Message};
+use wonnx_preprocessing::text::get_lines;
 use std::{collections::HashMap, path::Path};
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::Shape;
+use wonnx_preprocessing::text;
+use wonnx_preprocessing::Tensor;
 
 mod gpu;
 mod info;
-mod text;
 mod types;
 mod utils;
 
@@ -126,7 +128,7 @@ async fn run() -> Result<(), NNXError> {
 
                 let values: Result<Vec<f32>, _> =
                     text.split(',').map(|v| v.parse::<f32>()).collect();
-                let mut values = values.map_err(|x| NNXError::TokenizationFailed(x.into()))?;
+                let mut values = values.map_err(NNXError::InvalidNumber)?;
                 values.resize(raw_input_shape.element_count() as usize, 0.0);
                 inputs.insert(
                     raw_input_name.clone(),

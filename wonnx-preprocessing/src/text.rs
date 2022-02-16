@@ -1,5 +1,8 @@
 use std::borrow::Cow;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
+use thiserror::Error;
 use tokenizers::models::wordpiece::WordPieceBuilder;
 use tokenizers::normalizers::BertNormalizer;
 use tokenizers::pre_tokenizers::bert::BertPreTokenizer;
@@ -10,7 +13,14 @@ use tokenizers::utils::truncation::TruncationStrategy::LongestFirst;
 use tokenizers::{AddedToken, EncodeInput, Encoding, InputSequence, Tokenizer};
 use wonnx::utils::Shape;
 
-use crate::types::{NNXError, Tensor};
+use crate::Tensor;
+
+#[derive(Error, Debug)]
+pub enum PreprocessingError {
+    #[error("text tokenization error: {0}")]
+    TextTokenizationError(#[from] Box<dyn std::error::Error + Sync + Send>),
+}
+
 pub struct BertTokenizer {
     pub tokenizer: Tokenizer,
 }
@@ -83,18 +93,22 @@ impl BertTokenizer {
         BertTokenizer { tokenizer }
     }
 
-    fn tokenize(&self, text: &str) -> Result<BertEncodedText, NNXError> {
+    fn tokenize(&self, text: &str) -> Result<BertEncodedText, PreprocessingError> {
         let encoding = self
             .tokenizer
             .encode(
                 EncodeInput::Single(InputSequence::Raw(Cow::from(text))),
                 true,
             )
-            .map_err(NNXError::TokenizationFailed)?;
+            .map_err(PreprocessingError::TextTokenizationError)?;
         Ok(BertEncodedText { encoding })
     }
 
-    pub fn get_mask_input_for(&self, text: &str, shape: &Shape) -> Result<Tensor, NNXError> {
+    pub fn get_mask_input_for(
+        &self,
+        text: &str,
+        shape: &Shape,
+    ) -> Result<Tensor, PreprocessingError> {
         let segment_length = shape.dim(shape.rank() - 1) as usize;
         let tokenized = self.tokenize(text)?;
         let mut tokens = tokenized.get_mask();
@@ -106,7 +120,7 @@ impl BertTokenizer {
         })
     }
 
-    pub fn get_input_for(&self, text: &str, shape: &Shape) -> Result<Tensor, NNXError> {
+    pub fn get_input_for(&self, text: &str, shape: &Shape) -> Result<Tensor, PreprocessingError> {
         let segment_length = shape.dim(shape.rank() - 1) as usize;
         let tokenized = self.tokenize(text)?;
         let mut tokens = tokenized.get_tokens();
@@ -131,4 +145,9 @@ impl BertEncodedText {
     pub fn get_tokens(&self) -> Vec<i64> {
         self.encoding.get_ids().iter().map(|x| *x as i64).collect()
     }
+}
+
+pub fn get_lines(path: &Path) -> Vec<String> {
+    let file = BufReader::new(File::open(path).unwrap());
+    file.lines().map(|line| line.unwrap()).collect()
 }

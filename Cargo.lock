@@ -3696,13 +3696,27 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "env_logger",
- "image",
  "log",
  "ndarray",
  "pollster",
  "prettytable-rs",
  "protobuf",
  "structopt",
+ "thiserror",
+ "tract-onnx",
+ "wgpu",
+ "wonnx",
+ "wonnx-preprocessing",
+]
+
+[[package]]
+name = "wonnx-preprocessing"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "log",
+ "ndarray",
+ "protobuf",
  "thiserror",
  "tokenizers",
  "tract-onnx",

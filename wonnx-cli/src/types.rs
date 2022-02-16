@@ -1,8 +1,8 @@
-use ndarray::ArrayBase;
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, num::ParseFloatError, path::PathBuf, str::FromStr};
 use structopt::StructOpt;
 use thiserror::Error;
-use wonnx::{onnx::ModelProto, utils::Shape, SessionError, WonnxError};
+use wonnx::{onnx::ModelProto, SessionError, WonnxError};
+use wonnx_preprocessing::{text::PreprocessingError, Tensor};
 
 #[cfg(feature = "cpu")]
 use tract_onnx::prelude::*;
@@ -19,11 +19,6 @@ pub enum Backend {
     Gpu,
     #[cfg(feature = "cpu")]
     Cpu,
-}
-
-pub struct Tensor {
-    pub data: ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>,
-    pub shape: Shape,
 }
 
 #[derive(Error, Debug)]
@@ -54,8 +49,11 @@ pub enum NNXError {
     #[error("comparison failed")]
     Comparison(String),
 
-    #[error("tokenization failed: {0}")]
-    TokenizationFailed(Box<dyn std::error::Error + Sync + Send>),
+    #[error("preprocessing failed: {0}")]
+    PreprocessingFailed(#[from] PreprocessingError),
+
+    #[error("invalid number: {0}")]
+    InvalidNumber(ParseFloatError),
 }
 
 impl FromStr for Backend {
@@ -136,9 +134,8 @@ pub struct InferOptions {
     /// Compare results of CPU and GPU inference (100 iterations to measure time)
     pub compare: bool,
 
-    #[cfg(feature = "cpu")]
-    #[structopt(long, requires = "compare")]
-    /// When comparing, perform 100 inferences to measure time
+    #[structopt(long)]
+    /// Perform 100 inferences to measure time
     pub benchmark: bool,
 }
 
