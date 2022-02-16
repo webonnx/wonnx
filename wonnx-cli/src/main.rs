@@ -210,7 +210,7 @@ async fn run() -> Result<(), NNXError> {
 
                 for i in 0..gpu_output.len() {
                     let diff = (gpu_output[i] - cpu_output[i]).abs();
-                    if diff > 0.00001 {
+                    if diff > 0.001 {
                         return Err(NNXError::Comparison(format!(
 							"output element {} differs too much: GPU says {} vs CPU says {} (difference is {})",
 							i, gpu_output[i], cpu_output[i], diff
