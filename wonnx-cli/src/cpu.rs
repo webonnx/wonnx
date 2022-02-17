@@ -10,6 +10,7 @@ type RunnableOnnxModel =
 
 pub struct CPUInferer {
     model: RunnableOnnxModel,
+    input_shapes: HashMap<String, Shape>,
 }
 
 impl CPUInferer {
@@ -32,7 +33,25 @@ impl CPUInferer {
         }
 
         let cpu_model = cpu_model.into_optimized()?.into_runnable()?;
-        Ok(CPUInferer { model: cpu_model })
+        Ok(CPUInferer {
+            model: cpu_model,
+            input_shapes: input_shapes.clone(),
+        })
+    }
+}
+
+trait ToTract {
+    fn to_tract_tensor(&self, dims: &[usize]) -> Result<Tensor, NNXError>;
+}
+
+impl ToTract for wonnx_preprocessing::Tensor {
+    fn to_tract_tensor(&self, dims: &[usize]) -> Result<Tensor, NNXError> {
+        match self {
+            wonnx_preprocessing::Tensor::F32(d) => Ok(tract_onnx::prelude::Tensor::from_shape(
+                dims,
+                d.as_slice().unwrap(),
+            )?),
+        }
     }
 }
 
@@ -54,26 +73,15 @@ impl Inferer for CPUInferer {
                 .enumerate()
                 .find(|x| x.1.get_name() == input_name)
                 .unwrap_or_else(|| panic!("input not found with name {}", input_name));
-            log::info!(
-                "set input fact {} for cpu model (shape: {:?})",
-                input_index.0,
-                input_tensor.shape
-            );
+            log::info!("set input fact {} for cpu model", input_index.0,);
 
-            let dims: Vec<usize> = input_tensor
-                .shape
+            let dims: Vec<usize> = self.input_shapes[input_name]
                 .dims
                 .iter()
                 .map(|x| (*x) as usize)
                 .collect();
 
-            cpu_inputs.insert(
-                input_index.0,
-                tract_onnx::prelude::Tensor::from_shape(
-                    &dims,
-                    input_tensor.data.as_slice().unwrap(),
-                )?,
-            );
+            cpu_inputs.insert(input_index.0, input_tensor.to_tract_tensor(&dims)?);
         }
 
         let mut cpu_inputs_ordered = TVec::new();

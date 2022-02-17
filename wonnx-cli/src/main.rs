@@ -82,6 +82,7 @@ async fn run() -> Result<(), NNXError> {
             .expect("Could not deserialize the model");
 
             let mut inputs: HashMap<String, Tensor> = HashMap::new();
+            let mut input_shapes = HashMap::with_capacity(inputs.len());
 
             // Process text inputs
             if !infer_opt.text.is_empty() || !infer_opt.text_mask.is_empty() {
@@ -93,14 +94,8 @@ async fn run() -> Result<(), NNXError> {
                         .get_input_shape(text_input_name)?
                         .ok_or_else(|| NNXError::InputNotFound(text_input_name.clone()))?;
                     let input = tok.get_input_for(text, &text_input_shape)?;
-                    log::info!(
-                        "Set {} ({})={}: tokens={:?}",
-                        text_input_name,
-                        text_input_shape,
-                        text,
-                        input.data
-                    );
                     inputs.insert(text_input_name.clone(), input);
+                    input_shapes.insert(text_input_name.clone(), text_input_shape);
                 }
 
                 // Tokenized text input
@@ -109,14 +104,8 @@ async fn run() -> Result<(), NNXError> {
                         .get_input_shape(text_input_name)?
                         .ok_or_else(|| NNXError::InputNotFound(text_input_name.clone()))?;
                     let input = tok.get_mask_input_for(text, &text_input_shape)?;
-                    log::info!(
-                        "Set {} ({})={}: mask={:?}",
-                        text_input_name,
-                        text_input_shape,
-                        text,
-                        input.data
-                    );
                     inputs.insert(text_input_name.clone(), input);
+                    input_shapes.insert(text_input_name.clone(), text_input_shape);
                 }
             }
 
@@ -132,11 +121,9 @@ async fn run() -> Result<(), NNXError> {
                 values.resize(raw_input_shape.element_count() as usize, 0.0);
                 inputs.insert(
                     raw_input_name.clone(),
-                    Tensor {
-                        data: Array::from_vec(values).into_dyn(),
-                        shape: raw_input_shape.clone(),
-                    },
+                    Tensor::F32(Array::from_vec(values).into_dyn()),
                 );
+                input_shapes.insert(raw_input_name.clone(), raw_input_shape);
             }
 
             // Load input image if it was supplied
@@ -157,24 +144,15 @@ async fn run() -> Result<(), NNXError> {
                     );
                 }
 
-                inputs.insert(
-                    input_name.clone(),
-                    Tensor {
-                        data,
-                        shape: input_shape,
-                    },
-                );
-            }
-
-            // Collect input shape data
-            let mut input_shapes = HashMap::with_capacity(inputs.len());
-            for (k, v) in &inputs {
-                input_shapes.insert(k.clone(), v.shape.clone());
+                inputs.insert(input_name.clone(), Tensor::F32(data));
+                input_shapes.insert(input_name.clone(), input_shape.clone());
             }
 
             #[cfg(feature = "cpu")]
             if infer_opt.compare {
-                let gpu_backend = Backend::Gpu.for_model(&model_path, &input_shapes).await?;
+                let gpu_backend = Backend::Gpu
+                    .inferer_for_model(&model_path, &input_shapes)
+                    .await?;
                 let gpu_start = std::time::Instant::now();
                 if infer_opt.benchmark {
                     for _ in 0..100 {
@@ -186,7 +164,9 @@ async fn run() -> Result<(), NNXError> {
                 log::info!("gpu time: {}ms", gpu_time.as_millis());
                 drop(gpu_backend);
 
-                let cpu_backend = Backend::Cpu.for_model(&model_path, &input_shapes).await?;
+                let cpu_backend = Backend::Cpu
+                    .inferer_for_model(&model_path, &input_shapes)
+                    .await?;
                 let cpu_start = std::time::Instant::now();
                 if infer_opt.benchmark {
                     for _ in 0..100 {
@@ -233,7 +213,7 @@ async fn run() -> Result<(), NNXError> {
             let first_result = async {
                 let backend = infer_opt
                     .backend
-                    .for_model(&model_path, &input_shapes)
+                    .inferer_for_model(&model_path, &input_shapes)
                     .await?;
 
                 if infer_opt.benchmark {
@@ -265,7 +245,7 @@ async fn run() -> Result<(), NNXError> {
                                 );
                                 log::warn!("trying {:?} backend instead", fallback_backend);
                                 let fallback_inferer = fallback_backend
-                                    .for_model(&model_path, &input_shapes)
+                                    .inferer_for_model(&model_path, &input_shapes)
                                     .await?;
                                 fallback_inferer.infer(&infer_opt, &inputs, &model).await?
                             }
@@ -327,7 +307,7 @@ impl Backend {
         }
     }
 
-    async fn for_model(
+    async fn inferer_for_model(
         &self,
         model_path: &str,
         #[allow(unused_variables)] input_shapes: &HashMap<String, Shape>,

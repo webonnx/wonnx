@@ -114,10 +114,7 @@ impl BertTokenizer {
         let mut tokens = tokenized.get_mask();
         tokens.resize(segment_length, 0);
         let data = ndarray::Array::from_iter(tokens.iter().map(|x| (*x) as f32)).into_dyn();
-        Ok(Tensor {
-            data,
-            shape: shape.clone(),
-        })
+        Ok(Tensor::F32(data))
     }
 
     pub fn get_input_for(&self, text: &str, shape: &Shape) -> Result<Tensor, PreprocessingError> {
@@ -126,10 +123,7 @@ impl BertTokenizer {
         let mut tokens = tokenized.get_tokens();
         tokens.resize(segment_length, 0);
         let data = ndarray::Array::from_iter(tokens.iter().map(|x| (*x) as f32)).into_dyn();
-        Ok(Tensor {
-            data,
-            shape: shape.clone(),
-        })
+        Ok(Tensor::F32(data))
     }
 }
 
