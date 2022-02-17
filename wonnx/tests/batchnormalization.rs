@@ -1,13 +1,6 @@
-use approx::assert_ulps_eq;
 use std::collections::HashMap;
 use wonnx::utils::{attribute, graph, initializer, model, node, tensor, InputTensor};
-
-fn abs_eq_vector(xs: &[f32], ys: &[f32]) {
-    assert_eq!(xs.len(), ys.len());
-    for i in 0..xs.len() {
-        assert_ulps_eq!(xs[i], ys[i], max_ulps = 2);
-    }
-}
+mod common;
 
 #[test]
 fn batch_normalization() {
@@ -68,7 +61,7 @@ fn batch_normalization() {
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     let out_y = &result["Y"];
 
-    abs_eq_vector(
+    common::assert_eq_vector(
         out_y.as_slice(),
         &[
             // Y = (X - input_mean) / sqrt(input_var + epsilon) * scale + B

@@ -4,7 +4,7 @@ on:
   push:
     # Sequence of patterns matched against refs/tags
     tags:
-      - 'py-wonnx-v*' # Push events to matching py-wonnx-v*
+      - "wonnx-py-v*" # Push events to matching wonnx-py-v*
 jobs:
   build_manylinux:
     name: Create Release manylinux

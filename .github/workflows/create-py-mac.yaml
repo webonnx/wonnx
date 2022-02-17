@@ -4,7 +4,7 @@ on:
   push:
     # Sequence of patterns matched against refs/tags
     tags:
-      - 'py-wonnx-v*' # Push events to matching py-wonnx-v*
+      - "wonnx-py-v*" # Push events to matching wonnx-py-v*
 
 jobs:
   build:
@@ -32,7 +32,7 @@ jobs:
       - name: Prepare maturin publish
         shell: bash
         run: |
-          cd py-wonnx
+          cd wonnx-py
           rustup override set nightly-2022-01-01
       - name: maturin publish
         uses: messense/maturin-action@v1
@@ -41,4 +41,4 @@ jobs:
         with:
           maturin-version: 0.12.1
           command: publish
-          args: -m py-wonnx/Cargo.toml --no-sdist --universal2 -o wheels -i python -u __token__
+          args: -m wonnx-py/Cargo.toml --no-sdist --universal2 -o wheels -i python -u __token__

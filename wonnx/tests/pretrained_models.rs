@@ -12,10 +12,8 @@ fn test_relu() {
     let data = vec![-1.0f32, 1.0];
     input_data.insert("x".to_string(), InputTensor::F32(data.as_slice()));
 
-    let session = pollster::block_on(wonnx::Session::from_path(
-        "examples/data/models/single_relu.onnx",
-    ))
-    .expect("session did not create");
+    let session = pollster::block_on(wonnx::Session::from_path("../data/models/single_relu.onnx"))
+        .expect("session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     assert_eq!(result["y"], &[0.0, 1.0]);
@@ -30,10 +28,8 @@ fn test_mnist() {
         "Input3".to_string(),
         InputTensor::F32(image.as_slice().unwrap()),
     );
-    let session = pollster::block_on(wonnx::Session::from_path(
-        "examples/data/models/opt-mnist.onnx",
-    ))
-    .expect("Session did not create");
+    let session = pollster::block_on(wonnx::Session::from_path("../data/models/opt-mnist.onnx"))
+        .expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
         .iter()
@@ -118,10 +114,8 @@ fn test_squeeze() {
         InputTensor::F32(image.as_slice().unwrap()),
     );
 
-    let session = pollster::block_on(wonnx::Session::from_path(
-        "examples/data/models/opt-squeeze.onnx",
-    ))
-    .expect("session did not create");
+    let session = pollster::block_on(wonnx::Session::from_path("../data/models/opt-squeeze.onnx"))
+        .expect("session did not create");
     let result =
         &pollster::block_on(session.run(&input_data)).unwrap()["squeezenet0_flatten0_reshape0"];
     let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
@@ -136,7 +130,7 @@ pub fn load_image(
 ) -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("examples/data/images")
+            .join("../data/images")
             .join(image_path),
     )
     .unwrap()
@@ -164,7 +158,7 @@ pub fn load_squeezenet_image(
 ) -> ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 4]>> {
     let image_buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = image::open(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("examples/data/images")
+            .join("../data/images")
             .join("bald_eagle.jpeg"),
     )
     .unwrap()

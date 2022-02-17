@@ -5,7 +5,7 @@
 ![Crates.io](https://img.shields.io/crates/l/wonnx)
 
 
-Wonnx aims for running blazing Fast AI on any device.
+Wonnx is a GPU-accelerated ONNX inference run-time written 100% in Rust, ready for the web.
 
 ## Supported Platforms (enabled by `wgpu`)
 
@@ -19,25 +19,35 @@ Wonnx aims for running blazing Fast AI on any device.
 
 :white_check_mark: = First Class Support — :ok: = Best Effort Support — :construction: = Unsupported, but support in progress
 
-## Getting Started
+## Getting started
 
 - Install Rust
 - Install Vulkan, Metal, or DX12 for the GPU API.
+- Ensure Git LFS is installed
 - git clone this repo.
 
 ```bash
 git clone https://github.com/webonnx/wonnx.git
+git lfs install
 ```
 
-### From Rust
+### From the command line
 
-Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then to run an example:
+Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then, you're all set!
+You can run an example:
 
 ```bash
 cargo run --example squeeze --release
 ```
 
-### From Python 
+Or you can try the CLI (see the [README](./wonnx-cli/README.md) for more information):
+
+````bash
+cargo run --release -- info ./data/models/opt-squeeze.mnist
+cargo run --release -- infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --labels ./data/models/squeeze-labels.txt --top 3
+````
+
+### From Python
 
 ```bash
 pip install wonnx
@@ -46,8 +56,9 @@ pip install wonnx
 And then:
 
 ```python
-session = wonnx.PySession.from_path(
-    "../examples/data/models/single_relu.onnx"
+from wonnx import PySession
+session = PySession.from_path(
+    "../data/models/single_relu.onnx"
 )
 inputs = {"x": [-1.0, 2.0]}
 assert session.run(inputs) == {"y": [0.0, 2.0]}
@@ -56,11 +67,14 @@ assert session.run(inputs) == {"y": [0.0, 2.0]}
 To build the Python module for development:
 
 ````sh
+cd wonnx-py
 python3 -m venv .env
 source .env/bin/activate
 pip install maturin
 maturin develop
 ````
+
+Then run `python3` with the above Python code!
 
 ## Running a model from scratch
 
@@ -76,8 +90,6 @@ python -m onnxsim mnist-8.onnx opt-mnist.onnx
 ```bash
 cargo run --example mnist --release
 ```
-
-## Usage in Rust
 
 ```rust
 fn main() -> HashMap<String, Vec<f32>> {
@@ -102,7 +114,7 @@ fn main() -> HashMap<String, Vec<f32>> {
 > Examples are available in the `examples` folder
 
 
-## Tested Models
+## Tested models
 
 - Squeezenet
 - MNIST
