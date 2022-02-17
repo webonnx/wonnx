@@ -26,3 +26,6 @@ tract-onnx = { version = "0.15.8", optional = true }
 wgpu = "*"
 wonnx = { path = "../wonnx" }
 wonnx-preprocessing = { path = "../wonnx-preprocessing" }
+
+[dev-dependencies]
+assert_cmd = "2.0"
