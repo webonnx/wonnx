@@ -4,6 +4,8 @@ use wonnx::{
     utils::{graph, model, node, tensor, tensor_of_type, InputTensor},
 };
 
+mod common;
+
 #[test]
 fn test_cos() {
     let n: usize = 16;
@@ -52,7 +54,7 @@ fn test_reciprocal() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], reciprocal_data);
+    common::assert_eq_vector(result["Y"].as_slice(), &reciprocal_data);
 }
 
 #[test]

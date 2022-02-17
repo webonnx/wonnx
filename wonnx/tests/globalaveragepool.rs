@@ -1,13 +1,6 @@
-use approx::assert_ulps_eq;
 use std::collections::HashMap;
 use wonnx::utils::{graph, model, node, tensor, InputTensor};
-
-fn abs_eq_vector(xs: &[f32], ys: &[f32]) {
-    assert_eq!(xs.len(), ys.len());
-    for i in 0..xs.len() {
-        assert_ulps_eq!(xs[i], ys[i], max_ulps = 2);
-    }
-}
+mod common;
 
 #[test]
 fn global_average_pool() {
@@ -56,5 +49,5 @@ fn global_average_pool() {
     // Channel 2: [[4,5], [6,7]] => average is 5,5
     // Channel 3: [[8,9], [10, 11]] => average is 9,5
     // Channel 4: [[12,13], [14, 15]] => average is 13,5
-    abs_eq_vector(out_y.as_slice(), &[1.5, 5.5, 9.5, 13.5]);
+    common::assert_eq_vector(out_y.as_slice(), &[1.5, 5.5, 9.5, 13.5]);
 }
