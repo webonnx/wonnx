@@ -109,6 +109,11 @@ lazy_static! {
             include_str!("../templates/snippets/activation_scalar.wgsl"),
         )
         .unwrap();
+        tera.add_raw_template(
+            "endomorphism/gather.wgsl",
+            include_str!("../templates/endomorphism/gather.wgsl"),
+        )
+        .unwrap();
         tera
     };
 }
@@ -254,6 +259,50 @@ pub fn compile(
                 scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "endomorphism/map.wgsl",
                 threads: (x_threads, 1, 1),
+            }
+        }
+
+        "Gather" => {
+            // Input 0 is data, input 1 is indices
+            // Which axis to gather on. Negative value means counting dimensions from the back. Accepted range is [-r, r-1] where r = rank(data).
+            // Default is 0. See https://github.com/onnx/onnx/blob/main/docs/Operators.md#attributes-25
+            let axis = get_attribute("axis", Some(0), node)?;
+            if axis != 0 {
+                return Err(CompileError::UnimplementedVariant {
+                    variant: format!("axis={}", axis),
+                    op: String::from("Gather"),
+                });
+            }
+
+            let elements_per_index: u64 = i_dims[0][1..].iter().product();
+            let scalar_type = agreed_type(&input_shapes[0..1], output_shapes)?;
+            let batch_type = MultiType::for_size(elements_per_index as usize, scalar_type);
+            let batch_size = batch_type.elements();
+
+            // The X dimension represents the indexes
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                input_lengths[1],
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+
+            // The Y dimension represents the elements to copy for each index
+            let (y_threads, workgroup_size_y) = workgroup_size(
+                ceil(elements_per_index, batch_size as u64),
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_Y,
+            )?;
+
+            context.insert("batch_type", &batch_type.wgsl_type_name());
+            context.insert("batch_size", &batch_size);
+            context.insert("workgroup_size_x", &workgroup_size_x);
+            context.insert("workgroup_size_y", &workgroup_size_y);
+            context.insert("elements_per_index", &elements_per_index);
+
+            NodeTemplate {
+                scalar_type,
+                template: "endomorphism/gather.wgsl",
+                threads: (x_threads, y_threads, 1),
             }
         }
 
