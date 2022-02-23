@@ -225,7 +225,8 @@ impl GpuModel {
                 NodeDefinition::Input(input_def) => {
                     if outputs_readable {
                         log::warn!(
-                            "it looks like you will be reading back an inference input as output"
+                            "it looks like you will be reading back inference input '{}' as output",
+                            input_def.get_name()
                         );
                     }
 
