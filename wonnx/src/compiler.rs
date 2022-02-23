@@ -274,7 +274,7 @@ pub fn compile(
                 });
             }
 
-            let elements_per_index: u64 = i_dims[0][1..].iter().product();
+            let elements_per_index = input_chunks[0][0];
             let scalar_type = agreed_type(&input_shapes[0..1], output_shapes)?;
             let chunk_type = MultiType::for_size(elements_per_index as usize, scalar_type);
             let chunk_size = chunk_type.elements();
@@ -297,7 +297,6 @@ pub fn compile(
             context.insert("chunk_size", &chunk_size);
             context.insert("workgroup_size_x", &workgroup_size_x);
             context.insert("workgroup_size_y", &workgroup_size_y);
-            context.insert("elements_per_index", &elements_per_index);
 
             NodeTemplate {
                 scalar_type,
