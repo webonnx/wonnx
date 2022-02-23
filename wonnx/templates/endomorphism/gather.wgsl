@@ -21,7 +21,7 @@ var<storage, write> output_0: Chunk;
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let index_index = global_id.x; // Index of the index in the indices array that we are currently processing
 	let chunk_index = global_id.y; // Chunk of elements that we are copying for this index (chunk size determined dynamically)
-	let index_stride = u32({{ i_chunks[0][0] / chunk_size }});
+	let index_stride = {{ i_chunks[0][0] / chunk_size }}u;
 
 	// Negative indexing is apparently allowed; see https://github.com/onnx/onnx/blob/main/docs/Operators.md#inputs-38
 	var index = input_1.data[index_index];
