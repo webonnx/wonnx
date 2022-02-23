@@ -12,16 +12,17 @@ type Mat4x3 = mat4x3<{{ scalar_type }}>;
 
 struct Array {
 	data: [[stride({{ scalar_stride }})]] array<Scalar>;
-}; 
+};
 
 struct ArrayVector {
 	data: [[stride({{ vec4_stride }})]] array<Vec4>;
-}; 
+};
 
 struct ArrayMatrix {
 	data: [[stride({{ mat4x4_stride }})]] array<Mat4x4>;
-}; 
+};
 
 struct ArrayMatrix3 {
 	data: [[stride({{ mat3x3_stride }})]] array<Mat3x3>;
 };
+
