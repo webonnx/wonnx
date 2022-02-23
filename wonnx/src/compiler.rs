@@ -276,8 +276,8 @@ pub fn compile(
 
             let elements_per_index: u64 = i_dims[0][1..].iter().product();
             let scalar_type = agreed_type(&input_shapes[0..1], output_shapes)?;
-            let batch_type = MultiType::for_size(elements_per_index as usize, scalar_type);
-            let batch_size = batch_type.elements();
+            let chunk_type = MultiType::for_size(elements_per_index as usize, scalar_type);
+            let chunk_size = chunk_type.elements();
 
             // The X dimension represents the indexes
             let (x_threads, workgroup_size_x) = workgroup_size(
@@ -288,13 +288,13 @@ pub fn compile(
 
             // The Y dimension represents the elements to copy for each index
             let (y_threads, workgroup_size_y) = workgroup_size(
-                ceil(elements_per_index, batch_size as u64),
+                ceil(elements_per_index, chunk_size as u64),
                 MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
                 MAX_WORKGROUP_SIZE_Y,
             )?;
 
-            context.insert("batch_type", &batch_type.wgsl_type_name());
-            context.insert("batch_size", &batch_size);
+            context.insert("chunk_type", &chunk_type.wgsl_type_name());
+            context.insert("chunk_size", &chunk_size);
             context.insert("workgroup_size_x", &workgroup_size_x);
             context.insert("workgroup_size_y", &workgroup_size_y);
             context.insert("elements_per_index", &elements_per_index);
