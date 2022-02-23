@@ -155,7 +155,17 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
         };
 
         node.get_attribute().iter().for_each(|a| {
-            usage.attributes.insert(a.get_name().to_string());
+            let value = match a.get_field_type() {
+                wonnx::onnx::AttributeProto_AttributeType::FLOAT => format!("{}", a.get_f()),
+                wonnx::onnx::AttributeProto_AttributeType::INT => format!("{}", a.get_i()),
+                wonnx::onnx::AttributeProto_AttributeType::STRING => {
+                    String::from_utf8(a.get_s().to_vec()).unwrap()
+                }
+                _ => format!("<{:?}>", a.get_field_type()),
+            };
+
+            let name = format!("{}={}", a.get_name(), value);
+            usage.attributes.insert(name);
         });
     }
 
@@ -167,7 +177,7 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
             .iter()
             .cloned()
             .collect::<Vec<String>>()
-            .join(", ");
+            .join("\n");
         usage_table.add_row(row![op, attrs]);
     }
 
