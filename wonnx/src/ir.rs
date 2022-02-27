@@ -126,7 +126,7 @@ impl<'model> Node<'model> {
             .iter()
             .map(|input_name: &'model String| {
                 let source_node_definition = node_definitions_by_output
-                    .get(&input_name.to_string())
+                    .get(input_name)
                     .unwrap_or(&MISSING_OPTIONAL_INPUT);
 
                 Ok(match source_node_definition {
