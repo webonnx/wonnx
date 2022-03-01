@@ -148,3 +148,31 @@ impl Session {
         Ok(self.gpu_model.infer(inputs).await?)
     }
 }
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use wasm_bindgen::prelude::*;
+
+    #[wasm_bindgen]
+    pub struct Session {
+        session: crate::Session,
+    }
+
+    #[wasm_bindgen]
+    pub struct SessionError(crate::SessionError);
+
+    #[wasm_bindgen]
+    impl Session {
+        pub async fn new(bytes: Vec<u8>) -> Result<Session, SessionError> {
+            Ok(Session {
+                session: crate::Session::from_bytes(bytes.as_slice())
+                    .await
+                    .map_err(SessionError)?,
+            })
+        }
+
+        pub fn hello() -> String {
+            String::from("world")
+        }
+    }
+}

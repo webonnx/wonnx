@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>WONNX</title>
+	</head>
+
+	<body>
+		<h1>WONNX</h1>
+		<script type="module">
+			import init, { Session } from "./pkg/wonnx.js";
+			init().then(() => {
+				console.log(Session.hello());
+			});
+		</script>
+	</body>
+</html>

@@ -76,6 +76,18 @@ maturin develop
 
 Then run `python3` with the above Python code!
 
+### WASM
+
+````bash
+cd wonnx
+cargo install wasm-pack
+
+# The RUSTFLAGS are needed because WebGPU APIs are still unstable in web_sys
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web
+python -m SimpleHTTPServer 8080
+# Now, open http://localhost:8080/ to test
+````
+
 ## Running a model from scratch
 
 - To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
