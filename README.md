@@ -43,7 +43,7 @@ cargo run --example squeeze --release
 Or you can try the CLI (see the [README](./wonnx-cli/README.md) for more information):
 
 ````bash
-cargo run --release -- info ./data/models/opt-squeeze.mnist
+cargo run --release -- info ./data/models/opt-squeeze.onnx
 cargo run --release -- infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --labels ./data/models/squeeze-labels.txt --top 3
 ````
 
