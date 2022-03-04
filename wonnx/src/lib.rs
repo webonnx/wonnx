@@ -151,23 +151,49 @@ impl Session {
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
+    use crate::InputTensor;
+    use std::collections::HashMap;
     use wasm_bindgen::prelude::*;
 
     #[wasm_bindgen(start)]
     pub fn main() {
         console_error_panic_hook::set_once();
     }
+
+    #[wasm_bindgen]
+    pub async fn test() -> f32 {
+        let mut input_data = HashMap::new();
+        let data = vec![-1.0f32, 1.0];
+        input_data.insert("x".to_string(), InputTensor::F32(data.as_slice()));
+
+        let session =
+            crate::Session::from_bytes(include_bytes!("../../data/models/single_relu.onnx"))
+                .await
+                .expect("session did not create");
+        let result = session.run(&input_data).await.unwrap();
+        let y = result["y"].to_vec();
+        y[0]
+    }
+
     #[wasm_bindgen]
     pub struct Session {
         session: crate::Session,
     }
 
     #[wasm_bindgen]
-    pub struct SessionError(crate::SessionError);
+    pub struct Tensor(crate::onnx::ValueInfoProto);
 
     #[wasm_bindgen]
+    pub fn tensor(name: &str, dimensions: &[i64]) -> Tensor {
+        Tensor(crate::utils::tensor(name, dimensions))
+    }
+
+    #[wasm_bindgen]
+    pub struct SessionError(crate::SessionError);
+
+    #[wasm_bindgen(js_name = "fromBytes")]
     impl Session {
-        pub async fn new(bytes: Vec<u8>) -> Result<Session, SessionError> {
+        pub async fn from_bytes(bytes: Vec<u8>) -> Result<Session, SessionError> {
             Ok(Session {
                 session: crate::Session::from_bytes(bytes.as_slice())
                     .await

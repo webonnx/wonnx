@@ -7,9 +7,11 @@
 	<body>
 		<h1>WONNX</h1>
 		<script type="module">
-			import init, { Session } from "./pkg/wonnx.js";
-			init().then(() => {
-				console.log(Session.hello());
+			import init, { Session, test } from "./pkg/wonnx.js";
+			init().then(async () => {
+				const p = test();
+				console.log("test", p);
+				console.log("test end", await p);
 			});
 		</script>
 	</body>
