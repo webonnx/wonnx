@@ -84,7 +84,11 @@ cargo install wasm-pack
 
 # The RUSTFLAGS are needed because WebGPU APIs are still unstable in web_sys
 RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web
-python -m SimpleHTTPServer 8080
+
+# Add --dev if you want a debug build
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web --dev
+
+python3 -m http.server 8080
 # Now, open http://localhost:8080/ to test
 ````
 
