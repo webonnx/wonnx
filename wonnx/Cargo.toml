@@ -43,6 +43,7 @@ pollster = "0.2.4"
 env_logger = "0.9.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+wgpu = { version = "0.12.0" }
 console_error_panic_hook = "0.1.6"
 getrandom = { version = "0.2", features = ["js"] }
 wasm-bindgen = "0.2.78" # remember to change version in wiki as well
