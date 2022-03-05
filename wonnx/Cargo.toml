@@ -5,9 +5,9 @@ authors = ["haixuanTao <tao.xavier@outlook.com>", "Tommy van der Vorst <tommy@pi
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "Wonnx is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
-repository = "https://github.com/haixuanTao/wonnx.git"
-homepage = "https://github.com/haixuanTao/wonnx"
-readme = "README.md"
+repository = "https://github.com/webonnx/wonnx.git"
+homepage = "https://github.com/webonnx/wonnx"
+readme = "../README.md"
 exclude = [
     "etc/**/*",
     ".github/**/**",

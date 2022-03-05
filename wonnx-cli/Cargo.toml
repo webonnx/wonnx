@@ -2,6 +2,8 @@
 name = "wonnx-cli"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/webonnx/wonnx.git"
+homepage = "https://github.com/webonnx/wonnx"
 
 [features]
 cpu = ["tract-onnx"]
