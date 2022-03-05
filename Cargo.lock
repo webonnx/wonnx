@@ -3740,28 +3740,18 @@ version = "0.2.4"
 dependencies = [
  "approx",
  "bytemuck",
- "console_error_panic_hook",
- "console_log",
  "env_logger",
- "getrandom 0.2.4",
  "image",
- "js-sys",
  "lazy_static",
  "log",
  "ndarray",
  "num",
- "parking_lot",
  "pollster",
  "protobuf",
  "serde",
  "serde_derive",
  "tera",
  "thiserror",
- "wasm-bindgen",
- "wasm-bindgen-console-logger",
- "wasm-bindgen-futures",
- "wasm-bindgen-test",
- "web-sys",
  "wgpu",
 ]
 
@@ -3807,6 +3797,23 @@ dependencies = [
  "pollster",
  "protobuf",
  "pyo3",
+ "wonnx",
+]
+
+[[package]]
+name = "wonnx-wasm"
+version = "0.2.4"
+dependencies = [
+ "console_error_panic_hook",
+ "console_log",
+ "getrandom 0.2.4",
+ "js-sys",
+ "log",
+ "wasm-bindgen",
+ "wasm-bindgen-console-logger",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "web-sys",
  "wonnx",
 ]
 

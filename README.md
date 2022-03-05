@@ -83,13 +83,13 @@ Then run `python3` with the above Python code!
 cargo install wasm-pack
 
 # The RUSTFLAGS are needed because WebGPU APIs are still unstable in web_sys
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg ./wonnx
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx ./wonnx-wasm
 
 # Add --dev if you want a debug build
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg ./wonnx --dev
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx ./wonnx-wasm --dev
 
 python3 -m http.server 8080
-# Now, open http://localhost:8080/data/ to test
+# Now, open http://localhost:8080/wonnx-wasm/ to test
 ````
 
 Note that you will have to use a browser that supports WebGPU (and has the feature enabled). For Chrome, install Chrome Canary
