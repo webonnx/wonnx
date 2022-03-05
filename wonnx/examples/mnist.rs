@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use std::path::Path;
 use std::time::Instant;
-use wonnx::utils::InputTensor;
 
 // Args Management
 async fn run() {
@@ -26,10 +25,7 @@ async fn execute_gpu() -> Option<HashMap<String, Vec<f32>>> {
     let mut input_data = HashMap::new();
 
     let image = load_image();
-    input_data.insert(
-        "Input3".to_string(),
-        InputTensor::F32(image.as_slice().unwrap()),
-    );
+    input_data.insert("Input3".to_string(), image.as_slice().unwrap().into());
 
     let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../data/models")

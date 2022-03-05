@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 // Indicates a f32 overflow in an intermediate Collatz value
 // use wasm_bindgen_test::*;
@@ -36,7 +37,7 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, WonnxError> {
     let image = load_image();
     input_data.insert(
         "data".to_string(),
-        InputTensor::F32(image.as_slice().unwrap()),
+        InputTensor::F32(Cow::from(image.as_slice().unwrap())),
     );
 
     let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -13,7 +13,7 @@ fn test_cos() {
 
     let data = vec![0.0f32; n];
     let shape = vec![n as i64];
-    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Cos -> Y
     let model = model(graph(
@@ -39,7 +39,7 @@ fn test_reciprocal() {
     let data: Vec<f32> = (1..=n).map(|x| x as f32).collect();
     let reciprocal_data: Vec<f32> = (1..=n).map(|x| 1.0 / (x as f32)).collect();
     let shape = vec![n as i64];
-    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Reciprocal -> Y
     let model = model(graph(
@@ -65,7 +65,7 @@ fn test_integer() {
 
     let data = vec![21i32; n];
     let shape = vec![n as i64];
-    input_data.insert("X".to_string(), InputTensor::I32(data.as_slice()));
+    input_data.insert("X".to_string(), InputTensor::I32(data.as_slice().into()));
 
     // Model: X -> Cos -> Y
     let model = model(graph(

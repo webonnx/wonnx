@@ -22,7 +22,7 @@ async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, SessionError> {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
-    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
+    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice().into()));
 
     // ONNX INPUTS
     let shape = vec![1, c as i64, n as i64, n as i64];

@@ -297,7 +297,7 @@ impl GpuModel {
                 output_name.to_string(),
                 match output_source {
                     InferenceOutput::InferenceInput(input_name) => {
-                        match inference_inputs[input_name] {
+                        match &inference_inputs[input_name] {
                             InputTensor::F32(v) => v.to_vec(),
                             InputTensor::I32(v) => v.iter().map(|f| (*f) as f32).collect(),
                         }
