@@ -336,6 +336,9 @@ impl TensorProtoExtra for TensorProto {
 
         let buffer_usage = match readable {
             true => {
+                // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
+                // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
+                // STORAGE buffer when on WebGPU.
                 if cfg!(target_arch = "wasm32") {
                     BufferUsages::STORAGE | BufferUsages::COPY_SRC
                 } else {
@@ -398,6 +401,9 @@ impl<'model> OperatorDefinition<'model> {
                 );
 
                 let buffer_usage = if outputs_readable {
+                    // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
+                    // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
+                    // STORAGE buffer when on WebGPU.
                     if cfg!(target_arch = "wasm32") {
                         BufferUsages::STORAGE | BufferUsages::COPY_SRC
                     } else {
@@ -563,6 +569,9 @@ impl GpuTensor {
     ) -> Result<Vec<f32>, GpuError> {
         let buffer_slice = self.buffer.slice(..);
 
+        // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
+        // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
+        // STORAGE buffer when on WebGPU.
         #[cfg(target_arch = "wasm32")]
         let output_data = wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice)
             .await
