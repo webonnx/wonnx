@@ -570,6 +570,7 @@ impl GpuTensor {
 
         #[cfg(not(target_arch = "wasm32"))]
         let output_data = {
+            let _ = queue; // Need this because otherwise compiler complains we are not using the queue parameter
             let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
             device.poll(wgpu::Maintain::Wait);
             buffer_future.await.expect("failed to run compute on gpu!");
