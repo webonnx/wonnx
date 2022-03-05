@@ -92,6 +92,10 @@ python3 -m http.server 8080
 # Now, open http://localhost:8080/data/ to test
 ````
 
+Note that you will have to use a browser that supports WebGPU (and has the feature enabled). For Chrome, install Chrome Canary
+and enable the `Unsafe WebGPU` flag by navigating to `chrome://flags/#enable-unsafe-webgpu`. For Firefox, enable the
+`dom.webgpu.enabled` setting by navigating to `about:config`.
+
 ## Running a model from scratch
 
 - To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
