@@ -603,6 +603,9 @@ impl GpuTensor {
             }
         };
         drop(output_data);
+
+        // On WASM we are not mapping the buffer, so we don't need to unmap
+        #[cfg(not(target_arch = "wasm32"))]
         self.buffer.unmap();
         Ok(result)
     }
