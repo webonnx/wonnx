@@ -152,9 +152,13 @@ impl Session {
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use crate::InputTensor;
+    use js_sys::Promise;
+    use std::borrow::Cow;
     use std::collections::HashMap;
+    use std::sync::Arc;
     use wasm_bindgen::prelude::*;
     use wasm_bindgen_console_logger::DEFAULT_LOGGER;
+    use wasm_bindgen_futures::future_to_promise;
 
     #[wasm_bindgen(start)]
     pub fn main() {
@@ -164,48 +168,68 @@ mod wasm {
     }
 
     #[wasm_bindgen]
-    pub async fn test() -> f32 {
-        let mut input_data = HashMap::new();
-        let data = vec![-1.0f32, 1.0];
-        input_data.insert("x".to_string(), InputTensor::F32(data.as_slice()));
-
-        let session =
-            crate::Session::from_bytes(include_bytes!("../../data/models/single_relu.onnx"))
-                .await
-                .expect("session did not create");
-        let result = session.run(&input_data).await.unwrap();
-        let y = result["y"].to_vec();
-        y[0]
+    pub struct Input {
+        input_data: HashMap<String, Vec<f32>>,
     }
 
     #[wasm_bindgen]
+    impl Input {
+        #[wasm_bindgen(constructor)]
+        pub fn new() -> Input {
+            Input {
+                input_data: HashMap::new(),
+            }
+        }
+
+        #[wasm_bindgen(js_name = "insert")]
+        pub fn insert(&mut self, input_name: String, value: Vec<f32>) {
+            self.input_data.insert(input_name, value);
+        }
+    }
+
+    #[wasm_bindgen]
+    #[derive(Clone)]
     pub struct Session {
-        session: crate::Session,
-    }
-
-    #[wasm_bindgen]
-    pub struct Tensor(crate::onnx::ValueInfoProto);
-
-    #[wasm_bindgen]
-    pub fn tensor(name: &str, dimensions: &[i64]) -> Tensor {
-        Tensor(crate::utils::tensor(name, dimensions))
+        session: Arc<crate::Session>,
     }
 
     #[wasm_bindgen]
     pub struct SessionError(crate::SessionError);
 
-    #[wasm_bindgen(js_name = "fromBytes")]
+    #[wasm_bindgen]
+    impl SessionError {
+        #[wasm_bindgen(js_name = toString)]
+        pub fn to_string(&self) -> String {
+            self.0.to_string()
+        }
+    }
+
+    #[wasm_bindgen]
     impl Session {
+        #[wasm_bindgen(js_name = "fromBytes")]
         pub async fn from_bytes(bytes: Vec<u8>) -> Result<Session, SessionError> {
             Ok(Session {
-                session: crate::Session::from_bytes(bytes.as_slice())
-                    .await
-                    .map_err(SessionError)?,
+                session: Arc::new(
+                    crate::Session::from_bytes(bytes.as_slice())
+                        .await
+                        .map_err(SessionError)?,
+                ),
             })
         }
 
-        pub fn hello() -> String {
-            String::from("world")
+        pub fn run(&self, input: Input) -> Promise {
+            let input_data: HashMap<String, InputTensor<'_>> = input
+                .input_data
+                .into_iter()
+                .map(|(k, v)| (k, InputTensor::F32(Cow::Owned(v))))
+                .collect();
+
+            let engine = self.session.clone();
+
+            future_to_promise(async move {
+                let result = engine.run(&input_data).await.map_err(SessionError)?;
+                Ok(JsValue::from_serde(&result).unwrap())
+            })
         }
     }
 }

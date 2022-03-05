@@ -79,17 +79,17 @@ Then run `python3` with the above Python code!
 ### WASM
 
 ````bash
-cd wonnx
+# From the root of the repository, run:
 cargo install wasm-pack
 
 # The RUSTFLAGS are needed because WebGPU APIs are still unstable in web_sys
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg ./wonnx
 
 # Add --dev if you want a debug build
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web --dev
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg ./wonnx
 
 python3 -m http.server 8080
-# Now, open http://localhost:8080/ to test
+# Now, open http://localhost:8080/data/ to test
 ````
 
 ## Running a model from scratch
