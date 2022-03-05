@@ -154,10 +154,13 @@ mod wasm {
     use crate::InputTensor;
     use std::collections::HashMap;
     use wasm_bindgen::prelude::*;
+    use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 
     #[wasm_bindgen(start)]
     pub fn main() {
         console_error_panic_hook::set_once();
+        log::set_logger(&DEFAULT_LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Info);
     }
 
     #[wasm_bindgen]
