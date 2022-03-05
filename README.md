@@ -86,7 +86,7 @@ cargo install wasm-pack
 RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg ./wonnx
 
 # Add --dev if you want a debug build
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg ./wonnx
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg ./wonnx --dev
 
 python3 -m http.server 8080
 # Now, open http://localhost:8080/data/ to test
