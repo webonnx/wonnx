@@ -37,9 +37,8 @@
 					console.timeEnd("inference");
 					console.log({result});
 					log(JSON.stringify(result, undefined, "\t"));
-					
-
 					session.free();
+					input.free();
 				}
 				catch(e) {
 					console.error(e, e.toString());

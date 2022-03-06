@@ -18,8 +18,9 @@ pub fn main() {
 }
 
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct Input {
-    input_data: HashMap<String, Vec<f32>>,
+    input_data: HashMap<String, Arc<Vec<f32>>>,
 }
 
 #[wasm_bindgen]
@@ -33,7 +34,7 @@ impl Input {
 
     #[wasm_bindgen(js_name = "insert")]
     pub fn insert(&mut self, input_name: String, value: Vec<f32>) {
-        self.input_data.insert(input_name, value);
+        self.input_data.insert(input_name, Arc::new(value));
     }
 }
 
@@ -73,17 +74,18 @@ impl Session {
         })
     }
 
-    pub fn run(&self, input: Input) -> Promise {
-        let input_data: HashMap<String, InputTensor<'_>> = input
-            .input_data
-            .into_iter()
-            .map(|(k, v)| (k, InputTensor::F32(Cow::Owned(v))))
-            .collect();
-
+    pub fn run(&self, input: &Input) -> Promise {
+        let input_copy = input.clone();
         let engine = self.session.clone();
 
         future_to_promise(async move {
+            let input_data: HashMap<String, InputTensor<'_>> = input_copy
+                .input_data
+                .iter()
+                .map(|(k, v)| (k.clone(), InputTensor::F32(Cow::Borrowed(v.as_slice()))))
+                .collect();
             let result = engine.run(&input_data).await.map_err(SessionError)?;
+            drop(input_copy);
             Ok(JsValue::from_serde(&result).unwrap())
         })
     }
