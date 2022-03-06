@@ -21,6 +21,9 @@ exclude = [
 [lib]
 crate-type = ["cdylib"]
 
+[profile.release]
+lto = true
+
 [dependencies]
 wonnx = { path = "../wonnx" }
 log = "0.4.14" 
