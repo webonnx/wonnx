@@ -1,3 +1,6 @@
+#![allow(clippy::unused_unit)]
+#![allow(clippy::inherent_to_string)]
+
 use js_sys::Promise;
 use std::borrow::Cow;
 use std::collections::HashMap;
