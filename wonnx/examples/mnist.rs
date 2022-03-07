@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-// Indicates a f32 overflow in an intermediate Collatz value
-// use wasm_bindgen_test::*;
 
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use std::path::Path;

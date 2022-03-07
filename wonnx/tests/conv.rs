@@ -1,25 +1,9 @@
 use std::collections::HashMap;
-// use wasm_bindgen_test::*;
-use wonnx::*;
-// Indicates a f32 overflow in an intermediate Collatz value
 use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
-
-async fn run() {
-    //    let conv_asymetric_stride = conv_kernel_3().await.unwrap();
-    //
-    //    assert_eq!(
-    //        conv_asymetric_stride,
-    //        [
-    //            10., 18., 24., 30., 36.,
-    //            37., 14., 18., 22., 26.,
-    //        ]
-    //    );
-}
+use wonnx::*;
 
 #[test]
 fn conv_pad() {
-    // USER INPUT
-
     let n = 5;
     let c = 1;
     let mut input_data = HashMap::new();
@@ -27,8 +11,6 @@ fn conv_pad() {
     let data: Vec<f32> = (0..50).map(|x| x as f32).collect();
     let shape = vec![2, c as i64, n as i64, n as i64];
     input_data.insert("X".to_string(), data.as_slice().into());
-
-    // ONNX INPUTS
 
     let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1.0f32).collect();
 
@@ -49,13 +31,9 @@ fn conv_pad() {
         )],
     ));
 
-    // LOGIC
-
     let session =
         pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
-
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-
     assert_eq!(
         result["Y"],
         [
@@ -73,8 +51,6 @@ fn conv_pad() {
 
 #[test]
 fn conv_without_pad() {
-    // USER INPUT
-
     let n = 5;
     let c = 1;
     let mut input_data = HashMap::new();
@@ -82,8 +58,6 @@ fn conv_without_pad() {
     let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
     let shape = vec![1, c as i64, n as i64, n as i64];
     input_data.insert("X".to_string(), data.as_slice().into());
-
-    // ONNX INPUTS
 
     let kernel_n = 3;
     let m = 1;
@@ -102,11 +76,8 @@ fn conv_without_pad() {
         )],
     ));
 
-    // LOGIC
-
     let session =
         pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
-
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     assert_eq!(
         result["Y"],
@@ -116,8 +87,6 @@ fn conv_without_pad() {
 
 #[test]
 fn conv_stride() {
-    // USER INPUT
-
     let c = 1;
     let mut input_data = HashMap::new();
 
@@ -170,15 +139,12 @@ fn conv_stride() {
 
 #[test]
 fn conv_asymetric_stride() {
-    // USER INPUT
-
     let c = 1;
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..35).map(|x| x as f32).collect();
     input_data.insert("X".to_string(), data.as_slice().into());
 
-    // ONNX INPUTS
     let kernel_n = 3;
     let m = 1;
     let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
@@ -204,23 +170,16 @@ fn conv_asymetric_stride() {
         )],
     ));
 
-    // LOGIC
-
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
-
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-
     assert_eq!(result["Y"], [21., 33., 99., 117., 189., 207., 171., 183.]);
 }
 
 fn _conv_kernel_3() {
-    // USER INPUT
-
     let n: usize = 4;
     let c = 1;
 
-    // ONNX INPUTS
     let mut dim_batch = onnx::TensorShapeProto_Dimension::new();
     dim_batch.set_dim_value(2i64);
 
@@ -287,20 +246,4 @@ fn _conv_kernel_3() {
     graph.set_initializer(protobuf::RepeatedField::from(vec![initializer_w]));
     let mut model = crate::onnx::ModelProto::new();
     model.set_graph(graph);
-
-    // LOGIC
-}
-
-fn main() {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        env_logger::init();
-        pollster::block_on(run());
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-        console_log::init().expect("could not initialize logger");
-        wasm_bindgen_futures::spawn_local(run());
-    }
 }

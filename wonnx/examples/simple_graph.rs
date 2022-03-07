@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-// use wasm_bindgen_test::*;
-// Indicates a f32 overflow in an intermediate Collatz value
+
 use wonnx::{
     utils::{attribute, graph, initializer, model, node, tensor},
     SessionError, WonnxError,
