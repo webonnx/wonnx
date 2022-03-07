@@ -4,13 +4,12 @@ use std::collections::HashMap;
 use std::path::Path;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::*;
-use wonnx::utils::InputTensor;
 
 #[test]
 fn test_relu() {
     let mut input_data = HashMap::new();
     let data = vec![-1.0f32, 1.0];
-    input_data.insert("x".to_string(), InputTensor::F32(data.as_slice().into()));
+    input_data.insert("x".to_string(), data.as_slice().into());
 
     let session = pollster::block_on(wonnx::Session::from_path("../data/models/single_relu.onnx"))
         .expect("session did not create");

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor, InputTensor};
+use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
 mod common;
 
 #[test]
@@ -18,7 +18,7 @@ fn batch_normalization() {
         width_height as i64,
         width_height as i64,
     ];
-    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice().into()));
+    input_data.insert("X".to_string(), data.as_slice().into());
 
     let mean: Vec<f32> = vec![100.0, -100.0];
     let var: Vec<f32> = vec![10.0, 10.0];

@@ -3,7 +3,6 @@
 #![allow(clippy::inherent_to_string)]
 
 use js_sys::Promise;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -83,7 +82,7 @@ impl Session {
             let input_data: HashMap<String, InputTensor<'_>> = input_copy
                 .input_data
                 .iter()
-                .map(|(k, v)| (k.clone(), InputTensor::F32(Cow::Borrowed(v.as_slice()))))
+                .map(|(k, v)| (k.clone(), v.as_slice().into()))
                 .collect();
             let result = engine.run(&input_data).await.map_err(SessionError)?;
             drop(input_copy);
