@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 #![allow(clippy::unused_unit)]
 #![allow(clippy::inherent_to_string)]
 

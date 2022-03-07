@@ -76,27 +76,11 @@ maturin develop
 
 Then run `python3` with the above Python code!
 
-### WASM
+### In the browser, using WebGPU+WASM
 
-````bash
-# From the root of the repository, run:
-cargo install wasm-pack
+See [wonnx-wasm](./wonnx-wasm/README.md).
 
-# The RUSTFLAGS are needed because WebGPU APIs are still unstable in web_sys
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx ./wonnx-wasm
-
-# Add --dev if you want a debug build
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx ./wonnx-wasm --dev
-
-python3 -m http.server 8080
-# Now, open http://localhost:8080/wonnx-wasm/ to test
-````
-
-Note that you will have to use a browser that supports WebGPU (and has the feature enabled). For Chrome, install Chrome Canary
-and enable the `Unsafe WebGPU` flag by navigating to `chrome://flags/#enable-unsafe-webgpu`. For Firefox, enable the
-`dom.webgpu.enabled` setting by navigating to `about:config`.
-
-## Running a model from scratch
+## Running other models
 
 - To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
 
