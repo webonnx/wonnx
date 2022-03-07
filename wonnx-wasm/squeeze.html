@@ -6,8 +6,9 @@
 
 	<body>
 		<h1>WONNX: Squeeze image classification</h1>
-		<div id="log">Loading...</div>
+		<div id="log">Loading... (If this doesn't load, you may have to enable WebGPU in your browser and reload this page)</div>
 		<video id="player" autoplay width="224" height="224"></video>
+		<div id="perf"></div>
 		
 		<script type="module">
 			import init, { Session, Input } from "/target/pkg/wonnx.js";
@@ -49,6 +50,9 @@
 					canvas.height = squeezeHeight;
 					const context = canvas.getContext('2d');
 
+					let inferenceCount = 0;
+					let inferenceTime = 0;
+
 					// Captures a frame and produces inference
 					async function inferImage() {
 						try {
@@ -76,7 +80,11 @@
 							// Start inference
 							const input = new Input();
 							input.insert("data", image);
+							const start = performance.now();
 							const result = await session.run(input);
+							const duration = performance.now() - start;
+							inferenceCount++;
+							inferenceTime += duration;
 							input.free();
 
 							// Find the label with the highest probability
@@ -93,6 +101,8 @@
 
 							// Write result
 							document.getElementById("log").innerText = `${labelsList[maxIndex]} (${maxProb})`;
+							const avgFrameTime = inferenceTime / inferenceCount;
+							document.getElementById("perf").innerText = `Inference time: ${avgFrameTime.toFixed(2)}ms, at most ${Math.floor(1000/avgFrameTime)} fps`;
 						}
 						catch (e) {
 							console.error(e, e.toString());
