@@ -45,11 +45,32 @@ fn test_reduce(
 fn reduce() {
     let _ = env_logger::builder().is_test(true).try_init();
 
+    #[rustfmt::skip]
+    let data = [
+        5.0, 1.0, 
+        20.0, 2.0, 
+        
+        30.0, 1.0, 
+        40.0, 2.0, 
+        
+        55.0, 1.0,
+        60.0, 2.0,
+    ];
+
+    // ONNX test case: do_not_keepdims with ReduceMax
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![1]),
+        "ReduceProd",
+        false,
+        &[100., 2., 1200., 2., 3300., 2.],
+        &[3, 2],
+    );
+
     // ONNX test case: default_axes_keepdims
     test_reduce(
-        &[
-            5.0, 1.0, 20.0, 2.0, 30.0, 1.0, 40.0, 2.0, 55.0, 1.0, 60.0, 2.0,
-        ],
+        &data,
         &[3, 2, 2],
         None,
         "ReduceMean",
@@ -60,9 +81,7 @@ fn reduce() {
 
     // ONNX test case: do_not_keepdims
     test_reduce(
-        &[
-            5.0, 1.0, 20.0, 2.0, 30.0, 1.0, 40.0, 2.0, 55.0, 1.0, 60.0, 2.0,
-        ],
+        &data,
         &[3, 2, 2],
         Some(vec![1]),
         "ReduceMean",
@@ -73,9 +92,7 @@ fn reduce() {
 
     // ONNX test case: keepdims
     test_reduce(
-        &[
-            5.0, 1.0, 20.0, 2.0, 30.0, 1.0, 40.0, 2.0, 55.0, 1.0, 60.0, 2.0,
-        ],
+        &data,
         &[3, 2, 2],
         Some(vec![1]),
         "ReduceMean",
@@ -86,14 +103,45 @@ fn reduce() {
 
     // ONNX test case: negative_axes_keepdims
     test_reduce(
-        &[
-            5.0, 1.0, 20.0, 2.0, 30.0, 1.0, 40.0, 2.0, 55.0, 1.0, 60.0, 2.0,
-        ],
+        &data,
         &[3, 2, 2],
         Some(vec![-2]),
         "ReduceMean",
         true,
         &[12.5, 1.5, 35., 1.5, 57.5, 1.5],
         &[3, 1, 2],
+    );
+
+    // ONNX test case: do_not_keepdims with ReduceSum
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![1]),
+        "ReduceSum",
+        false,
+        &[25.0, 3.0, 70., 3., 115., 3.],
+        &[3, 2],
+    );
+
+    // ONNX test case: do_not_keepdims with ReduceMin
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![1]),
+        "ReduceMin",
+        false,
+        &[5., 1., 30., 1., 55., 1.],
+        &[3, 2],
+    );
+
+    // ONNX test case: do_not_keepdims with ReduceMax
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![1]),
+        "ReduceMax",
+        false,
+        &[20., 2., 40., 2., 60., 2.],
+        &[3, 2],
     );
 }

@@ -97,6 +97,11 @@ lazy_static! {
             include_str!("../templates/pool/conv.wgsl"),
         )
         .unwrap();
+        tera.add_raw_template(
+            "pool/reduce.wgsl",
+            include_str!("../templates/pool/reduce.wgsl"),
+        )
+        .unwrap();
         tera.add_raw_template("structs.wgsl", include_str!("../templates/structs.wgsl"))
             .unwrap();
         tera.add_raw_template(
@@ -258,6 +263,60 @@ pub fn compile(
             NodeTemplate {
                 scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "endomorphism/map.wgsl",
+                threads: (x_threads, 1, 1),
+            }
+        }
+
+        op @ ("ReduceMean" | "ReduceSum" | "ReduceMax" | "ReduceMin" | "ReduceProd") => {
+            let all_axes: Vec<i64> = (0..(i_dims[0].len() as i64)).collect();
+            let axes: Vec<i64> = get_attribute("axes", Some(all_axes), node)?
+                .into_iter()
+                .map(|idx| {
+                    if idx < 0 {
+                        (i_dims[0].len() as i64) + idx
+                    } else {
+                        idx
+                    }
+                })
+                .collect();
+            let scalar_type = agreed_type(input_shapes, output_shapes)?;
+
+            let dims_removed: Vec<i64> = input_shapes[0]
+                .dims
+                .iter()
+                .enumerate()
+                .map(|(idx, dim)| {
+                    if axes.contains(&(idx as i64)) {
+                        1
+                    } else {
+                        *dim as i64
+                    }
+                })
+                .collect();
+            let chunks_with_dims_preserved = Shape::from(scalar_type, &dims_removed).chunks();
+
+            log::info!(
+                "reduce Op={} axes={:?} output_shape={:?} chunks_with_dims_preserved={:?} output_length={}",
+                op,
+                axes,
+                o_dims[0],
+                chunks_with_dims_preserved,
+                output_lengths[0]
+            );
+
+            // The reduce shader will be invoked once for each scalar in the output (which represents one reduce operation)
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                output_lengths[0],
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+            context.insert("workgroup_size_x", &workgroup_size_x);
+            context.insert("chunks_with_dims_preserved", &chunks_with_dims_preserved);
+            context.insert("axes", &axes);
+
+            NodeTemplate {
+                scalar_type,
+                template: "pool/reduce.wgsl",
                 threads: (x_threads, 1, 1),
             }
         }
