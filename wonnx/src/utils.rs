@@ -5,6 +5,7 @@ use crate::onnx;
 use crate::onnx::OperatorSetIdProto;
 use crate::onnx::TensorProto_DataType;
 use crate::onnx::ValueInfoProto;
+use std::borrow::Cow;
 use std::convert::From;
 use std::convert::Into;
 use std::fmt::Display;
@@ -62,8 +63,20 @@ impl Shape {
 }
 
 pub enum InputTensor<'a> {
-    F32(&'a [f32]),
-    I32(&'a [i32]),
+    F32(Cow<'a, [f32]>),
+    I32(Cow<'a, [i32]>),
+}
+
+impl<'a> From<&'a [f32]> for InputTensor<'a> {
+    fn from(a: &'a [f32]) -> Self {
+        InputTensor::F32(Cow::Borrowed(a))
+    }
+}
+
+impl<'a> From<&'a [i32]> for InputTensor<'a> {
+    fn from(a: &'a [i32]) -> Self {
+        InputTensor::I32(Cow::Borrowed(a))
+    }
 }
 
 #[derive(Error, Debug)]
@@ -439,7 +452,7 @@ impl From<onnx::AttributeProto> for String {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{attribute, graph, initializer, model, node, tensor, InputTensor};
+    use crate::utils::{attribute, graph, initializer, model, node, tensor};
 
     #[test]
     fn test_model() {
@@ -450,7 +463,7 @@ mod tests {
         let mut input_data = std::collections::HashMap::new();
 
         let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
-        input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
+        input_data.insert("X".to_string(), data.as_slice().into());
 
         // ONNX INPUTS
         let shape = vec![1, c, n, n];

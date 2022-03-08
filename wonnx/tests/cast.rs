@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use protobuf::ProtobufEnum;
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{attribute, graph, model, node, tensor, tensor_of_type, InputTensor},
+    utils::{attribute, graph, model, node, tensor, tensor_of_type},
 };
 
 #[test]
@@ -14,7 +14,7 @@ fn test_cast() {
     // The input will be 0.0, 0.33, 0.66, ... and (by casting) we'll effectively 'floor' these
     let data: Vec<f32> = (0..n).map(|x| x as f32 / 3.0).collect();
     let dims = vec![n as i64];
-    input_data.insert("X".to_string(), InputTensor::F32(data.as_slice()));
+    input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Identity -> Y; Y==Z
     let model = model(graph(

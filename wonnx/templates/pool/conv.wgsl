@@ -24,10 +24,10 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
 	if (gidx < {{ o_lens[0] }}u) {
 		let batch = gidx / {{ o_chunks[0][0] }}u; 
-		let rest = gidx % {{ o_chunks[0][0] }}u; 
+		var rest = gidx % {{ o_chunks[0][0] }}u; 
 
 		let m = rest / {{ o_chunks[0][1] }}u;
-		let rest = rest % {{ o_chunks[0][1] }}u;
+		rest = rest % {{ o_chunks[0][1] }}u;
 		
 		let y = rest / {{ o_chunks[0][2] }}u;
 		let x = rest % {{ o_chunks[0][2] }}u;

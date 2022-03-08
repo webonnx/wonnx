@@ -297,12 +297,14 @@ impl GpuModel {
                 output_name.to_string(),
                 match output_source {
                     InferenceOutput::InferenceInput(input_name) => {
-                        match inference_inputs[input_name] {
+                        match &inference_inputs[input_name] {
                             InputTensor::F32(v) => v.to_vec(),
                             InputTensor::I32(v) => v.iter().map(|f| (*f) as f32).collect(),
                         }
                     }
-                    InferenceOutput::Tensor(tensor) => tensor.read_to_vec(&self.device).await?,
+                    InferenceOutput::Tensor(tensor) => {
+                        tensor.read_to_vec(&self.device, &self.queue).await?
+                    }
                 },
             );
         }
@@ -333,7 +335,16 @@ impl TensorProtoExtra for TensorProto {
         };
 
         let buffer_usage = match readable {
-            true => BufferUsages::MAP_READ | BufferUsages::STORAGE,
+            true => {
+                // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
+                // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
+                // STORAGE buffer when on WebGPU.
+                if cfg!(target_arch = "wasm32") {
+                    BufferUsages::STORAGE | BufferUsages::COPY_SRC
+                } else {
+                    BufferUsages::STORAGE | BufferUsages::MAP_READ
+                }
+            }
             false => BufferUsages::STORAGE,
         };
 
@@ -390,7 +401,14 @@ impl<'model> OperatorDefinition<'model> {
                 );
 
                 let buffer_usage = if outputs_readable {
-                    BufferUsages::STORAGE | BufferUsages::MAP_READ
+                    // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
+                    // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
+                    // STORAGE buffer when on WebGPU.
+                    if cfg!(target_arch = "wasm32") {
+                        BufferUsages::STORAGE | BufferUsages::COPY_SRC
+                    } else {
+                        BufferUsages::STORAGE | BufferUsages::MAP_READ
+                    }
                 } else {
                     BufferUsages::STORAGE
                 };
@@ -544,12 +562,29 @@ impl GpuStep {
 
 impl GpuTensor {
     /// Read the tensor from GPU memory to main memory (as Vec<f32>)
-    async fn read_to_vec(&self, device: &wgpu::Device) -> Result<Vec<f32>, GpuError> {
+    async fn read_to_vec(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<Vec<f32>, GpuError> {
         let buffer_slice = self.buffer.slice(..);
-        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-        device.poll(wgpu::Maintain::Wait);
-        buffer_future.await.expect("failed to run compute on gpu!");
-        let output_data = buffer_slice.get_mapped_range();
+
+        // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
+        // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
+        // STORAGE buffer when on WebGPU.
+        #[cfg(target_arch = "wasm32")]
+        let output_data = wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice)
+            .await
+            .unwrap();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let output_data = {
+            let _ = queue; // Need this because otherwise compiler complains we are not using the queue parameter
+            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+            device.poll(wgpu::Maintain::Wait);
+            buffer_future.await.expect("failed to run compute on gpu!");
+            buffer_slice.get_mapped_range()
+        };
 
         // The actual buffer may be bigger than what we should return, because buffers have a minimum size in wgpu
         // Fetch the size we should expect so we can chop the buffer to the correct size
@@ -568,6 +603,9 @@ impl GpuTensor {
             }
         };
         drop(output_data);
+
+        // On WASM we are not mapping the buffer, so we don't need to unmap
+        #[cfg(not(target_arch = "wasm32"))]
         self.buffer.unmap();
         Ok(result)
     }

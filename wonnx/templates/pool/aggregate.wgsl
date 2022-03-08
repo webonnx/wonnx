@@ -12,10 +12,10 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 	if (gidx < {{ o_lens[0] / 4 }}u) {
 		let batch = gidx / {{ o_chunks[0][0] / 4 }}u; 
-		let rest = gidx % {{ o_chunks[0][0] / 4 }}u; 
+		var rest = gidx % {{ o_chunks[0][0] / 4 }}u; 
 
 		let m = rest / {{ o_chunks[0][1] }}u;
-		let rest = rest % {{ o_chunks[0][1] }}u;
+		rest = rest % {{ o_chunks[0][1] }}u;
 	
 		let y = rest / {{ o_chunks[0][2] }}u;
 		let x = rest % {{ o_chunks[0][2] }}u;
@@ -50,10 +50,10 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 			result = result / {{ kernel_len }}.;
 		{%- endif %}
 
-		let base_index = batch * {{ o_chunks[0][0] }}u + m * {{ o_chunks[0][1] * 4 }}u + y * {{ width }}u + x;
+		let base_index_2 = batch * {{ o_chunks[0][0] }}u + m * {{ o_chunks[0][1] * 4 }}u + y * {{ width }}u + x;
 
 		for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {
-			let index = base_index + index_vec * {{ o_chunks[0][1] }}u;
+			let index = base_index_2 + index_vec * {{ o_chunks[0][1] }}u;
 			output_0.data[index] = result[index_vec];
 		}
 	}

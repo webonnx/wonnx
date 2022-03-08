@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use wonnx::utils::{attribute, graph, model, node, tensor, InputTensor};
+use wonnx::utils::{attribute, graph, model, node, tensor};
 mod common;
 
 fn assert_gather(
@@ -13,8 +13,8 @@ fn assert_gather(
 ) {
     let mut input_data = HashMap::new();
 
-    input_data.insert("X".to_string(), InputTensor::F32(data));
-    input_data.insert("I".to_string(), InputTensor::I32(indices));
+    input_data.insert("X".to_string(), data.into());
+    input_data.insert("I".to_string(), indices.into());
 
     // Model: (X, I) -> Gather -> Y
     let bn_model = model(graph(

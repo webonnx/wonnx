@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>WONNX</title>
+	</head>
+
+	<body>
+		<h1>WONNX on the web</h1>
+		<textarea id="log" style="width: 100%; height: 300px;"></textarea>
+		
+		<script type="module">
+			import init, { Session, Input } from "/target/pkg/wonnx.js";
+
+			async function fetchBytes(url) {
+				const reply = await fetch(url);
+				const blob = await reply.arrayBuffer();
+				const arr = new Uint8Array(blob);
+				return arr;
+			}
+
+			function log(txt) {
+				document.getElementById("log").append(txt);
+			}
+
+			async function run() {
+				try {
+					const [modelBytes, initResult] = await Promise.all([fetchBytes("../data/models/single_relu.onnx"), init()])
+					console.log("Initialized", { modelBytes, initResult, Session});
+					const session = await Session.fromBytes(modelBytes);
+
+					
+					console.log({session});
+					const input = new Input();
+					input.insert("x", [13.0, -37.0]);
+					console.time("inference");
+					const result = await session.run(input);
+					console.timeEnd("inference");
+					console.log({result});
+					log(JSON.stringify(result, undefined, "\t"));
+					session.free();
+					input.free();
+				}
+				catch(e) {
+					console.error(e, e.toString());
+				}
+			}
+
+			run();
+		</script>
+	</body>
+</html>

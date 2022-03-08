@@ -45,13 +45,13 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 			var matrix_3 = input_1.data[base_kernel_index + {{ 3 * channel / 16 }}u];
 
 			for(var index_c_vec: u32 = 0u; index_c_vec < 4u; index_c_vec = index_c_vec + 1u) {
-				let base_index = base_index + index_c_vec * {{ 4 * i_chunks[0][1] }}u;
+				let base_index_2 = base_index + index_c_vec * {{ 4 * i_chunks[0][1] }}u;
 
 				let tmp_vec = Vec4(
-					input_0.data[base_index],
-					input_0.data[base_index + {{ i_chunks[0][1] }}u],
-					input_0.data[base_index + {{ 2 * i_chunks[0][1] }}u],
-					input_0.data[base_index + {{ 3 * i_chunks[0][1] }}u],
+					input_0.data[base_index_2],
+					input_0.data[base_index_2 + {{ i_chunks[0][1] }}u],
+					input_0.data[base_index_2 + {{ 2 * i_chunks[0][1] }}u],
+					input_0.data[base_index_2 + {{ 3 * i_chunks[0][1] }}u],
 				);
 			
 				result = tmp_vec * Mat4x4(
@@ -72,9 +72,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		{% set activation_type = op_type | replace(from="Conv", to="") %}
 		{%- include "snippets/activation_vec.wgsl" %}
 
-		let base_index = batch * {{ o_chunks[0][0] }}u + m * {{ o_chunks[0][1] * 4 }}u + xy;
+		let base_index_3 = batch * {{ o_chunks[0][0] }}u + m * {{ o_chunks[0][1] * 4 }}u + xy;
 		for(var index_vec: u32 = 0u; index_vec < 4u; index_vec = index_vec + 1u) {
-			let index = base_index + index_vec * {{ o_chunks[0][1] }}u;
+			let index = base_index_3 + index_vec * {{ o_chunks[0][1] }}u;
 			output_0.data[index] = result[index_vec];
 		}
 	}
