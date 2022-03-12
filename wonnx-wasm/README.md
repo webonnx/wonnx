@@ -13,7 +13,7 @@ The wonnx-wasm package provides a simple interface using which you can perform i
 ````js
 import init, { Session, Input } from "/target/pkg/wonnx.js";
 
-async funtion run() {
+async function run() {
 	await init();
 
 	try {
