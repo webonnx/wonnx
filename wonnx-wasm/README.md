@@ -11,7 +11,7 @@ The wonnx create is compiled to a WASM module which a browser can run at near-na
 The wonnx-wasm package provides a simple interface using which you can perform inference using ONNX models, mostly resembling the API of the native version. The API looks like this:
 
 ````js
-import init, { Session, Input } from "/target/pkg/wonnx.js";
+import init, { Session, Input } from "@webonnx/wonnx-wasm";
 
 async function run() {
 	await init();
@@ -43,10 +43,10 @@ From the root of the repository, run the following commands:
 cargo install wasm-pack
 
 # Build release version. The RUSTFLAGS are needed because WebGPU APIs are still unstable in web_sys
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx ./wonnx-wasm
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx --scope webonnx ./wonnx-wasm
 
 # Add --dev if you want a debug build
-RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx ./wonnx-wasm --dev
+RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx --scope webonnx ./wonnx-wasm --dev
 ````
 
 To test the freshly built package, run `python3 -m http.server 8080` and open http://localhost:8080/wonnx-wasm/ in a web browser.
