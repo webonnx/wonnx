@@ -21,31 +21,16 @@ Wonnx is a GPU-accelerated ONNX inference run-time written 100% in Rust, ready f
 
 ## Getting started
 
-- Install Rust
-- Install Vulkan, Metal, or DX12 for the GPU API.
-- Ensure Git LFS is installed
-- git clone this repo.
-
-```bash
-git clone https://github.com/webonnx/wonnx.git
-git lfs install
-```
-
-Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then, you're all set!
-
 ### From the command line
 
-You can run one of the included examples through cargo:
+Ensure your system supports either Vulkan, Metal or DX12 for access to the GPU. Then either download a binary release,
+or install Rust and run `cargo install --git https://github.com/webonnx/wonnx.git wonnx-cli` to install the CLI.
 
-```bash
-cargo run --example squeeze --release
-```
-
-The CLI provides a convenient interface for tinkering with models (see the [README](./wonnx-cli/README.md) for more information):
+The CLI tool (`nnx`) provides a convenient interface for tinkering with models (see the [README](./wonnx-cli/README.md) for more information):
 
 ````bash
-cargo run --release -- info ./data/models/opt-squeeze.onnx
-cargo run --release -- infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --labels ./data/models/squeeze-labels.txt --top 3
+nnx info ./data/models/opt-squeeze.onnx
+nnx infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --labels ./data/models/squeeze-labels.txt --top 3
 ````
 
 ### From Rust
@@ -100,6 +85,28 @@ which is included as WebAssembly module and will use the browser's WebGPU implem
 for a more complete usage example involving a bundler.
 
 For more details on the JS/WASM package including build instructions, see [wonnx-wasm](./wonnx-wasm/README.md).
+
+### For development
+
+To work on wonnx itself, follow the following steps:
+
+- Install Rust
+- Install Vulkan, Metal, or DX12 for the GPU API.
+- Ensure Git LFS is installed
+- git clone this repo.
+
+```bash
+git clone https://github.com/webonnx/wonnx.git
+git lfs install
+```
+
+Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then, you're all set!
+
+You can run one of the included examples through cargo:
+
+```bash
+cargo run --example squeeze --release
+```
 
 ## Running other models
 
