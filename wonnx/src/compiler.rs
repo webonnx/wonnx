@@ -119,6 +119,11 @@ lazy_static! {
             include_str!("../templates/endomorphism/gather.wgsl"),
         )
         .unwrap();
+        tera.add_raw_template(
+            "endomorphism/onehot.wgsl",
+            include_str!("../templates/endomorphism/onehot.wgsl"),
+        )
+        .unwrap();
         tera
     };
 }
