@@ -55,6 +55,14 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 				{% if op_type == "ReduceMean" or op_type == "ReduceSum" %}
 					accumulator = accumulator + input_val;
+				{% elif op_type == "ReduceL1" %}
+					accumulator = accumulator + abs(input_val);
+				{% elif op_type == "ReduceL2" %}
+					accumulator = accumulator + (input_val * input_val);
+				{% elif op_type == "ReduceLogSum" %}
+					accumulator = accumulator + input_val;
+				{% elif op_type == "ReduceLogSumExp" %}
+					accumulator = accumulator + exp(input_val);
 				{% elif op_type == "ReduceProd" %}
 					accumulator = accumulator * input_val;
 				{% elif op_type == "ReduceMin" %}
@@ -82,6 +90,10 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		{#- Post-processing -#}
 		{% if op_type == "ReduceMean" %}
 			accumulator = accumulator / Scalar(count);
+		{% elif op_type == "ReduceL2" %}
+			accumulator = sqrt(accumulator);
+		{% elif op_type == "ReduceLogSum" or op_type == "ReduceLogSumExp" %}
+			accumulator = log(accumulator);
 		{% endif %}
 
 		output_0.data[gidx] = accumulator;

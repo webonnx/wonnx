@@ -41,6 +41,10 @@ fn test_reduce(
     common::assert_eq_vector(result["Y"].as_slice(), output);
 }
 
+fn sum_square(a: f32, b: f32) -> f32 {
+    ((a * a) + (b * b)).sqrt()
+}
+
 #[test]
 fn reduce() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -57,7 +61,80 @@ fn reduce() {
         60.0, 2.0,
     ];
 
-    // ONNX test case: do_not_keepdims with ReduceMax
+    // ReduceSum: sum all
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![]),
+        "ReduceSum",
+        false,
+        &[219.],
+        &[1],
+    );
+
+    // ReduceLogSumExp
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![0]),
+        "ReduceLogSumExp",
+        false,
+        &[55., 2.0986123, 60.],
+        &[3],
+    );
+
+    // ReduceLogSumExp
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![0]),
+        "ReduceLogSum",
+        false,
+        &[4.499_809_7, 1.098_612_4, 4.787_492_3],
+        &[3],
+    );
+
+    // ONNX test case: do_not_keepdims with ReduceL2
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![1]),
+        "ReduceL2",
+        false,
+        &[
+            sum_square(20.0, 5.0),
+            sum_square(1., 2.),
+            sum_square(30.0, 40.0),
+            sum_square(1.0, 2.0),
+            sum_square(55., 60.),
+            sum_square(1., 2.),
+        ],
+        &[3, 2],
+    );
+
+    // ReduceL2 all axes
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![0, 1, 2]),
+        "ReduceL2",
+        false,
+        &[97.800_82],
+        &[1],
+    );
+
+    // ONNX test case: do_not_keepdims with ReduceL1
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![1]),
+        "ReduceL1",
+        false,
+        &[25.0, 3.0, 70., 3., 115., 3.],
+        &[3, 2],
+    );
+
+    // ONNX test case: do_not_keepdims with ReduceProd
     test_reduce(
         &data,
         &[3, 2, 2],
