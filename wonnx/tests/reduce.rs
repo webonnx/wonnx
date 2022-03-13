@@ -65,7 +65,7 @@ fn reduce() {
     test_reduce(
         &data,
         &[3, 2, 2],
-        Some(vec![]),
+        None, // all
         "ReduceSum",
         false,
         &[219.],
