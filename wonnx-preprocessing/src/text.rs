@@ -52,6 +52,7 @@ impl BertTokenizer {
             max_length: 60,
             strategy: LongestFirst,
             stride: 0,
+            ..Default::default()
         }));
         tokenizer.with_pre_tokenizer(BertPreTokenizer);
         tokenizer.with_post_processor(BertProcessing::new(
@@ -66,6 +67,7 @@ impl BertTokenizer {
                 lstrip: false,
                 rstrip: false,
                 normalized: false, //?
+                ..Default::default()
             },
             AddedToken {
                 content: "[CLS]".into(),
@@ -73,6 +75,7 @@ impl BertTokenizer {
                 lstrip: false,
                 rstrip: false,
                 normalized: false, //?
+                ..Default::default()
             },
             AddedToken {
                 content: "[SEP]".into(),
@@ -80,6 +83,7 @@ impl BertTokenizer {
                 lstrip: false,
                 rstrip: false,
                 normalized: false, //?
+                ..Default::default()
             },
             AddedToken {
                 content: "[MASK]".into(),
@@ -87,6 +91,7 @@ impl BertTokenizer {
                 lstrip: false,
                 rstrip: false,
                 normalized: false, //?
+                ..Default::default()
             },
         ]);
 
