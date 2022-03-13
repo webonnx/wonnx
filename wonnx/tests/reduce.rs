@@ -221,4 +221,15 @@ fn reduce() {
         &[20., 2., 40., 2., 60., 2.],
         &[3, 2],
     );
+
+    // ONNX test case for ReduceSumSquare (https://github.com/onnx/onnx/blob/94e2f64551ded652df53a7e9111031e8aabddaee/onnx/backend/test/case/node/reducesumsquare.py#L27)
+    test_reduce(
+        &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11., 12.],
+        &[3, 2, 2],
+        Some(vec![1]),
+        "ReduceSumSquare",
+        false,
+        &[10., 20., 74., 100., 202., 244.],
+        &[3, 2],
+    );
 }

@@ -57,7 +57,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 					accumulator = accumulator + input_val;
 				{% elif op_type == "ReduceL1" %}
 					accumulator = accumulator + abs(input_val);
-				{% elif op_type == "ReduceL2" %}
+				{% elif op_type == "ReduceL2" or op_type == "ReduceSumSquare" %}
 					accumulator = accumulator + (input_val * input_val);
 				{% elif op_type == "ReduceLogSum" %}
 					accumulator = accumulator + input_val;
