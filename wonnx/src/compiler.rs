@@ -216,6 +216,10 @@ fn agreed_type(
         }
     }
 
+    if let Some(ScalarType::I64) = data_type {
+        data_type = Some(ScalarType::I32);
+    }
+
     data_type.ok_or(CompileError::TypeUnderspecified)
 }
 

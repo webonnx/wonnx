@@ -343,6 +343,7 @@ impl TensorProtoExtra for TensorProto {
             input_shape
         );
 
+        /// TODO read i64 tensors as i32 (and error on overflow)
         let data = self.get_float_data();
         let raw_data = if !data.is_empty() {
             bytemuck::cast_slice(data)
