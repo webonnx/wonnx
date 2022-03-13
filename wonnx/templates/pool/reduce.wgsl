@@ -12,7 +12,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 	{# We will be invoked once for each scalar in the output (output_0.data[gidx]) which represents one reduce operation.
 	Find out which output cell we are calculating (d_X refers to the index of dimension X in the input) #}
-	if (gidx < {{ i_lens[0] }}u) {
+	if (gidx < {{ o_lens[0] }}u) {
 		var rest = gidx;
 
 		{#- chunks_with_dims_preserved is the input dims, but the reduced axes have their size set to 1, e.g. an input 
