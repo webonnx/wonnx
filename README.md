@@ -31,21 +31,27 @@ git clone https://github.com/webonnx/wonnx.git
 git lfs install
 ```
 
+Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then, you're all set!
+
 ### From the command line
 
-Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then, you're all set!
-You can run an example:
+You can run one of the included examples through cargo:
 
 ```bash
 cargo run --example squeeze --release
 ```
 
-Or you can try the CLI (see the [README](./wonnx-cli/README.md) for more information):
+The CLI provides a convenient interface for tinkering with models (see the [README](./wonnx-cli/README.md) for more information):
 
 ````bash
 cargo run --release -- info ./data/models/opt-squeeze.onnx
 cargo run --release -- infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --labels ./data/models/squeeze-labels.txt --top 3
 ````
+
+### From Rust
+
+Add the `wonnx` crate as dependency (`cargo add wonnx` if you have cargo-add). Then, see the [examples](./wonnx/examples)
+for usage examples, or [browse the API docs](https://docs.rs/wonnx).
 
 ### From Python
 
@@ -53,7 +59,7 @@ cargo run --release -- infer ./data/models/opt-squeeze.onnx -i data=./data/image
 pip install wonnx
 ```
 
-And then:
+And then, to use:
 
 ```python
 from wonnx import PySession
@@ -64,21 +70,36 @@ inputs = {"x": [-1.0, 2.0]}
 assert session.run(inputs) == {"y": [0.0, 2.0]}
 ```
 
-To build the Python module for development:
-
-````sh
-cd wonnx-py
-python3 -m venv .env
-source .env/bin/activate
-pip install maturin
-maturin develop
-````
-
 Then run `python3` with the above Python code!
 
-### In the browser, using WebGPU+WASM
+For more details on the Python package including build instructions, see [wonnx-py](./wonnx-py/README.md).
 
-See [wonnx-wasm](./wonnx-wasm/README.md).
+### In the browser, using WebGPU + WebAssembly
+
+````bash
+npm install @webonnx/wonnx-wasm
+````
+
+And then, on the client side:
+
+````js
+import init, { Session, Input } from "@webonnx/wonnx-wasm";
+
+// Check for WebGPU availability first: if(navigator.gpu) { .. }
+await init();
+const session = await Session.fromBytes(modelBytes /* Uint8Array containing the ONNX file */);
+const input = new Input();
+input.insert("x", [13.0, -37.0]);
+const result = await session.run(input); // This will be an object where the keys are the names of the model outputs and the values are arrays of numbers.
+session.free();
+input.free();
+````
+
+The package [@webonnx/wonnx-wasm](https://www.npmjs.com/package/@webonnx/wonnx-wasm) provides an interface to WONNX, 
+which is included as WebAssembly module and will use the browser's WebGPU implementation. See [wonnx-wasm-example](https://github.com/webonnx/wonnx-wasm-example)
+for a more complete usage example involving a bundler.
+
+For more details on the JS/WASM package including build instructions, see [wonnx-wasm](./wonnx-wasm/README.md).
 
 ## Running other models
 
@@ -104,7 +125,7 @@ Examples are available in the [examples folder](./wonnx/examples/).
 
 ## GPU selection
 
-You may set the following environment variables to influence GPU selection by WGPU:
+Except when running in WebAssembly, you may set the following environment variables to influence GPU selection by WGPU:
 
 * `WGPU_ADAPTER_NAME` with a substring of the name of the adapter you want to use (e.g. `1080` will match `NVIDIA GeForce 1080ti`).
 * `WGPU_BACKEND` with a comma separated list of the backends you want to use (`vulkan`, `metal`, `dx12`, `dx11`, or `gl`).
