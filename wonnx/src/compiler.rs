@@ -317,6 +317,7 @@ pub fn compile(
                 MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
                 MAX_WORKGROUP_SIZE_X,
             )?;
+
             context.insert("workgroup_size_x", &workgroup_size_x);
             context.insert("chunks_with_dims_preserved", &chunks_with_dims_preserved);
             context.insert("axes", &axes);
@@ -324,6 +325,48 @@ pub fn compile(
             NodeTemplate {
                 scalar_type,
                 template: "pool/reduce.wgsl",
+                threads: (x_threads, 1, 1),
+            }
+        }
+
+        "OneHot" => {
+            // Currently only OneHot on the last axis is supported
+            let axis = get_attribute("axis", Some(-1), node)?;
+            if axis != -1 {
+                return Err(CompileError::UnimplementedVariant {
+                    variant: format!("axis={}", axis),
+                    op: String::from("OneHot"),
+                });
+            }
+
+            // Depth tensor must have exactly one element
+            if input_shapes[1].element_count() != 1 {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 1,
+                    input_shape: input_shapes[1].clone(),
+                });
+            }
+
+            // Values tensor must have exactly two elements
+            if input_shapes[2].element_count() != 2 {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 2,
+                    input_shape: input_shapes[2].clone(),
+                });
+            }
+
+            // OneHot will invoke once for each index
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                input_lengths[0],
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+            context.insert("workgroup_size_x", &workgroup_size_x);
+
+            NodeTemplate {
+                scalar_type: output_shapes[0].data_type,
+                template: "endomorphism/onehot.wgsl",
+
                 threads: (x_threads, 1, 1),
             }
         }
