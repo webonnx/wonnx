@@ -38,6 +38,8 @@ pytest_plugins = ("onnx.backend.test.report",)
 import wonnx
 import numpy as np
 
+OP_TESTED = os.environ["OP_TESTED"]
+
 
 class DummyRep(BackendRep):
     def __init__(self, inputs, outputs, outputs_shape, model):
@@ -145,17 +147,7 @@ def do_enforce_test_coverage_safelist(model):  # type: (ModelProto) -> bool
 
 backend_test = onnx.backend.test.BackendTest(DummyBackend, __name__)
 
-backend_test.include(f"test_relu_[a-z,_]*")
-backend_test.include(f"test_conv_[a-z,_]*")
-backend_test.include(f"test_abs_[a-z,_]*")
-backend_test.include(f"test_acos_[a-z,_]*")
-backend_test.include(f"test_atan_[a-z,_]*")
-backend_test.include(f"test_ceil_[a-z,_]*")
-backend_test.include(f"test_cos_[a-z,_]*")
-backend_test.include(f"test_exp_[a-z,_]*")
-backend_test.include(f"test_floor_[a-z,_]*")
-backend_test.include(f"test_leakyrelu_[a-z,_]*")
-
+backend_test.include(f"test_{OP_TESTED}_[a-z,_]*")
 
 globals().update(backend_test.enable_report().test_cases)
 
