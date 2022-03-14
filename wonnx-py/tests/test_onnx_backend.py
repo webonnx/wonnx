@@ -156,6 +156,19 @@ backend_test.include(f"test_exp_[a-z,_]*")
 backend_test.include(f"test_floor_[a-z,_]*")
 backend_test.include(f"test_leakyrelu_[a-z,_]*")
 
+# Disable tests for ReduceSum because ReduceSum accepts the 'axes' list as input instead of as an attribute, and the test
+# case sets the 'axes' input dynamically, which we don't support (yet?).
+# backend_test.include(f"test_reduce_sum_[a-z,_]*")
+backend_test.include(f"test_reduce_mean_[a-z,_]*")
+backend_test.include(f"test_reduce_l1_[a-z,_]*")
+backend_test.include(f"test_reduce_l2_[a-z,_]*")
+backend_test.include(f"test_reduce_min_[a-z,_]*")
+backend_test.include(f"test_reduce_prod_[a-z,_]*")
+backend_test.include(f"test_reduce_sum_square_[a-z,_]*")
+backend_test.include(f"test_reduce_max_[a-z,_]*")
+backend_test.include(f"test_reduce_log_sum_[a-z,_]*")
+backend_test.include(f"test_reduce_log_sum_exp_[a-z,_]*")
+
 
 globals().update(backend_test.enable_report().test_cases)
 
