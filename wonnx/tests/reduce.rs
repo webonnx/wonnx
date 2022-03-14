@@ -1,6 +1,7 @@
+use protobuf::ProtobufEnum;
 use std::collections::HashMap;
 use wonnx::{
-    onnx::AttributeProto,
+    onnx::{AttributeProto, TensorProto, TensorProto_DataType},
     utils::{attribute, graph, model, node, tensor},
 };
 mod common;
@@ -232,4 +233,57 @@ fn reduce() {
         &[10., 20., 74., 100., 202., 244.],
         &[3, 2],
     );
+}
+
+pub fn initializer_int(name: &str, data: Vec<i64>) -> TensorProto {
+    let mut initializer = TensorProto::new();
+    initializer.set_name(name.to_string());
+    initializer.set_data_type(TensorProto_DataType::INT64.value()); // FLOAT
+    initializer.set_int64_data(data);
+    initializer
+}
+
+// Separate test for the case where ReduceSum takes an axes input
+// Test case adapted from https://github.com/onnx/onnx/blob/94e2f64551ded652df53a7e9111031e8aabddaee/onnx/backend/test/case/node/reducesum.py#L92
+#[test]
+fn test_reduce_sum_with_axes_as_input() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let mut input_data = HashMap::new();
+
+    #[rustfmt::skip]
+    let data: &[f32] = &[
+       1., 2.,
+       3., 4.,
+
+       5., 6.,
+       7., 8.,
+
+       9., 10.,
+       11., 12.,
+    ];
+
+    input_data.insert("X".to_string(), data.into());
+    let attributes: Vec<AttributeProto> = vec![attribute("keepdims", 1)];
+
+    // Model: X -> ReduceMean -> Y
+    let model = model(graph(
+        vec![tensor("X", &[3, 2, 2])],
+        vec![tensor("Y", &[3, 2])],
+        vec![],
+        vec![initializer_int("A", vec![-2])],
+        vec![node(
+            vec!["X", "A"],
+            vec!["Y"],
+            "myReduce",
+            "ReduceSum",
+            attributes,
+        )],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    log::info!("OUT: {:?}", result["Y"]);
+    common::assert_eq_vector(result["Y"].as_slice(), &[4., 6., 12., 14., 20., 22.]);
 }

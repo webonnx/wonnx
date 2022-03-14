@@ -281,7 +281,7 @@ pub fn compile(
                     }
                 })
                 .collect();
-            let scalar_type = agreed_type(input_shapes, output_shapes)?;
+            let scalar_type = agreed_type(&[input_shapes[0]], output_shapes)?;
 
             let dims_removed: Vec<i64> = input_shapes[0]
                 .dims
