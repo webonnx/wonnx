@@ -377,3 +377,10 @@ fn test_matmul_square_matrix() {
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#Range">Range</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Range-11">11</a>|
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#Softmax">Softmax</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Softmax-13">13</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Softmax-11">11</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Softmax-1">1</a>|✅ (axis=1)|
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#SoftmaxCrossEntropyLoss">SoftmaxCrossEntropyLoss</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#SoftmaxCrossEntropyLoss-13">13</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#SoftmaxCrossEntropyLoss-12">12</a>|
+
+### Known limitations
+
+* The `Clip`, `Resize`, `Reshape`, `Split` and `ReduceSum` ops accept (typically optional) secondary inputs to set various
+  parameters (i.e. axis). These inputs are only supported if they are supplied as initializer tensors (i.e. do not depend 
+  on inputs and are not outputs of other ops), because wonnx pre-compiles all operations to shaders in advance (and must know
+  these parameters up front).
