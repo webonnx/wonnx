@@ -296,7 +296,7 @@ impl<'model> Optimizer<'model> {
                     // The Clip, Split, Resize and Reshape operator each take optional inputs that influence the operation.
                     // These are typically statically initialized tensors containing shapes. For more efficient execution we
                     // move these static values to attributes.
-                    op @ ("Clip" | "Split" | "Resize" | "Reshape") => {
+                    op @ ("Clip" | "Split" | "Resize" | "Reshape" | "ReduceSum") => {
                         if new_inputs.is_empty() {
                             return Err(OptimizerError::NoInputs);
                         }
@@ -307,6 +307,7 @@ impl<'model> Optimizer<'model> {
                             "Resize" => RESIZE_INPUT_NAMES,
                             "Reshape" => RESHAPE_INPUT_NAMES,
                             "Clip" => CLIP_INPUT_NAMES,
+                            "ReduceSum" => REDUCESUM_INPUT_NAMES,
                             _ => unreachable!(),
                         };
 
@@ -329,7 +330,8 @@ impl<'model> Optimizer<'model> {
                                         ("Split", "split")
                                         | ("Resize", "roi")
                                         | ("Resize", "sizes")
-                                        | ("Reshape", "shape") => match data_type {
+                                        | ("Reshape", "shape")
+                                        | ("ReduceSum", "axes") => match data_type {
                                             ScalarType::I64 => {
                                                 log::info!(
                                                         "transferring input {} for op {} to i64 attribute (initializer data type: {:?})",
@@ -520,3 +522,4 @@ static SPLIT_INPUT_NAMES: &[&str] = &["input", "split"];
 static RESIZE_INPUT_NAMES: &[&str] = &["X", "roi", "scales", "sizes"];
 static RESHAPE_INPUT_NAMES: &[&str] = &["data", "shape"];
 static CLIP_INPUT_NAMES: &[&str] = &["input", "min", "max"];
+static REDUCESUM_INPUT_NAMES: &[&str] = &["input", "axes"];
