@@ -45,7 +45,8 @@
 	{{ activation_output }} = input_vec * tanh(log(Vec4(Scalar(1), Scalar(1), Scalar(1), Scalar(1)) + exp(input_vec)));
 
 {%- elif activation_type == "LeakyRelu" -%}
-	{{ activation_output }} = max(Scalar({{ alpha }}) * {{ activation_input }}, Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)));
+	{{ activation_output }} = max({{ activation_input }}, Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)))
+	                         + min(Scalar({{ alpha }}) * {{ activation_input }}, Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)));
 
 {%- elif activation_output != activation_input -%}
 	{{ activation_output }} = {{ activation_input }};
