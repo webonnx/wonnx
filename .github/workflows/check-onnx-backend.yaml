@@ -11,8 +11,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Run Tests
-        uses: docker://konstin2/maturin:latest
+      - uses: actions/setup-python@v2
         with:
-          entrypoint: /bin/bash
-          args: .github/test_onnx_backend.sh
+          python-version: 3.9
+      - name: install llvmpipe and lavapipe
+        run: |
+          sudo apt-get update -y -qq
+          sudo add-apt-repository ppa:oibaf/graphics-drivers -y
+          sudo apt-get update
+          sudo apt install -y libegl1-mesa libgl1-mesa-dri libxcb-xfixes0-dev mesa-vulkan-drivers
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: test
+        run: |
+          cd wonnx-py
+          rustup override set nightly-2022-01-01
+          export RUSTFLAGS='-C target-feature=+fxsr,+sse,+sse2,+sse3,+ssse3,+sse4.1,+popcnt'
+          python3 -m venv .env
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install maturin
+          pip install -r requirements.txt
+          maturin develop
+          WGPU_BACKEND=vulkan pytest tests/test_onnx_backend.py
