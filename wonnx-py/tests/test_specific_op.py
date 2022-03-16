@@ -1,149 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-
-import itertools
-import os
-import platform
-import unittest
-import onnx.backend.base
 import onnx.backend.test
 
-from onnx.backend.base import BackendRep, Device, DeviceType, namedtupledict
-from onnx.backend.test.runner import BackendIsNotSupposedToImplementIt
-import onnx.shape_inference
-import onnx.version_converter
-from typing import NamedTuple, Optional, Text, Any, Tuple, Sequence
-from onnx import NodeProto, ModelProto, TensorProto
-import numpy  # type: ignore
-
-# The following just executes the fake backend through the backend test
-# infrastructure. Since we don't have full reference implementation of all ops
-# in ONNX repo, it's impossible to produce the proper results. However, we can
-# run 'checker' (that's what base Backend class does) to verify that all tests
-# fed are actually well-formed ONNX models.
-#
-# If everything is fine, all the tests would be marked as "skipped".
-#
-# We don't enable report in this test because the report collection logic itself
-# fails when models are mal-formed.
-
-
-# This is a pytest magic variable to load extra plugins
 pytest_plugins = ("onnx.backend.test.report",)
 
+import os
 import wonnx
-import numpy as np
+import unittest
+
+from test_onnx_backend import DummyBackend
 
 OP_TESTED = os.environ["OP_TESTED"]
-
-
-class DummyRep(BackendRep):
-    def __init__(self, inputs, outputs, outputs_shape, model):
-        self.inputs = inputs
-        self.outputs = outputs
-        self.outputs_shape = outputs_shape
-        self.session = wonnx.PySession.from_bytes(onnx._serialize(model))
-        self.rtol = 1
-        pass
-
-    def run(self, inputs, rtol=1.0, **kwargs):
-
-        dicts = {}
-        for k, v in zip(self.inputs, inputs):
-            if isinstance(v, np.ndarray):
-                dicts[k] = v.flatten()
-            else:
-                tmp_v = np.array(v)
-                np.reshape(tmp_v, self.outputs_shape[k])
-                dicts[k] = tmp_v
-
-        results = self.session.run(dicts)
-
-        outputs = []
-        for item in results.items():
-            tmp_v = np.array(item[1])
-            tmp_v = np.reshape(tmp_v, self.outputs_shape[item[0]])
-            tmp_v = tmp_v.astype("float32")
-            outputs.append(tmp_v)
-        return outputs
-
-
-class DummyBackend(onnx.backend.base.Backend):
-    @classmethod
-    def prepare(
-        cls,
-        model,  # type: ModelProto
-        inputs,
-        device="CPU",  # type: Text
-        **kwargs,  # type: Any
-    ):  # type: (...) -> Optional[onnx.backend.base.BackendRep]
-        super(DummyBackend, cls).prepare(model, device, **kwargs)
-
-        # test shape inference
-        model = onnx.shape_inference.infer_shapes(model)
-        inputs = [input.name for input in model.graph.input]
-        outputs = [output.name for output in model.graph.output]
-
-        outputs_shape = {}
-        for output in model.graph.output:
-            outputs_shape[output.name] = [
-                shape.dim_value for shape in output.type.tensor_type.shape.dim
-            ]
-
-        if do_enforce_test_coverage_safelist(model):
-            for node in model.graph.node:
-                for i, output in enumerate(node.output):
-                    if node.op_type == "Dropout" and i != 0:
-                        continue
-                    assert output in value_infos
-                    tt = value_infos[output].type.tensor_type
-                    assert tt.elem_type != TensorProto.UNDEFINED
-                    for dim in tt.shape.dim:
-                        assert dim.WhichOneof("value") == "dim_value"
-
-        return DummyRep(
-            inputs=inputs,
-            outputs=outputs,
-            model=model,
-            outputs_shape=outputs_shape,
-        )
-
-    @classmethod
-    def supports_device(cls, device):  # type: (Text) -> bool
-        d = Device(device)
-        if d.type == DeviceType.CPU:
-            return True
-        return False
-
-
-test_coverage_safelist = set(
-    [
-        "bvlc_alexnet",
-        "densenet121",
-        "inception_v1",
-        "inception_v2",
-        "resnet50",
-        "shufflenet",
-        "SingleRelu",
-        "squeezenet_old",
-        "vgg19",
-        "zfnet",
-    ]
-)
-
-
-def do_enforce_test_coverage_safelist(model):  # type: (ModelProto) -> bool
-    if model.graph.name not in test_coverage_safelist:
-        return False
-    for node in model.graph.node:
-        if node.op_type in set(["RNN", "LSTM", "GRU"]):
-            return False
-    return True
-
 
 backend_test = onnx.backend.test.BackendTest(DummyBackend, __name__)
 
