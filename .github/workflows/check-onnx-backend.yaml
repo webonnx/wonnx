@@ -7,11 +7,11 @@ on:
 
 jobs:
   build_manylinux:
-    name: Create Release manylinux
+    name: Build and Test ONNX Backend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Publish wheel
+      - name: Run Tests
         uses: docker://konstin2/maturin:latest
         with:
           entrypoint: /bin/bash
