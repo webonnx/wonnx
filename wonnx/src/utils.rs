@@ -65,6 +65,7 @@ impl Shape {
 pub enum InputTensor<'a> {
     F32(Cow<'a, [f32]>),
     I32(Cow<'a, [i32]>),
+    I64(Cow<'a, [i64]>),
 }
 
 impl<'a> From<&'a [f32]> for InputTensor<'a> {
@@ -76,6 +77,12 @@ impl<'a> From<&'a [f32]> for InputTensor<'a> {
 impl<'a> From<&'a [i32]> for InputTensor<'a> {
     fn from(a: &'a [i32]) -> Self {
         InputTensor::I32(Cow::Borrowed(a))
+    }
+}
+
+impl<'a> From<&'a [i64]> for InputTensor<'a> {
+    fn from(a: &'a [i64]) -> Self {
+        InputTensor::I64(Cow::Borrowed(a))
     }
 }
 

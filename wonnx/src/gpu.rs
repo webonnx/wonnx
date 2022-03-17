@@ -316,6 +316,7 @@ impl GpuModel {
                         match &inference_inputs[input_name] {
                             InputTensor::F32(v) => v.to_vec(),
                             InputTensor::I32(v) => v.iter().map(|f| (*f) as f32).collect(),
+                            InputTensor::I64(v) => v.iter().map(|f| (*f) as f32).collect(),
                         }
                     }
                     InferenceOutput::Tensor(tensor) => {
@@ -336,44 +337,80 @@ trait TensorProtoExtra {
 impl TensorProtoExtra for TensorProto {
     /// Create a GPU buffer containing the data of this initializer
     fn buffer(&self, device: &wgpu::Device, readable: bool) -> Result<Buffer, GpuError> {
-        let input_shape = Shape::from(ScalarType::from_i32(self.get_data_type())?, self.get_dims());
+        let scalar_type = ScalarType::from_i32(self.get_data_type())?;
+        let input_shape = Shape::from(scalar_type, self.get_dims());
         log::info!(
-            "creating tensor buffer {} shape {}",
+            "creating buffer for tensor {} shape {}",
             self.get_name(),
             input_shape
         );
 
-        /// TODO read i64 tensors as i32 (and error on overflow)
-        let data = self.get_float_data();
-        let raw_data = if !data.is_empty() {
-            bytemuck::cast_slice(data)
-        } else {
-            self.get_raw_data()
-        };
-
-        let buffer_usage = match readable {
-            true => {
-                // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
-                // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
-                // STORAGE buffer when on WebGPU.
-                if cfg!(target_arch = "wasm32") {
-                    BufferUsages::STORAGE | BufferUsages::COPY_SRC
-                } else {
-                    BufferUsages::STORAGE | BufferUsages::MAP_READ
-                }
+        match scalar_type {
+            ScalarType::F32 => {
+                let data = self.get_float_data();
+                buffer_with_bytes(
+                    device,
+                    readable,
+                    self.get_name(),
+                    if !data.is_empty() {
+                        bytemuck::cast_slice(data)
+                    } else {
+                        self.get_raw_data()
+                    },
+                )
             }
-            false => BufferUsages::STORAGE,
-        };
-
-        // Do not create buffers that are too small
-        Ok(if raw_data.len() < MINIMUM_BUFFER_SIZE_BYTES as _ {
-            let mut larger_raw_data = raw_data.to_vec();
-            larger_raw_data.resize(MINIMUM_BUFFER_SIZE_BYTES as _, 0);
-            resource::create_buffer_init(device, &larger_raw_data, self.get_name(), buffer_usage)
-        } else {
-            resource::create_buffer_init(device, raw_data, self.get_name(), buffer_usage)
-        })
+            ScalarType::I64 => {
+                // WGSL doesn't support 64 bit integers, so we load 64 bit tensors as 32 bit ints
+                log::warn!("initializers with int64 data type are not supported, converting into int32 initializer");
+                let ints: Vec<i32> = self.get_int64_data().iter().map(|x| *x as i32).collect();
+                let raw_data = bytemuck::cast_slice(&ints);
+                buffer_with_bytes(device, readable, self.get_name(), raw_data)
+            }
+            ScalarType::I32 => {
+                let data = self.get_int32_data();
+                buffer_with_bytes(
+                    device,
+                    readable,
+                    self.get_name(),
+                    if !data.is_empty() {
+                        bytemuck::cast_slice(data)
+                    } else {
+                        self.get_raw_data()
+                    },
+                )
+            }
+        }
     }
+}
+
+fn buffer_with_bytes(
+    device: &wgpu::Device,
+    readable: bool,
+    name: &str,
+    raw_data: &[u8],
+) -> Result<Buffer, GpuError> {
+    let buffer_usage = match readable {
+        true => {
+            // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
+            // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
+            // STORAGE buffer when on WebGPU.
+            if cfg!(target_arch = "wasm32") {
+                BufferUsages::STORAGE | BufferUsages::COPY_SRC
+            } else {
+                BufferUsages::STORAGE | BufferUsages::MAP_READ
+            }
+        }
+        false => BufferUsages::STORAGE,
+    };
+
+    // Do not create buffers that are too small
+    Ok(if raw_data.len() < MINIMUM_BUFFER_SIZE_BYTES as _ {
+        let mut larger_raw_data = raw_data.to_vec();
+        larger_raw_data.resize(MINIMUM_BUFFER_SIZE_BYTES as _, 0);
+        resource::create_buffer_init(device, &larger_raw_data, name, buffer_usage)
+    } else {
+        resource::create_buffer_init(device, raw_data, name, buffer_usage)
+    })
 }
 
 impl<'model> OperatorDefinition<'model> {
@@ -552,6 +589,15 @@ impl GpuStep {
                             bytemuck::cast_slice(&resize(int_input.to_vec())),
                         );
                     }
+                    InputTensor::I64(int_input) => {
+                        log::warn!("reading int64 input as int32 (int64 is not supported for calculation but can be used as input as long as values fit in int32)");
+                        let int32_input = int_input.iter().map(|x| *x as i32).collect();
+                        queue.write_buffer(
+                            input_buffer,
+                            0,
+                            bytemuck::cast_slice(&resize(int32_input)),
+                        );
+                    }
                 }
 
                 Ok(())
@@ -614,7 +660,8 @@ impl GpuTensor {
                 result_ints.iter().map(|i| *i as f32).collect()
             }
             ScalarType::I64 => {
-                let result_ints: Vec<i64> =
+                log::warn!("reading int64 output as int32 because internally int64 scalars are not supported");
+                let result_ints: Vec<i32> =
                     bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec();
                 result_ints.iter().map(|i| *i as f32).collect()
             }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{graph, model, node, tensor, tensor_of_type, InputTensor},
+    utils::{graph, initializer_int64, model, node, tensor, tensor_of_type, InputTensor},
 };
 
 mod common;
@@ -81,4 +81,31 @@ fn test_integer() {
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     assert_eq!(result["Y"], vec![42.0; n]);
+}
+
+#[test]
+fn test_int64_initializers() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let n: usize = 16;
+    let left: Vec<i64> = (0..n).map(|x| x as i64).collect();
+    let right: Vec<i64> = (0..n).map(|x| (x * 2) as i64).collect();
+    let sum: Vec<f32> = (0..n).map(|x| (x * 3) as f32).collect();
+    let dims = vec![n as i64];
+
+    let model = model(graph(
+        vec![tensor_of_type("X", &dims, TensorProto_DataType::INT64)],
+        vec![tensor_of_type("Z", &dims, TensorProto_DataType::INT64)],
+        vec![tensor_of_type("Y", &dims, TensorProto_DataType::INT64)],
+        vec![initializer_int64("Y", right)],
+        vec![node(vec!["X", "Y"], vec!["Z"], "adder", "Add", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    let mut input_data: HashMap<String, InputTensor> = HashMap::new();
+    input_data.insert("X".to_string(), left.as_slice().into());
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    common::assert_eq_vector(result["Z"].as_slice(), &sum);
 }
