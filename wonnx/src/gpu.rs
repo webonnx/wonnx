@@ -95,7 +95,13 @@ impl GpuModel {
         // Walk the IR DAG and encode into GPU execution steps
         let mut readable_nodes: HashSet<NodeIdentifier> = HashSet::new();
         let mut node_outputs = HashMap::<NodeIdentifier, Vec<GpuTensor>>::new();
-        gpu_model.sequence(root.clone(), &mut readable_nodes, &mut node_outputs)?;
+        let mut node_reg = HashSet::new();
+        gpu_model.sequence(
+            root.clone(),
+            &mut readable_nodes,
+            &mut node_outputs,
+            &mut node_reg,
+        )?;
 
         // Find out which outputs we should return as inference outputs
         if let NodeDefinition::Outputs { names } = &root.definition {
@@ -143,6 +149,7 @@ impl GpuModel {
         node: Arc<Node<'model>>,
         nodes_readable: &mut HashSet<NodeIdentifier<'model>>,
         node_outputs: &mut HashMap<NodeIdentifier<'model>, Vec<GpuTensor>>,
+        node_reg: &mut HashSet<NodeIdentifier<'model>>,
     ) -> Result<(), GpuError> {
         let node_identifier = node.identifier();
         let outputs_readable = nodes_readable.contains(&node_identifier);
@@ -150,20 +157,29 @@ impl GpuModel {
         // Sequence inputs
         let mut input_tensors: Vec<GpuTensor> = vec![];
         for node_input in &node.inputs {
+            let identifier = node_input.source_node.identifier();
             // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
             if let NodeDefinition::Outputs { .. } = &node.definition {
-                nodes_readable.insert(node_input.source_node.identifier());
+                nodes_readable.insert(identifier.clone());
             }
 
             if let NodeDefinition::Operator(op_def) = &node.definition {
                 // For these ops we just forward the buffer (so we should also forward readability)
                 if op_def.proto.get_op_type() == "Reshape" {
-                    nodes_readable.insert(node_input.source_node.identifier());
+                    nodes_readable.insert(identifier.clone());
                 }
             }
 
-            // Sequence the source node
-            self.sequence(node_input.source_node.clone(), nodes_readable, node_outputs)?;
+            if !node_reg.contains(&identifier) {
+                node_reg.insert(identifier.clone());
+                // Sequence the source node
+                self.sequence(
+                    node_input.source_node.clone(),
+                    nodes_readable,
+                    node_outputs,
+                    node_reg,
+                )?;
+            }
 
             // Select the tensor we want for our input
             let source_identifier = node_input.source_node.identifier();
