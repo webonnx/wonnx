@@ -308,7 +308,7 @@ pub fn tensor_of_type(
 pub fn initializer(name: &str, data: Vec<f32>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
     initializer.set_name(name.to_string());
-    initializer.set_data_type(1); // FLOAT
+    initializer.set_data_type(TensorProto_DataType::FLOAT.value());
     initializer.set_float_data(data);
     initializer
 }
