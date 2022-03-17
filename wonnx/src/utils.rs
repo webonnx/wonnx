@@ -304,12 +304,19 @@ pub fn tensor_of_type(
     tensor
 }
 
-// Remove dimensions
 pub fn initializer(name: &str, data: Vec<f32>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
     initializer.set_name(name.to_string());
     initializer.set_data_type(TensorProto_DataType::FLOAT.value());
     initializer.set_float_data(data);
+    initializer
+}
+
+pub fn initializer_int64(name: &str, data: Vec<i64>) -> onnx::TensorProto {
+    let mut initializer = crate::onnx::TensorProto::new();
+    initializer.set_name(name.to_string());
+    initializer.set_data_type(TensorProto_DataType::INT64.value());
+    initializer.set_int64_data(data);
     initializer
 }
 
