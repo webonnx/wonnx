@@ -558,8 +558,13 @@ pub fn compile(
                 ),
             }
         }
-        "Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu" | "LeakyRelu" => {
-            let alpha = get_attribute("alpha", Some(1.0), node)?;
+        op @ ("Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu"
+        | "LeakyRelu") => {
+            let alpha = if op == "LeakyRelu" {
+                get_attribute("alpha", Some(0.01), node)?
+            } else {
+                get_attribute("alpha", Some(1.0), node)?
+            };
             context.insert("alpha", &alpha);
 
             let (x_threads, workgroup_size_x) = workgroup_size(

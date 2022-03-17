@@ -1,2 +1,4 @@
 pytest
+onnx
 torchvision
+tabulate
