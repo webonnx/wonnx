@@ -95,12 +95,12 @@ impl GpuModel {
         // Walk the IR DAG and encode into GPU execution steps
         let mut readable_nodes: HashSet<NodeIdentifier> = HashSet::new();
         let mut node_outputs = HashMap::<NodeIdentifier, Vec<GpuTensor>>::new();
-        let mut node_reg = HashSet::new();
+        let mut nodes_seen = HashSet::new();
         gpu_model.sequence(
             root.clone(),
             &mut readable_nodes,
             &mut node_outputs,
-            &mut node_reg,
+            &mut nodes_seen,
         )?;
 
         // Find out which outputs we should return as inference outputs
@@ -149,7 +149,7 @@ impl GpuModel {
         node: Arc<Node<'model>>,
         nodes_readable: &mut HashSet<NodeIdentifier<'model>>,
         node_outputs: &mut HashMap<NodeIdentifier<'model>, Vec<GpuTensor>>,
-        node_reg: &mut HashSet<NodeIdentifier<'model>>,
+        nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
     ) -> Result<(), GpuError> {
         let node_identifier = node.identifier();
         let outputs_readable = nodes_readable.contains(&node_identifier);
@@ -170,14 +170,14 @@ impl GpuModel {
                 }
             }
 
-            if !node_reg.contains(&identifier) {
-                node_reg.insert(identifier.clone());
+            if !nodes_seen.contains(&identifier) {
+                nodes_seen.insert(identifier.clone());
                 // Sequence the source node
                 self.sequence(
                     node_input.source_node.clone(),
                     nodes_readable,
                     node_outputs,
-                    node_reg,
+                    nodes_seen,
                 )?;
             }
 
