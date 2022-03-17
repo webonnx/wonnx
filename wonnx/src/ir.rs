@@ -317,6 +317,7 @@ impl<'model> Debug for NodeDefinition<'model> {
 }
 
 /// Wrap an Arc<Node> in a struct so we can implement pointer-based comparison for it, and use them as keys in a HashSet/HashMap
+#[derive(Clone)]
 pub struct NodeIdentifier<'model>(Arc<Node<'model>>);
 
 impl<'model> Hash for NodeIdentifier<'model> {
