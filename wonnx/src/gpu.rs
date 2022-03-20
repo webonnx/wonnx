@@ -1,9 +1,11 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    convert::TryInto,
     sync::Arc,
 };
 
+use num::FromPrimitive;
 use thiserror::Error;
 use wgpu::{Buffer, BufferUsages, CommandEncoder};
 
@@ -69,6 +71,9 @@ pub enum GpuError {
 
     #[error("scalar type error: {0}")]
     ScalarType(#[from] DataTypeError),
+
+    #[error("value out of bounds")]
+    OutOfBoundsError,
 }
 
 enum InferenceOutput {
@@ -315,8 +320,14 @@ impl GpuModel {
                     InferenceOutput::InferenceInput(input_name) => {
                         match &inference_inputs[input_name] {
                             InputTensor::F32(v) => v.to_vec(),
-                            InputTensor::I32(v) => v.iter().map(|f| (*f) as f32).collect(),
-                            InputTensor::I64(v) => v.iter().map(|f| (*f) as f32).collect(),
+                            InputTensor::I32(v) => v
+                                .iter()
+                                .map(|i| f32::from_i32(*i).ok_or(GpuError::OutOfBoundsError))
+                                .collect::<Result<Vec<f32>, _>>()?,
+                            InputTensor::I64(v) => v
+                                .iter()
+                                .map(|i| f32::from_i64(*i).ok_or(GpuError::OutOfBoundsError))
+                                .collect::<Result<Vec<f32>, _>>()?,
                         }
                     }
                     InferenceOutput::Tensor(tensor) => {
@@ -362,7 +373,12 @@ impl TensorProtoExtra for TensorProto {
             ScalarType::I64 => {
                 // WGSL doesn't support 64 bit integers, so we load 64 bit tensors as 32 bit ints
                 log::warn!("initializers with int64 data type are not supported, converting into int32 initializer");
-                let ints: Vec<i32> = self.get_int64_data().iter().map(|x| *x as i32).collect();
+                let ints: Vec<i32> = self
+                    .get_int64_data()
+                    .iter()
+                    .map(|x| (*x).try_into())
+                    .collect::<Result<Vec<i32>, _>>()
+                    .map_err(|_e| GpuError::OutOfBoundsError)?;
                 let raw_data = bytemuck::cast_slice(&ints);
                 buffer_with_bytes(device, readable, self.get_name(), raw_data)
             }
