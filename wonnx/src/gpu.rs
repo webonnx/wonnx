@@ -5,7 +5,6 @@ use std::{
     sync::Arc,
 };
 
-use num::FromPrimitive;
 use thiserror::Error;
 use wgpu::{Buffer, BufferUsages, CommandEncoder};
 
@@ -14,7 +13,10 @@ use crate::{
     ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
     onnx::TensorProto,
     resource::{self, resize},
-    utils::{ceil, DataTypeError, InputTensor, ScalarType, Shape, MINIMUM_BUFFER_SIZE_BYTES},
+    utils::{
+        ceil, DataTypeError, InputTensor, OutputTensor, ScalarType, Shape,
+        MINIMUM_BUFFER_SIZE_BYTES,
+    },
 };
 
 /// The maximum number of bindings in a binding group (defined by wgpu)
@@ -292,7 +294,7 @@ impl GpuModel {
     pub async fn infer<'a>(
         &self,
         inference_inputs: &HashMap<String, InputTensor<'a>>,
-    ) -> Result<HashMap<String, Vec<f32>>, GpuError> {
+    ) -> Result<HashMap<String, OutputTensor>, GpuError> {
         log::info!("encode inference steps");
         let mut encoder = self
             .device
@@ -310,25 +312,15 @@ impl GpuModel {
     async fn read_outputs<'a>(
         &self,
         inference_inputs: &HashMap<String, InputTensor<'a>>,
-    ) -> Result<HashMap<String, Vec<f32>>, GpuError> {
-        let mut output_data = HashMap::new();
+    ) -> Result<HashMap<String, OutputTensor>, GpuError> {
+        let mut output_data: HashMap<String, OutputTensor> = HashMap::new();
 
         for (output_name, output_source) in &self.inference_outputs {
             output_data.insert(
                 output_name.to_string(),
                 match output_source {
                     InferenceOutput::InferenceInput(input_name) => {
-                        match &inference_inputs[input_name] {
-                            InputTensor::F32(v) => v.to_vec(),
-                            InputTensor::I32(v) => v
-                                .iter()
-                                .map(|i| f32::from_i32(*i).ok_or(GpuError::OutOfBoundsError))
-                                .collect::<Result<Vec<f32>, _>>()?,
-                            InputTensor::I64(v) => v
-                                .iter()
-                                .map(|i| f32::from_i64(*i).ok_or(GpuError::OutOfBoundsError))
-                                .collect::<Result<Vec<f32>, _>>()?,
-                        }
+                        (&inference_inputs[input_name]).into()
                     }
                     InferenceOutput::Tensor(tensor) => {
                         tensor.read_to_vec(&self.device, &self.queue).await?
@@ -648,7 +640,7 @@ impl GpuTensor {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> Result<Vec<f32>, GpuError> {
+    ) -> Result<OutputTensor, GpuError> {
         let buffer_slice = self.buffer.slice(..);
 
         // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
@@ -672,17 +664,17 @@ impl GpuTensor {
         // Fetch the size we should expect so we can chop the buffer to the correct size
         let output_buffer_size = self.shape.element_count() as usize;
         let result = match self.shape.data_type {
-            ScalarType::F32 => bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec(),
+            ScalarType::F32 => {
+                OutputTensor::F32(bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec())
+            }
             ScalarType::I32 => {
-                let result_ints: Vec<i32> =
-                    bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec();
-                result_ints.iter().map(|i| *i as f32).collect()
+                OutputTensor::I32(bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec())
             }
             ScalarType::I64 => {
                 log::warn!("reading int64 output as int32 because internally int64 scalars are not supported");
                 let result_ints: Vec<i32> =
                     bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec();
-                result_ints.iter().map(|i| *i as f32).collect()
+                OutputTensor::I64(result_ints.iter().map(|i| *i as i64).collect())
             }
         };
         drop(output_data);

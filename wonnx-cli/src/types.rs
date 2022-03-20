@@ -1,7 +1,11 @@
 use std::{collections::HashMap, num::ParseFloatError, path::PathBuf, str::FromStr};
 use structopt::StructOpt;
 use thiserror::Error;
-use wonnx::{onnx::ModelProto, SessionError, WonnxError};
+use wonnx::{
+    onnx::ModelProto,
+    utils::{OutputTensor, TensorConversionError},
+    SessionError, WonnxError,
+};
 use wonnx_preprocessing::{text::PreprocessingError, Tensor};
 
 #[cfg(feature = "cpu")]
@@ -54,6 +58,9 @@ pub enum NNXError {
 
     #[error("invalid number: {0}")]
     InvalidNumber(ParseFloatError),
+
+    #[error("tensor error: {0}")]
+    TensorConversionError(#[from] TensorConversionError),
 }
 
 impl FromStr for Backend {
@@ -181,5 +188,5 @@ pub trait Inferer {
         infer_opt: &InferOptions,
         inputs: &HashMap<String, Tensor>,
         model: &ModelProto,
-    ) -> Result<Vec<f32>, NNXError>;
+    ) -> Result<OutputTensor, NNXError>;
 }

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use wonnx::onnx::ModelProto;
 
 use async_trait::async_trait;
+use wonnx::utils::OutputTensor;
 
 use crate::types::InferOptions;
 use crate::types::Inferer;
@@ -27,7 +28,7 @@ impl Inferer for GPUInferer {
         infer_opt: &InferOptions,
         inputs: &HashMap<String, crate::Tensor>,
         _model: &ModelProto,
-    ) -> Result<Vec<f32>, NNXError> {
+    ) -> Result<OutputTensor, NNXError> {
         let input_refs = inputs
             .iter()
             .map(|(k, v)| (k.clone(), v.input_tensor()))

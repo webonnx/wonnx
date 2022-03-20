@@ -50,7 +50,7 @@ fn test_onehot(
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     log::info!("OUT: {:?}", result["Y"]);
-    common::assert_eq_vector(result["Y"].as_slice(), output);
+    common::assert_eq_vector(result["Y"].unwrap_f32_slice(), output);
 }
 
 #[test]

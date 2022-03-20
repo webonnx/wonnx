@@ -1,20 +1,23 @@
 use std::collections::HashMap;
 
 use wonnx::{
-    utils::{attribute, graph, initializer, model, node, tensor},
+    utils::{attribute, graph, initializer, model, node, tensor, OutputTensor},
     SessionError, WonnxError,
 };
 
 async fn run() -> Result<(), WonnxError> {
-    let result = &execute_gpu().await?;
-    let (_, result) = result.iter().next().unwrap();
+    let result = execute_gpu().await?;
+    let result = result.into_iter().next().unwrap().1;
 
-    assert_eq!(result, &[54., 63., 72., 99., 108., 117., 144., 153., 162.]);
+    assert_eq!(
+        result,
+        OutputTensor::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.])
+    );
     Ok(())
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, SessionError> {
+async fn execute_gpu() -> Result<HashMap<String, OutputTensor>, SessionError> {
     // USER INPUT
     let n = 5;
     let c = 1;

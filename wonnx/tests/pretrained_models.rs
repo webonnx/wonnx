@@ -2,6 +2,7 @@ use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use ndarray::s;
 use std::collections::HashMap;
 use std::path::Path;
+mod common;
 
 #[test]
 fn test_relu() {
@@ -13,7 +14,7 @@ fn test_relu() {
         .expect("session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    assert_eq!(result["y"], &[0.0, 1.0]);
+    common::assert_eq_vector(result["y"].unwrap_f32_slice(), &[0.0, 1.0]);
 }
 
 #[test]
@@ -26,6 +27,7 @@ fn test_mnist() {
         .expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
+        .unwrap_f32_slice()
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -42,6 +44,7 @@ fn test_mnist() {
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap().into());
     let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
+        .unwrap_f32_slice()
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -58,6 +61,7 @@ fn test_mnist() {
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap().into());
     let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
+        .unwrap_f32_slice()
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -74,6 +78,7 @@ fn test_mnist() {
     let mut input_data = HashMap::new();
     input_data.insert("Input3".to_string(), image.as_slice().unwrap().into());
     let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
+        .unwrap_f32_slice()
         .iter()
         .enumerate()
         .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
@@ -100,9 +105,14 @@ fn test_squeeze() {
         .expect("session did not create");
     let result =
         &pollster::block_on(session.run(&input_data)).unwrap()["squeezenet0_flatten0_reshape0"];
-    let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
+    let mut probabilities: Vec<(usize, f32)> = result
+        .unwrap_f32_slice()
+        .iter()
+        .cloned()
+        .enumerate()
+        .collect();
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
     assert_eq!(probabilities[0].0, 22);
 }

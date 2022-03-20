@@ -1,10 +1,12 @@
 use protobuf::ProtobufEnum;
 use protobuf::RepeatedField;
+use serde::Serialize;
 
 use crate::onnx;
 use crate::onnx::OperatorSetIdProto;
 use crate::onnx::TensorProto_DataType;
 use crate::onnx::ValueInfoProto;
+use num::FromPrimitive;
 use std::borrow::Cow;
 use std::convert::From;
 use std::convert::Into;
@@ -83,6 +85,53 @@ impl<'a> From<&'a [i32]> for InputTensor<'a> {
 impl<'a> From<&'a [i64]> for InputTensor<'a> {
     fn from(a: &'a [i64]) -> Self {
         InputTensor::I64(Cow::Borrowed(a))
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum TensorConversionError {
+    #[error("could not convert to the requested type becaue a value could not be represented in the target type")]
+    OutOfBoundsError,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum OutputTensor {
+    F32(Vec<f32>),
+    I32(Vec<i32>),
+    I64(Vec<i64>),
+}
+
+impl OutputTensor {
+    pub fn as_f32(self) -> Result<Vec<f32>, TensorConversionError> {
+        match self {
+            OutputTensor::F32(fs) => Ok(fs),
+            OutputTensor::I32(ints) => ints
+                .iter()
+                .map(|i| f32::from_i32(*i).ok_or(TensorConversionError::OutOfBoundsError))
+                .collect::<Result<_, _>>(),
+            OutputTensor::I64(ints) => ints
+                .into_iter()
+                .map(|i| f32::from_i64(i).ok_or(TensorConversionError::OutOfBoundsError))
+                .collect::<Result<_, _>>(),
+        }
+    }
+
+    pub fn unwrap_f32_slice(&self) -> &[f32] {
+        match self {
+            OutputTensor::F32(fs) => fs.as_slice(),
+            OutputTensor::I32(_) | OutputTensor::I64(_) => panic!("cannot convert into f32 slice"),
+        }
+    }
+}
+
+impl<'a> From<&InputTensor<'a>> for OutputTensor {
+    fn from(input: &InputTensor<'a>) -> Self {
+        match input {
+            InputTensor::F32(fs) => OutputTensor::F32(fs.to_vec()),
+            InputTensor::I32(fs) => OutputTensor::I32(fs.to_vec()),
+            InputTensor::I64(fs) => OutputTensor::I64(fs.to_vec()),
+        }
     }
 }
 
@@ -466,7 +515,7 @@ impl From<onnx::AttributeProto> for String {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{attribute, graph, initializer, model, node, tensor};
+    use crate::utils::{attribute, graph, initializer, model, node, tensor, OutputTensor};
 
     #[test]
     fn test_model() {
@@ -507,7 +556,7 @@ mod tests {
 
         assert_eq!(
             result["Y"],
-            [54., 63., 72., 99., 108., 117., 144., 153., 162.]
+            OutputTensor::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.])
         );
     }
 }

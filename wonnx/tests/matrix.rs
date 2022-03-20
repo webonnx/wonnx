@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
+mod common;
 
 #[test]
 fn test_matmul_square_matrix() {
@@ -34,10 +35,9 @@ fn test_matmul_square_matrix() {
 
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
-
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    assert_eq!(result["C"].as_slice(), sum.as_slice().unwrap());
+    common::assert_eq_vector(result["C"].unwrap_f32_slice(), sum.as_slice().unwrap());
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn test_two_transposes() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    assert_eq!(result["Z"], data);
+    common::assert_eq_vector(result["Z"].unwrap_f32_slice(), &data);
 }
 
 #[test]
@@ -102,9 +102,9 @@ fn test_split() {
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     let test_y = vec![1., 2., 3., 7., 8., 9.];
-    assert_eq!(result["Y"], test_y);
+    common::assert_eq_vector(result["Y"].unwrap_f32_slice(), &test_y);
     let test_w = vec![4., 5., 6., 10., 11., 12.];
-    assert_eq!(result["W"], test_w);
+    common::assert_eq_vector(result["W"].unwrap_f32_slice(), &test_w);
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn test_resize() {
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     let test_y = vec![1., 3.];
-    assert_eq!(result["Y"], test_y);
+    common::assert_eq_vector(result["Y"].unwrap_f32_slice(), &test_y);
 
     let mut input_data = HashMap::new();
     let data = (1..=4).map(|x| x as f32).collect::<Vec<f32>>();

@@ -27,7 +27,7 @@ tera = { version = "1.15.0", default-features = false }
 lazy_static = "1.4.0"
 thiserror = "^1.0.0"
 serde_derive = "1.0.133"
-serde = "1.0.133"
+serde = {version = "1.0.133", features = ["derive"] }
 num = "0.4.0"
 
 [dev-dependencies]

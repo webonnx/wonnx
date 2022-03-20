@@ -8,12 +8,14 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
+use wonnx::utils::OutputTensor;
 use wonnx::WonnxError;
 
 // Args Management
 async fn run() {
-    let probabilities = &execute_gpu().await.unwrap();
-    let (_, probabilities) = probabilities.iter().next().unwrap();
+    let probabilities = execute_gpu().await.unwrap();
+    let probabilities = probabilities.into_iter().next().unwrap().1;
+    let probabilities = probabilities.as_f32().unwrap();
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
@@ -28,7 +30,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, WonnxError> {
+async fn execute_gpu() -> Result<HashMap<String, OutputTensor>, WonnxError> {
     let mut input_data = HashMap::new();
     let image = load_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap().into());
