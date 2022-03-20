@@ -10,6 +10,7 @@ var<storage, write> output_0: Array;
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
+	{% if i_shape[0][1] >= 4 and (o_lens[0] % 4) == 0 %}
 	if (gidx < {{ o_lens[0] / 4 }}u) {
 		let batch = gidx / {{ o_chunks[0][0] / 4 }}u; 
 		var rest = gidx % {{ o_chunks[0][0] / 4 }}u; 
@@ -21,17 +22,21 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		let x = rest % {{ o_chunks[0][2] }}u;
 		
 		var result = Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0));
-		
+		var value = result;
+
 		let base_index = batch * {{ i_chunks[0][0] }}u + m * {{ i_chunks[0][1] * 4 }}u + y * {{ stride[0] }}u * {{ original_width }}u+ x * {{ stride[1] }}u;
+		var tmp_y = 0u;
+		var tmp_x = 0u;
+		var tmp_index = 0u;
 
 		for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
-			let tmp_y = i * {{ dilation[0] }}u; 
+			tmp_y = i * {{ dilation[0] }}u - {{ pad[0] }}u; 
 		
 			for(var j: u32 = 0u; j < {{ kernel_shape[1] }}u; j = j + 1u) { 
-				let tmp_x = j * {{ dilation[1] }}u;
+				tmp_x = j * {{ dilation[1] }}u - {{ pad[1] }}u;
 
-				let tmp_index  = base_index + tmp_y * {{ original_width }}u + tmp_x;
-				let vector = Vec4(
+				tmp_index  = base_index + tmp_y * {{ original_width }}u + tmp_x;
+				value = Vec4(
 					input_0.data[tmp_index],
 					input_0.data[tmp_index + {{ i_chunks[0][1] }}u],
 					input_0.data[tmp_index + {{ 2 * i_chunks[0][1] }}u],
@@ -39,9 +44,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 				);
 				
 				{%- if op_type == "MaxPool" -%}
-					result = max(result, vector);
+					result = max(result, value);
 				{%- elif op_type == "AveragePool" -%}
-					result = result + vector;
+					result = result + value;
 				{%- endif -%}
 			}
 		}
@@ -57,4 +62,48 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 			output_0.data[index] = result[index_vec];
 		}
 	}
+	{% else %}
+
+	if (gidx < {{ o_lens[0] }}u) {
+		let batch = gidx / {{ o_chunks[0][0] }}u; 
+		var rest = gidx % {{ o_chunks[0][0] }}u; 
+
+		let m = rest / {{ o_chunks[0][1] }}u;
+		rest = rest % {{ o_chunks[0][1] }}u;
+	
+		let y = rest / {{ o_chunks[0][2] }}u;
+		let x = rest % {{ o_chunks[0][2] }}u;
+		
+		var result = Scalar(0);
+		var value = Scalar(0);
+		
+		let base_index = batch * {{ i_chunks[0][0] }}u + m * {{ i_chunks[0][1] }}u + y * {{ stride[0] }}u * {{ original_width }}u + x * {{ stride[1] }}u;
+		var tmp_y = 0u;
+		var tmp_x = 0u;
+		var tmp_index = 0u;
+
+		for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
+		tmp_y = i * {{ dilation[0] }}u - {{ pad[0] }}u; 
+		
+			for(var j: u32 = 0u; j < {{ kernel_shape[1] }}u; j = j + 1u) {
+				tmp_x = j * {{ dilation[1] }}u - {{ pad[1] }}u;
+
+				tmp_index  = base_index + tmp_y * {{ original_width }}u + tmp_x;
+				value = input_0.data[tmp_index];
+				
+				{%- if op_type == "MaxPool" -%}
+					result = max(result, value);
+				{%- elif op_type == "AveragePool" -%}
+					result = result + value;
+				{%- endif -%}
+			}
+		}
+
+		{% if op_type == "AveragePool" -%}
+			result = result / {{ kernel_len }}.;
+		{%- endif %}
+
+		output_0.data[gidx] = result;
+	}
+	{% endif %}
 }
