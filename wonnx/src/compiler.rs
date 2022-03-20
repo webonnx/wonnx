@@ -5,10 +5,10 @@ use tera::{Context, Tera};
 use thiserror::Error;
 
 /// The maximum number of threads that can be spawned in each dimension, according to the WebGPU specification. See
-// https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsperdimension
+/// <https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsperdimension>
 pub const MAX_COMPUTE_WORKGROUPS_PER_DIMENSION: u32 = 65535;
 
-/// The maximum workgroup size per dimension (see https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsizex)
+/// The maximum workgroup size per dimension (see <https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsizex>)
 pub const MAX_WORKGROUP_SIZE_X: u32 = 256;
 pub const MAX_WORKGROUP_SIZE_Y: u32 = 256;
 pub const MAX_WORKGROUP_SIZE_Z: u32 = 64;
