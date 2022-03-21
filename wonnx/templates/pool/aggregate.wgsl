@@ -21,13 +21,18 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		let y = rest / {{ o_chunks[0][2] }}u;
 		let x = rest % {{ o_chunks[0][2] }}u;
 		
+		{% if op_type == "AveragePool" -%}
+		var result = Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0));
+		{% else %}
 		var result = Vec4(Scalar(-3.40282347E+38), Scalar(-3.40282347E+38), Scalar(-3.40282347E+38), Scalar(-3.40282347E+38));
+		{% endif %}
 		var value = result;
 
 		let base_index = batch * {{ i_chunks[0][0] }}u + m * {{ i_chunks[0][1] * 4 }}u ;
 		var tmp_y = 0u;
 		var tmp_x = 0u;
 		var tmp_index = 0u;
+		var counter = Scalar(0);
 
 		for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
 			tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
@@ -49,6 +54,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 								result = max(result, value);
 							{%- elif op_type == "AveragePool" -%}
 								result = result + value;
+								counter = counter + Scalar(1);
 							{%- endif -%}
 						}
 				}
@@ -56,7 +62,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		}	
 
 		{% if op_type == "AveragePool" -%}
-			result = result / {{ kernel_len }}.;
+			result = result / counter;
 		{%- endif %}
 
 		let base_index_2 = batch * {{ o_chunks[0][0] }}u + m * {{ o_chunks[0][1] * 4 }}u + y * {{ width }}u + x;
@@ -79,13 +85,18 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		let y = rest / {{ o_chunks[0][2] }}u;
 		let x = rest % {{ o_chunks[0][2] }}u;
 		
+		{% if op_type == "AveragePool" -%}
+		var result = Scalar(0);
+		{% else %}
 		var result = Scalar(-3.40282347E+38);
+		{% endif %}
 		var value = result;
 		
 		let base_index = batch * {{ i_chunks[0][0] }}u + m * {{ i_chunks[0][1] }}u;
 		var tmp_y = 0u;
 		var tmp_x = 0u;
 		var tmp_index = 0u;
+		var counter = Scalar(0);
 
 		for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
 			tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
@@ -102,6 +113,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 								result = max(result, value);
 							{%- elif op_type == "AveragePool" -%}
 								result = result + value;
+								counter = counter + Scalar(1);
 							{%- endif -%}
 						}
 				}
@@ -109,7 +121,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		}
 
 		{% if op_type == "AveragePool" -%}
-			result = result / {{ kernel_len }}.;
+			result = result / counter;
 		{%- endif %}
 
 		output_0.data[gidx] = result;
