@@ -2,6 +2,7 @@ use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use log::info;
 use ndarray::s;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::time::Instant;
 use std::{
     fs,
@@ -15,7 +16,7 @@ use wonnx::WonnxError;
 async fn run() {
     let probabilities = execute_gpu().await.unwrap();
     let probabilities = probabilities.into_iter().next().unwrap().1;
-    let probabilities = probabilities.as_f32().unwrap();
+    let probabilities: Vec<f32> = probabilities.try_into().unwrap();
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 

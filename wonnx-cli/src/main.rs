@@ -159,10 +159,10 @@ async fn run() -> Result<(), NNXError> {
                         let _ = gpu_backend.infer(&infer_opt, &inputs, &model).await?;
                     }
                 }
-                let gpu_output = gpu_backend
+                let gpu_output: Vec<f32> = gpu_backend
                     .infer(&infer_opt, &inputs, &model)
                     .await?
-                    .as_f32()?;
+                    .try_into()?;
                 let gpu_time = gpu_start.elapsed();
                 log::info!("gpu time: {}ms", gpu_time.as_millis());
                 drop(gpu_backend);
@@ -176,10 +176,10 @@ async fn run() -> Result<(), NNXError> {
                         let _ = cpu_backend.infer(&infer_opt, &inputs, &model).await?;
                     }
                 }
-                let cpu_output = cpu_backend
+                let cpu_output: Vec<f32> = cpu_backend
                     .infer(&infer_opt, &inputs, &model)
                     .await?
-                    .as_f32()?;
+                    .try_into()?;
                 let cpu_time = cpu_start.elapsed();
                 log::info!(
                     "cpu time: {}ms ({:.2}x gpu time)",

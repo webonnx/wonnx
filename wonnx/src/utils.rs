@@ -10,6 +10,7 @@ use num::FromPrimitive;
 use std::borrow::Cow;
 use std::convert::From;
 use std::convert::Into;
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::str::from_utf8;
 use thiserror::Error;
@@ -92,6 +93,9 @@ impl<'a> From<&'a [i64]> for InputTensor<'a> {
 pub enum TensorConversionError {
     #[error("could not convert to the requested type becaue a value could not be represented in the target type")]
     OutOfBoundsError,
+
+    #[error("cold not return the requested type; conversions cannot be done for slices")]
+    DataTypeError,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -103,24 +107,28 @@ pub enum OutputTensor {
 }
 
 impl OutputTensor {
-    pub fn as_f32(self) -> Result<Vec<f32>, TensorConversionError> {
+    pub fn unwrap_f32_slice(&self) -> &[f32] {
         match self {
-            OutputTensor::F32(fs) => Ok(fs),
+            OutputTensor::F32(fs) => fs.as_slice(),
+            OutputTensor::I32(_) | OutputTensor::I64(_) => panic!("cannot convert into f32 slice"),
+        }
+    }
+}
+
+impl TryFrom<OutputTensor> for Vec<f32> {
+    type Error = TensorConversionError;
+
+    fn try_from(value: OutputTensor) -> Result<Self, Self::Error> {
+        match value {
+            OutputTensor::F32(floats) => Ok(floats),
             OutputTensor::I32(ints) => ints
-                .iter()
-                .map(|i| f32::from_i32(*i).ok_or(TensorConversionError::OutOfBoundsError))
+                .into_iter()
+                .map(|i| f32::from_i32(i).ok_or(TensorConversionError::OutOfBoundsError))
                 .collect::<Result<_, _>>(),
             OutputTensor::I64(ints) => ints
                 .into_iter()
                 .map(|i| f32::from_i64(i).ok_or(TensorConversionError::OutOfBoundsError))
                 .collect::<Result<_, _>>(),
-        }
-    }
-
-    pub fn unwrap_f32_slice(&self) -> &[f32] {
-        match self {
-            OutputTensor::F32(fs) => fs.as_slice(),
-            OutputTensor::I32(_) | OutputTensor::I64(_) => panic!("cannot convert into f32 slice"),
         }
     }
 }

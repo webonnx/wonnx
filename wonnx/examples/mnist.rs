@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::TryInto;
 
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use std::path::Path;
@@ -9,7 +10,7 @@ use wonnx::utils::OutputTensor;
 async fn run() {
     let probabilities = execute_gpu().await.unwrap();
     let (_, probabilities) = probabilities.into_iter().next().unwrap();
-    let probabilities = probabilities.as_f32().unwrap();
+    let probabilities: Vec<f32> = probabilities.try_into().unwrap();
     println!("steps: {:#?}", probabilities);
     println!("steps: {:#?}", probabilities.len());
 
