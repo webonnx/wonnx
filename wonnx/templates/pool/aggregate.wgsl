@@ -10,7 +10,7 @@ var<storage, write> output_0: Array;
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
-	{% if i_shape[0][1] >= 4 and (o_lens[0] % 4) == 0 %}
+	{% if (i_shape[0][1] % 4) == 0 %}
 	if (gidx < {{ o_lens[0] / 4 }}u) {
 		let batch = gidx / {{ o_chunks[0][0] / 4 }}u; 
 		var rest = gidx % {{ o_chunks[0][0] / 4 }}u; 
@@ -65,10 +65,11 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 			let index = base_index_2 + index_vec * {{ o_chunks[0][1] }}u;
 			output_0.data[index] = result[index_vec];
 		}
-	}
+	} else {
+	if ((gidx >= 4 * {{ o_lens[0] }}u) && ( gidx < {{ o_lens[0] }}u)) {
 	{% else %}
-
-	if (gidx < {{ o_lens[0] }}u) {
+	if ( gidx < {{ o_lens[0] }}u ) {
+	{% endif %}
 		let batch = gidx / {{ o_chunks[0][0] }}u; 
 		var rest = gidx % {{ o_chunks[0][0] }}u; 
 
@@ -112,5 +113,4 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 		output_0.data[gidx] = result;
 	}
-	{% endif %}
 }

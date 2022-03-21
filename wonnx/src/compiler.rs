@@ -731,11 +731,21 @@ pub fn compile(
 
             // GLSL shader for convolution computation
             match op {
-                "MaxPool" | "AveragePool" | "GlobalAveragePool" => NodeTemplate {
-                    scalar_type: agreed_type(input_shapes, &output_shapes[0..1])?,
-                    template: "pool/aggregate.wgsl",
-                    threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
-                },
+                "MaxPool" | "AveragePool" | "GlobalAveragePool" => {
+                    if input_shape.dim(1) % 4 == 0 {
+                        NodeTemplate {
+                            scalar_type: agreed_type(input_shapes, &output_shapes[0..1])?,
+                            template: "pool/aggregate.wgsl",
+                            threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
+                        }
+                    } else {
+                        NodeTemplate {
+                            scalar_type: agreed_type(input_shapes, &output_shapes[0..1])?,
+                            template: "pool/aggregate.wgsl",
+                            threads: (ceil(output_lengths[0], 256) as _, 1, 1),
+                        }
+                    }
+                }
                 "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish" => {
                     // Alpha is the Leaky Relu attribute
                     let alpha = get_attribute("alpha", Some(0.01), node)?;
