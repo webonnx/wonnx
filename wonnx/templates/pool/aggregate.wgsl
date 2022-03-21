@@ -21,7 +21,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		let y = rest / {{ o_chunks[0][2] }}u;
 		let x = rest % {{ o_chunks[0][2] }}u;
 		
-		var result = Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0));
+		var result = Vec4(Scalar(-3.40282347E+38), Scalar(-3.40282347E+38), Scalar(-3.40282347E+38), Scalar(-3.40282347E+38));
 		var value = result;
 
 		let base_index = batch * {{ i_chunks[0][0] }}u + m * {{ i_chunks[0][1] * 4 }}u ;
@@ -66,7 +66,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 			output_0.data[index] = result[index_vec];
 		}
 	} else {
-	if ((gidx >= 4 * {{ o_lens[0] }}u) && ( gidx < {{ o_lens[0] }}u)) {
+	if ((gidx >= 4u * {{ o_lens[0] }}u) && ( gidx < {{ o_lens[0] }}u)) {
 	{% else %}
 	if ( gidx < {{ o_lens[0] }}u ) {
 	{% endif %}
@@ -79,8 +79,8 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		let y = rest / {{ o_chunks[0][2] }}u;
 		let x = rest % {{ o_chunks[0][2] }}u;
 		
-		var result = Scalar(0);
-		var value = Scalar(0);
+		var result = Scalar(-3.40282347E+38);
+		var value = result;
 		
 		let base_index = batch * {{ i_chunks[0][0] }}u + m * {{ i_chunks[0][1] }}u;
 		var tmp_y = 0u;
@@ -95,6 +95,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 					tmp_x = x * {{ stride[1] }}u + j * {{ dilation[1] }}u - {{ pad[1] }}u;
 						if ((tmp_x < {{ original_width }}u) && (tmp_x >= 0u)) {
 							tmp_index  = base_index + tmp_y * {{ original_width }}u + tmp_x;
+
 							value = input_0.data[tmp_index];
 							
 							{%- if op_type == "MaxPool" -%}
@@ -113,4 +114,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 		output_0.data[gidx] = result;
 	}
+	{% if (i_shape[0][1] % 4) == 0 %}
+	}
+	{% endif %}
 }

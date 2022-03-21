@@ -675,32 +675,18 @@ pub fn compile(
             let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
                 "SAME_UPPER" => {
-                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
-                    let slack_0_div_2 = slack_0 / 2;
-                    let slack_rest_0 = slack_0 % 2;
-                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
-                    let slack_1_div_2 = slack_1 / 2;
-                    let slack_rest_1 = slack_1 % 2;
-                    vec![
-                        slack_0_div_2 + slack_rest_0,
-                        slack_1_div_2 + slack_rest_1,
-                        slack_0_div_2,
-                        slack_1_div_2,
-                    ]
+                    let pad_0 = (output_shapes[0].dim(0) as i64 - 1) * strides[0] + kernel_shape[0]
+                        - input_shapes[0].dim(0) as i64;
+                    let pad_1 = (output_shapes[0].dim(1) as i64 - 1) * strides[1] + kernel_shape[1]
+                        - input_shapes[0].dim(1) as i64;
+                    vec![pad_0 / 2, pad_1 / 2]
                 }
                 "SAME_LOWER" => {
-                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
-                    let slack_0_div_2 = slack_0 / 2;
-                    let slack_rest_0 = slack_0 % 2;
-                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
-                    let slack_1_div_2 = slack_1 / 2;
-                    let slack_rest_1 = slack_1 % 2;
-                    vec![
-                        slack_0_div_2,
-                        slack_1_div_2,
-                        slack_0_div_2 + slack_rest_0,
-                        slack_1_div_2 + slack_rest_1,
-                    ]
+                    let pad_0 = (output_shapes[0].dim(0) as i64 - 1) * strides[0] + kernel_shape[0]
+                        - input_shapes[0].dim(0) as i64;
+                    let pad_1 = (output_shapes[0].dim(1) as i64 - 1) * strides[1] + kernel_shape[1]
+                        - input_shapes[0].dim(1) as i64;
+                    vec![pad_0 - pad_0 / 2, pad_1 - pad_1 / 2]
                 }
                 _ => {
                     return Err(CompileError::UnimplementedVariant {
