@@ -607,7 +607,10 @@ impl GpuStep {
                     }
                     InputTensor::I64(int_input) => {
                         log::warn!("reading int64 input as int32 (int64 is not supported for calculation but can be used as input as long as values fit in int32)");
-                        let int32_input = int_input.iter().map(|x| *x as i32).collect();
+                        let int32_input = int_input
+                            .iter()
+                            .map(|i| i32::from_i64(*i).ok_or(GpuError::OutOfBoundsError))
+                            .collect::<Result<_, _>>()?;
                         queue.write_buffer(
                             input_buffer,
                             0,
