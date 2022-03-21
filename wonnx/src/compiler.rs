@@ -682,10 +682,10 @@ pub fn compile(
                     let slack_1_div_2 = slack_1 / 2;
                     let slack_rest_1 = slack_1 % 2;
                     vec![
-                        slack_0_div_2,
-                        slack_1_div_2,
                         slack_0_div_2 + slack_rest_0,
                         slack_1_div_2 + slack_rest_1,
+                        slack_0_div_2,
+                        slack_1_div_2,
                     ]
                 }
                 "SAME_LOWER" => {
@@ -696,10 +696,10 @@ pub fn compile(
                     let slack_1_div_2 = slack_1 / 2;
                     let slack_rest_1 = slack_1 % 2;
                     vec![
-                        slack_0_div_2 + slack_rest_0,
-                        slack_1_div_2 + slack_rest_1,
                         slack_0_div_2,
                         slack_1_div_2,
+                        slack_0_div_2 + slack_rest_0,
+                        slack_1_div_2 + slack_rest_1,
                     ]
                 }
                 _ => {
