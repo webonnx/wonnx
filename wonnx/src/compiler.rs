@@ -671,6 +671,7 @@ pub fn compile(
             };
             let strides = get_attribute("strides", Some(vec![1, 1]), node)?;
             let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node)?;
+            let count_include_pad = get_attribute("count_include_pad", Some(0), node)?;
 
             let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
@@ -713,6 +714,7 @@ pub fn compile(
                 &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * input_shape.dim(1)),
             );
             context.insert("pad", &pads);
+            context.insert("count_include_pad", &count_include_pad);
             context.insert("dilation", &dilations);
 
             // GLSL shader for convolution computation

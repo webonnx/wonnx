@@ -62,7 +62,11 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		}	
 
 		{% if op_type == "AveragePool" -%}
+			{% if count_include_pad == 0 %}
 			result = result / counter;
+			{% else %}
+			result = result / {{ kernel_len }}.;
+			{% endif %}
 		{%- endif %}
 
 		let base_index_2 = batch * {{ o_chunks[0][0] }}u + m * {{ o_chunks[0][1] * 4 }}u + y * {{ width }}u + x;
@@ -121,7 +125,11 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		}
 
 		{% if op_type == "AveragePool" -%}
+			{% if count_include_pad == 0 %}
 			result = result / counter;
+			{% else %}
+			result = result / {{ kernel_len }}.;
+			{% endif %}
 		{%- endif %}
 
 		output_0.data[gidx] = result;
