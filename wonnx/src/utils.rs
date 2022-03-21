@@ -106,18 +106,10 @@ pub enum OutputTensor {
     I64(Vec<i64>),
 }
 
-impl OutputTensor {
-    pub fn unwrap_f32_slice(&self) -> &[f32] {
-        match self {
-            OutputTensor::F32(fs) => fs.as_slice(),
-            OutputTensor::I32(_) | OutputTensor::I64(_) => panic!("cannot convert into f32 slice"),
-        }
-    }
-}
-
 impl TryFrom<OutputTensor> for Vec<f32> {
     type Error = TensorConversionError;
 
+    /// Convert OutputTensor into a Vec<f32>, possibly converting integer tensors if the values fit
     fn try_from(value: OutputTensor) -> Result<Self, Self::Error> {
         match value {
             OutputTensor::F32(floats) => Ok(floats),
@@ -129,6 +121,21 @@ impl TryFrom<OutputTensor> for Vec<f32> {
                 .into_iter()
                 .map(|i| f32::from_i64(i).ok_or(TensorConversionError::OutOfBoundsError))
                 .collect::<Result<_, _>>(),
+        }
+    }
+}
+
+/// Convert &OutputTensor into an &[f32]. Because we cannot store converted results, this operation does not attempt
+/// to convert the tensor if the values are of a different type
+impl<'a> TryFrom<&'a OutputTensor> for &'a [f32] {
+    type Error = TensorConversionError;
+
+    fn try_from(value: &'a OutputTensor) -> Result<Self, Self::Error> {
+        match value {
+            OutputTensor::F32(floats) => Ok(floats.as_slice()),
+            OutputTensor::I32(_) | OutputTensor::I64(_) => {
+                Err(TensorConversionError::DataTypeError)
+            }
         }
     }
 }

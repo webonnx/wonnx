@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::TryInto;
 use wonnx::utils::{attribute, graph, initializer, model, node, tensor, OutputTensor};
 use wonnx::*;
 mod common;
@@ -81,7 +82,7 @@ fn conv_without_pad() {
         pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     common::assert_eq_vector(
-        result["Y"].unwrap_f32_slice(),
+        (&result["Y"]).try_into().unwrap(),
         &[54., 63., 72., 99., 108., 117., 144., 153., 162.],
     )
 }
@@ -133,7 +134,7 @@ fn conv_stride() {
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
     common::assert_eq_vector(
-        result["Y"].unwrap_f32_slice(),
+        (&result["Y"]).try_into().unwrap(),
         &[
             12., 27., 24., 63., 108., 81., 123., 198., 141., 112., 177., 124.,
         ],
@@ -177,7 +178,7 @@ fn conv_asymetric_stride() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     common::assert_eq_vector(
-        result["Y"].unwrap_f32_slice(),
+        (&result["Y"]).try_into().unwrap(),
         &[21., 33., 99., 117., 189., 207., 171., 183.],
     );
 }

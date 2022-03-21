@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryInto};
 use wonnx::utils::{graph, model, node, tensor};
 mod common;
 
@@ -24,7 +24,7 @@ fn test_identity() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    common::assert_eq_vector(result["Y"].unwrap_f32_slice(), &data);
+    common::assert_eq_vector((&result["Y"]).try_into().unwrap(), &data);
 }
 
 #[test]
@@ -52,5 +52,5 @@ fn test_double_identity() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    common::assert_eq_vector(result["Z"].unwrap_f32_slice(), &data);
+    common::assert_eq_vector((&result["Z"]).try_into().unwrap(), &data);
 }

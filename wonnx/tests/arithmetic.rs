@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::TensorProto_DataType,
     utils::{
@@ -56,7 +56,10 @@ fn test_reciprocal() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    common::assert_eq_vector(result["Y"].unwrap_f32_slice(), reciprocal_data.as_slice());
+    common::assert_eq_vector(
+        (&result["Y"]).try_into().unwrap(),
+        reciprocal_data.as_slice(),
+    );
 }
 
 #[test]

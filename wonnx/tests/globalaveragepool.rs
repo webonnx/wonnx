@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryInto};
 use wonnx::utils::{graph, model, node, tensor};
 mod common;
 
@@ -49,5 +49,5 @@ fn global_average_pool() {
     // Channel 2: [[4,5], [6,7]] => average is 5,5
     // Channel 3: [[8,9], [10, 11]] => average is 9,5
     // Channel 4: [[12,13], [14, 15]] => average is 13,5
-    common::assert_eq_vector(out_y.unwrap_f32_slice(), &[1.5, 5.5, 9.5, 13.5]);
+    common::assert_eq_vector(out_y.try_into().unwrap(), &[1.5, 5.5, 9.5, 13.5]);
 }

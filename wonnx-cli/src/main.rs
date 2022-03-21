@@ -271,11 +271,8 @@ async fn run() -> Result<(), NNXError> {
                 Some(labels_path) => {
                     let labels = get_lines(&labels_path);
 
-                    let mut probabilities = output
-                        .unwrap_f32_slice()
-                        .iter()
-                        .enumerate()
-                        .collect::<Vec<_>>();
+                    let output_slice: Vec<f32> = output.try_into().unwrap();
+                    let mut probabilities = output_slice.iter().enumerate().collect::<Vec<_>>();
                     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
                     let top = infer_opt.top.unwrap_or(10);

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::AttributeProto,
     utils::{attribute, graph, model, node, tensor, InputTensor},
@@ -50,7 +50,7 @@ fn test_onehot(
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     log::info!("OUT: {:?}", result["Y"]);
-    common::assert_eq_vector(result["Y"].unwrap_f32_slice(), output);
+    common::assert_eq_vector((&result["Y"]).try_into().unwrap(), output);
 }
 
 #[test]
