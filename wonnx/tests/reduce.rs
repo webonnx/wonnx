@@ -1,8 +1,7 @@
-use protobuf::ProtobufEnum;
 use std::collections::HashMap;
 use wonnx::{
-    onnx::{AttributeProto, TensorProto, TensorProto_DataType},
-    utils::{attribute, graph, model, node, tensor},
+    onnx::AttributeProto,
+    utils::{attribute, graph, initializer_int64, model, node, tensor},
 };
 mod common;
 
@@ -235,14 +234,6 @@ fn reduce() {
     );
 }
 
-pub fn initializer_int(name: &str, data: Vec<i64>) -> TensorProto {
-    let mut initializer = TensorProto::new();
-    initializer.set_name(name.to_string());
-    initializer.set_data_type(TensorProto_DataType::INT64.value()); // FLOAT
-    initializer.set_int64_data(data);
-    initializer
-}
-
 // Separate test for the case where ReduceSum takes an axes input
 // Test case adapted from https://github.com/onnx/onnx/blob/94e2f64551ded652df53a7e9111031e8aabddaee/onnx/backend/test/case/node/reducesum.py#L92
 #[test]
@@ -270,7 +261,7 @@ fn test_reduce_sum_with_axes_as_input() {
         vec![tensor("X", &[3, 2, 2])],
         vec![tensor("Y", &[3, 2])],
         vec![],
-        vec![initializer_int("A", vec![-2])],
+        vec![initializer_int64("A", vec![-2])],
         vec![node(
             vec!["X", "A"],
             vec!["Y"],

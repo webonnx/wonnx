@@ -65,6 +65,7 @@ impl Shape {
 pub enum InputTensor<'a> {
     F32(Cow<'a, [f32]>),
     I32(Cow<'a, [i32]>),
+    I64(Cow<'a, [i64]>),
 }
 
 impl<'a> From<&'a [f32]> for InputTensor<'a> {
@@ -76,6 +77,12 @@ impl<'a> From<&'a [f32]> for InputTensor<'a> {
 impl<'a> From<&'a [i32]> for InputTensor<'a> {
     fn from(a: &'a [i32]) -> Self {
         InputTensor::I32(Cow::Borrowed(a))
+    }
+}
+
+impl<'a> From<&'a [i64]> for InputTensor<'a> {
+    fn from(a: &'a [i64]) -> Self {
+        InputTensor::I64(Cow::Borrowed(a))
     }
 }
 
@@ -304,12 +311,19 @@ pub fn tensor_of_type(
     tensor
 }
 
-// Remove dimensions
 pub fn initializer(name: &str, data: Vec<f32>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
     initializer.set_name(name.to_string());
-    initializer.set_data_type(1); // FLOAT
+    initializer.set_data_type(TensorProto_DataType::FLOAT.value());
     initializer.set_float_data(data);
+    initializer
+}
+
+pub fn initializer_int64(name: &str, data: Vec<i64>) -> onnx::TensorProto {
+    let mut initializer = crate::onnx::TensorProto::new();
+    initializer.set_name(name.to_string());
+    initializer.set_data_type(TensorProto_DataType::INT64.value());
+    initializer.set_int64_data(data);
     initializer
 }
 

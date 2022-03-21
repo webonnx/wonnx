@@ -52,7 +52,6 @@ pub fn resize<T: Clone + bytemuck::Pod>(mut array: Vec<T>) -> Vec<T> {
     if size < 4 && size != 0 {
         array.resize(size + 4 - size % 4, T::zeroed());
     }
-
     array
 }
 

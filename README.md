@@ -384,3 +384,6 @@ fn test_matmul_square_matrix() {
   parameters (i.e. axis). These inputs are only supported if they are supplied as initializer tensors (i.e. do not depend 
   on inputs and are not outputs of other ops), because wonnx pre-compiles all operations to shaders in advance (and must know
   these parameters up front).
+
+* Internally 64-bit integers are not supported (the reason is they are not supported in the current version of WGSL); 
+  inputs and initializers with 64-bit scalars are converted to 32-bit values (possibly overflowing).
