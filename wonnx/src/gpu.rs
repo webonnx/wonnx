@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use num::FromPrimitive;
 use thiserror::Error;
 use wgpu::{Buffer, BufferUsages, CommandEncoder};
 
