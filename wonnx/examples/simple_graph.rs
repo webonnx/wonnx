@@ -35,7 +35,7 @@ async fn execute_gpu() -> Result<HashMap<String, OutputTensor>, SessionError> {
         vec![tensor("X", &shape)],
         vec![tensor("Y", &[1, m, 3, 3])],
         vec![tensor("W", &[m, c, 3, 3])],
-        vec![initializer("W", data_w)],
+        vec![initializer("W", data_w, vec![m, c, 3, 3])],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],

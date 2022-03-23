@@ -20,7 +20,7 @@ fn conv_pad() {
         vec![tensor("X", &shape)],
         vec![tensor("Y", &[2, 2, n, n])],
         vec![tensor("W", &[2, c, 3, 3])],
-        vec![initializer("W", data_w)],
+        vec![initializer("W", data_w, vec![2, c, 3, 3])],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
@@ -67,8 +67,8 @@ fn conv_without_pad() {
     let conv_model = model(graph(
         vec![tensor("X", &shape)],
         vec![tensor("Y", &[1, 1, 3, 3])],
-        vec![tensor("W", &[2, c, 3, 3])],
-        vec![initializer("W", data_w)],
+        vec![tensor("W", &[m, c, kernel_n, kernel_n])],
+        vec![initializer("W", data_w, vec![m, c, kernel_n, kernel_n])],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
@@ -112,7 +112,11 @@ fn conv_stride() {
             "W",
             &[m as i64, c as i64, kernel_n as i64, kernel_n as i64],
         )],
-        vec![initializer("W", data_w)],
+        vec![initializer(
+            "W",
+            data_w,
+            vec![m as i64, c as i64, kernel_n as i64, kernel_n as i64],
+        )],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
@@ -160,7 +164,11 @@ fn conv_asymetric_stride() {
             "W",
             &[m as i64, c as i64, kernel_n as i64, kernel_n as i64],
         )],
-        vec![initializer("W", data_w)],
+        vec![initializer(
+            "W",
+            data_w,
+            vec![m as i64, c as i64, kernel_n as i64, kernel_n as i64],
+        )],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
