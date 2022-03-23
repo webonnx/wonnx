@@ -1,7 +1,10 @@
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use ndarray::s;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::Path;
+use wonnx::utils::InputTensor;
+mod common;
 
 #[test]
 fn test_relu() {
@@ -13,77 +16,46 @@ fn test_relu() {
         .expect("session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    assert_eq!(result["y"], &[0.0, 1.0]);
+    common::assert_eq_vector((&result["y"]).try_into().unwrap(), &[0.0, 1.0]);
+}
+
+fn infer_mnist(image: InputTensor) -> (usize, f32) {
+    let session = pollster::block_on(wonnx::Session::from_path("../data/models/opt-mnist.onnx"))
+        .expect("Session did not create");
+
+    let mut input_data = HashMap::new();
+    input_data.insert("Input3".to_string(), image);
+    let output = pollster::block_on(session.run(&input_data)).unwrap();
+    let output_tensor: &[f32] = (&output["Plus214_Output_0"]).try_into().unwrap();
+    output_tensor
+        .iter()
+        .enumerate()
+        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
+            if &val_max > val {
+                (idx_max, val_max)
+            } else {
+                (idx, *val)
+            }
+        })
 }
 
 #[test]
 fn test_mnist() {
     let _ = env_logger::builder().is_test(true).try_init();
     let image = load_image("0.jpg");
-    let mut input_data = HashMap::new();
-    input_data.insert("Input3".to_string(), image.as_slice().unwrap().into());
-    let session = pollster::block_on(wonnx::Session::from_path("../data/models/opt-mnist.onnx"))
-        .expect("Session did not create");
-
-    let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
-        .iter()
-        .enumerate()
-        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
-            if &val_max > val {
-                (idx_max, val_max)
-            } else {
-                (idx, *val)
-            }
-        });
-
+    let result = infer_mnist(image.as_slice().unwrap().into());
     assert_eq!(result.0, 0);
 
     let image = load_image("3.jpg");
-    let mut input_data = HashMap::new();
-    input_data.insert("Input3".to_string(), image.as_slice().unwrap().into());
-    let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
-        .iter()
-        .enumerate()
-        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
-            if &val_max > val {
-                (idx_max, val_max)
-            } else {
-                (idx, *val)
-            }
-        });
-
+    let result = infer_mnist(image.as_slice().unwrap().into());
     assert_eq!(result.0, 3);
 
     let image = load_image("5.jpg");
-    let mut input_data = HashMap::new();
-    input_data.insert("Input3".to_string(), image.as_slice().unwrap().into());
-    let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
-        .iter()
-        .enumerate()
-        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
-            if &val_max > val {
-                (idx_max, val_max)
-            } else {
-                (idx, *val)
-            }
-        });
-
+    let result = infer_mnist(image.as_slice().unwrap().into());
     assert_eq!(result.0, 5);
 
     let image = load_image("7.jpg");
-    let mut input_data = HashMap::new();
-    input_data.insert("Input3".to_string(), image.as_slice().unwrap().into());
-    let result = pollster::block_on(session.run(&input_data)).unwrap()["Plus214_Output_0"]
-        .iter()
-        .enumerate()
-        .fold((0, 0.), |(idx_max, val_max), (idx, val)| {
-            if &val_max > val {
-                (idx_max, val_max)
-            } else {
-                (idx, *val)
-            }
-        });
-
+    let result = infer_mnist(image.as_slice().unwrap().into());
     assert_eq!(result.0, 7);
 }
 
@@ -100,9 +72,10 @@ fn test_squeeze() {
         .expect("session did not create");
     let result =
         &pollster::block_on(session.run(&input_data)).unwrap()["squeezenet0_flatten0_reshape0"];
-    let mut probabilities = result.iter().enumerate().collect::<Vec<_>>();
+    let output_tensor: &[f32] = result.try_into().unwrap();
+    let mut probabilities: Vec<(usize, f32)> = output_tensor.iter().cloned().enumerate().collect();
 
-    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
     assert_eq!(probabilities[0].0, 22);
 }

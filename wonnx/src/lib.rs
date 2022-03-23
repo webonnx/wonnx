@@ -17,7 +17,7 @@ use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::path::Path;
 use std::result::Result;
-use utils::{DataTypeError, InputTensor};
+use utils::{DataTypeError, InputTensor, OutputTensor};
 
 use crate::gpu::GpuModel;
 use thiserror::Error;
@@ -144,7 +144,7 @@ impl Session {
     pub async fn run<'a>(
         &self,
         inputs: &HashMap<String, InputTensor<'a>>,
-    ) -> Result<HashMap<String, Vec<f32>>, SessionError> {
+    ) -> Result<HashMap<String, OutputTensor>, SessionError> {
         Ok(self.gpu_model.infer(inputs).await?)
     }
 }

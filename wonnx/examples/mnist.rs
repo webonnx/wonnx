@@ -1,13 +1,16 @@
 use std::collections::HashMap;
+use std::convert::TryInto;
 
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use std::path::Path;
 use std::time::Instant;
+use wonnx::utils::OutputTensor;
 
 // Args Management
 async fn run() {
     let probabilities = execute_gpu().await.unwrap();
-    let (_, probabilities) = probabilities.iter().next().unwrap();
+    let (_, probabilities) = probabilities.into_iter().next().unwrap();
+    let probabilities: Vec<f32> = probabilities.try_into().unwrap();
     println!("steps: {:#?}", probabilities);
     println!("steps: {:#?}", probabilities.len());
 
@@ -19,7 +22,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Option<HashMap<String, Vec<f32>>> {
+async fn execute_gpu() -> Option<HashMap<String, OutputTensor>> {
     let mut input_data = HashMap::new();
 
     let image = load_image();

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use protobuf::ProtobufEnum;
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{attribute, graph, model, node, tensor, tensor_of_type},
+    utils::{attribute, graph, model, node, tensor, tensor_of_type, OutputTensor},
 };
 
 #[test]
@@ -37,6 +37,6 @@ fn test_cast() {
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     assert_eq!(
         result["Y"],
-        vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 5.0]
+        OutputTensor::I32(vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5])
     );
 }

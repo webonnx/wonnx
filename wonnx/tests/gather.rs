@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryInto};
 use wonnx::utils::{attribute, graph, model, node, tensor};
 mod common;
 
@@ -35,7 +35,7 @@ fn assert_gather(
         pollster::block_on(wonnx::Session::from_model(bn_model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    common::assert_eq_vector(result["Y"].as_slice(), output);
+    common::assert_eq_vector((&result["Y"]).try_into().unwrap(), output);
 }
 
 #[test]

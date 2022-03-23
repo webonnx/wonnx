@@ -159,7 +159,10 @@ async fn run() -> Result<(), NNXError> {
                         let _ = gpu_backend.infer(&infer_opt, &inputs, &model).await?;
                     }
                 }
-                let gpu_output = gpu_backend.infer(&infer_opt, &inputs, &model).await?;
+                let gpu_output: Vec<f32> = gpu_backend
+                    .infer(&infer_opt, &inputs, &model)
+                    .await?
+                    .try_into()?;
                 let gpu_time = gpu_start.elapsed();
                 log::info!("gpu time: {}ms", gpu_time.as_millis());
                 drop(gpu_backend);
@@ -173,7 +176,10 @@ async fn run() -> Result<(), NNXError> {
                         let _ = cpu_backend.infer(&infer_opt, &inputs, &model).await?;
                     }
                 }
-                let cpu_output = cpu_backend.infer(&infer_opt, &inputs, &model).await?;
+                let cpu_output: Vec<f32> = cpu_backend
+                    .infer(&infer_opt, &inputs, &model)
+                    .await?
+                    .try_into()?;
                 let cpu_time = cpu_start.elapsed();
                 log::info!(
                     "cpu time: {}ms ({:.2}x gpu time)",
@@ -265,7 +271,8 @@ async fn run() -> Result<(), NNXError> {
                 Some(labels_path) => {
                     let labels = get_lines(&labels_path);
 
-                    let mut probabilities = output.iter().enumerate().collect::<Vec<_>>();
+                    let output_slice: Vec<f32> = output.try_into().unwrap();
+                    let mut probabilities = output_slice.iter().enumerate().collect::<Vec<_>>();
                     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
                     let top = infer_opt.top.unwrap_or(10);

@@ -1,7 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{graph, initializer_int64, model, node, tensor, tensor_of_type, InputTensor},
+    utils::{
+        graph, initializer_int64, model, node, tensor, tensor_of_type, InputTensor, OutputTensor,
+    },
 };
 
 mod common;
@@ -28,7 +30,7 @@ fn test_cos() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], [1.0; 16]);
+    assert_eq!(result["Y"], OutputTensor::F32(vec![1.0; 16]));
 }
 
 #[test]
@@ -54,7 +56,10 @@ fn test_reciprocal() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    common::assert_eq_vector(result["Y"].as_slice(), &reciprocal_data);
+    common::assert_eq_vector(
+        (&result["Y"]).try_into().unwrap(),
+        reciprocal_data.as_slice(),
+    );
 }
 
 #[test]
@@ -80,7 +85,7 @@ fn test_integer() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], vec![42.0; n]);
+    assert_eq!(result["Y"], OutputTensor::I32(vec![42; n]));
 }
 
 #[test]
@@ -89,7 +94,7 @@ fn test_int64_initializers() {
     let n: usize = 16;
     let left: Vec<i64> = (0..n).map(|x| x as i64).collect();
     let right: Vec<i64> = (0..n).map(|x| (x * 2) as i64).collect();
-    let sum: Vec<f32> = (0..n).map(|x| (x * 3) as f32).collect();
+    let sum: Vec<i64> = (0..n).map(|x| (x * 3) as i64).collect();
     let dims = vec![n as i64];
 
     let model = model(graph(
@@ -107,5 +112,5 @@ fn test_int64_initializers() {
     input_data.insert("X".to_string(), left.as_slice().into());
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    common::assert_eq_vector(result["Z"].as_slice(), &sum);
+    assert_eq!(result["Z"], OutputTensor::I64(sum))
 }

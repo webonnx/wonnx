@@ -1,6 +1,8 @@
 use std::collections::HashMap;
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
+use std::convert::TryInto;
+use wonnx::utils::{attribute, graph, initializer, model, node, tensor, OutputTensor};
 use wonnx::*;
+mod common;
 
 #[test]
 fn conv_pad() {
@@ -36,7 +38,7 @@ fn conv_pad() {
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     assert_eq!(
         result["Y"],
-        [
+        OutputTensor::F32(vec![
             12.0, 21.0, 27.0, 33.0, 24.0, 33.0, 54.0, 63.0, 72.0, 51.0, 63.0, 99.0, 108.0, 117.0,
             81.0, 93.0, 144.0, 153.0, 162.0, 111.0, 72.0, 111.0, 117.0, 123.0, 84.0, 12.0, 21.0,
             27.0, 33.0, 24.0, 33.0, 54.0, 63.0, 72.0, 51.0, 63.0, 99.0, 108.0, 117.0, 81.0, 93.0,
@@ -45,7 +47,7 @@ fn conv_pad() {
             243.0, 369.0, 378.0, 387.0, 261.0, 172.0, 261.0, 267.0, 273.0, 184.0, 112.0, 171.0,
             177.0, 183.0, 124.0, 183.0, 279.0, 288.0, 297.0, 201.0, 213.0, 324.0, 333.0, 342.0,
             231.0, 243.0, 369.0, 378.0, 387.0, 261.0, 172.0, 261.0, 267.0, 273.0, 184.0
-        ]
+        ])
     );
 }
 
@@ -79,10 +81,10 @@ fn conv_without_pad() {
     let session =
         pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(
-        result["Y"],
-        [54., 63., 72., 99., 108., 117., 144., 153., 162.]
-    );
+    common::assert_eq_vector(
+        (&result["Y"]).try_into().unwrap(),
+        &[54., 63., 72., 99., 108., 117., 144., 153., 162.],
+    )
 }
 
 #[test]
@@ -131,10 +133,12 @@ fn conv_stride() {
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    assert_eq!(
-        result["Y"],
-        [12., 27., 24., 63., 108., 81., 123., 198., 141., 112., 177., 124.]
-    );
+    common::assert_eq_vector(
+        (&result["Y"]).try_into().unwrap(),
+        &[
+            12., 27., 24., 63., 108., 81., 123., 198., 141., 112., 177., 124.,
+        ],
+    )
 }
 
 #[test]
@@ -173,7 +177,10 @@ fn conv_asymetric_stride() {
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], [21., 33., 99., 117., 189., 207., 171., 183.]);
+    common::assert_eq_vector(
+        (&result["Y"]).try_into().unwrap(),
+        &[21., 33., 99., 117., 189., 207., 171., 183.],
+    );
 }
 
 fn _conv_kernel_3() {

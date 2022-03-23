@@ -2,18 +2,21 @@ use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use log::info;
 use ndarray::s;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::time::Instant;
 use std::{
     fs,
     io::{BufRead, BufReader},
     path::Path,
 };
+use wonnx::utils::OutputTensor;
 use wonnx::WonnxError;
 
 // Args Management
 async fn run() {
-    let probabilities = &execute_gpu().await.unwrap();
-    let (_, probabilities) = probabilities.iter().next().unwrap();
+    let probabilities = execute_gpu().await.unwrap();
+    let probabilities = probabilities.into_iter().next().unwrap().1;
+    let probabilities: Vec<f32> = probabilities.try_into().unwrap();
     let mut probabilities = probabilities.iter().enumerate().collect::<Vec<_>>();
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
 
@@ -28,7 +31,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<HashMap<String, Vec<f32>>, WonnxError> {
+async fn execute_gpu() -> Result<HashMap<String, OutputTensor>, WonnxError> {
     let mut input_data = HashMap::new();
     let image = load_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap().into());

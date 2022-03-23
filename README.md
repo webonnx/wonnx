@@ -195,7 +195,9 @@ fn test_matmul_square_matrix() {
 
     let result = pollster::block_on(session.run(input_data)).unwrap();
 
-    assert_eq!(result["C"].as_slice(), sum.as_slice().unwrap());
+    // Note: it is better to use a method that compares floats with a tolerance to account for differences
+    // between implementations; see `wonnx/tests/common/mod.rs` for an example.
+    assert_eq!((&result["C"]).try_into().unwrap(),sum.as_slice().unwrap());
 }
 ```
 > Check out tera documentation for other templating operation: https://tera.netlify.app/docs/

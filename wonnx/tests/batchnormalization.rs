@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryInto};
 use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
 mod common;
 
@@ -62,7 +62,7 @@ fn batch_normalization() {
     let out_y = &result["Y"];
 
     common::assert_eq_vector(
-        out_y.as_slice(),
+        out_y.try_into().unwrap(),
         &[
             // Y = (X - input_mean) / sqrt(input_var + epsilon) * scale + B
             // For X=0, Y = (0 - 100) / sqrt(10 + 0.1) * 1 + 1000 = 968,53

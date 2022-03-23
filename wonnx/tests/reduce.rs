@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::AttributeProto,
     utils::{attribute, graph, initializer_int64, model, node, tensor},
@@ -38,7 +38,7 @@ fn test_reduce(
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     log::info!("OUT: {:?}", result["Y"]);
-    common::assert_eq_vector(result["Y"].as_slice(), output);
+    common::assert_eq_vector((&result["Y"]).try_into().unwrap(), output);
 }
 
 fn sum_square(a: f32, b: f32) -> f32 {
@@ -276,5 +276,8 @@ fn test_reduce_sum_with_axes_as_input() {
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     log::info!("OUT: {:?}", result["Y"]);
-    common::assert_eq_vector(result["Y"].as_slice(), &[4., 6., 12., 14., 20., 22.]);
+    common::assert_eq_vector(
+        (&result["Y"]).try_into().unwrap(),
+        &[4., 6., 12., 14., 20., 22.],
+    );
 }

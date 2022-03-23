@@ -8,7 +8,7 @@ use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use wasm_bindgen_futures::future_to_promise;
-use wonnx::utils::InputTensor;
+use wonnx::utils::{InputTensor, OutputTensor};
 
 #[wasm_bindgen(start)]
 pub fn main() {
@@ -88,5 +88,14 @@ impl Session {
             drop(input_copy);
             Ok(JsValue::from_serde(&result).unwrap())
         })
+    }
+}
+
+/// Convert an OutputTensor to a JsValue (we cannot implement Into<JsValue> for OutputTensor here)
+pub fn tensor_to_js_value(tensor: OutputTensor) -> JsValue {
+    match tensor {
+        OutputTensor::F32(fs) => JsValue::from_serde(&fs).unwrap(),
+        OutputTensor::I32(ints) => JsValue::from_serde(&ints).unwrap(),
+        OutputTensor::I64(ints) => JsValue::from_serde(&ints).unwrap(),
     }
 }

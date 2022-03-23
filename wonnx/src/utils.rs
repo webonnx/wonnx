@@ -1,13 +1,16 @@
 use protobuf::ProtobufEnum;
 use protobuf::RepeatedField;
+use serde::Serialize;
 
 use crate::onnx;
 use crate::onnx::OperatorSetIdProto;
 use crate::onnx::TensorProto_DataType;
 use crate::onnx::ValueInfoProto;
+use num::FromPrimitive;
 use std::borrow::Cow;
 use std::convert::From;
 use std::convert::Into;
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::str::from_utf8;
 use thiserror::Error;
@@ -83,6 +86,67 @@ impl<'a> From<&'a [i32]> for InputTensor<'a> {
 impl<'a> From<&'a [i64]> for InputTensor<'a> {
     fn from(a: &'a [i64]) -> Self {
         InputTensor::I64(Cow::Borrowed(a))
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum TensorConversionError {
+    #[error("could not convert to the requested type becaue a value could not be represented in the target type")]
+    OutOfBoundsError,
+
+    #[error("cold not return the requested type; conversions cannot be done for slices")]
+    DataTypeError,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum OutputTensor {
+    F32(Vec<f32>),
+    I32(Vec<i32>),
+    I64(Vec<i64>),
+}
+
+impl TryFrom<OutputTensor> for Vec<f32> {
+    type Error = TensorConversionError;
+
+    /// Convert OutputTensor into a Vec<f32>, possibly converting integer tensors if the values fit
+    fn try_from(value: OutputTensor) -> Result<Self, Self::Error> {
+        match value {
+            OutputTensor::F32(floats) => Ok(floats),
+            OutputTensor::I32(ints) => ints
+                .into_iter()
+                .map(|i| f32::from_i32(i).ok_or(TensorConversionError::OutOfBoundsError))
+                .collect::<Result<_, _>>(),
+            OutputTensor::I64(ints) => ints
+                .into_iter()
+                .map(|i| f32::from_i64(i).ok_or(TensorConversionError::OutOfBoundsError))
+                .collect::<Result<_, _>>(),
+        }
+    }
+}
+
+/// Convert &OutputTensor into an &[f32]. Because we cannot store converted results, this operation does not attempt
+/// to convert the tensor if the values are of a different type
+impl<'a> TryFrom<&'a OutputTensor> for &'a [f32] {
+    type Error = TensorConversionError;
+
+    fn try_from(value: &'a OutputTensor) -> Result<Self, Self::Error> {
+        match value {
+            OutputTensor::F32(floats) => Ok(floats.as_slice()),
+            OutputTensor::I32(_) | OutputTensor::I64(_) => {
+                Err(TensorConversionError::DataTypeError)
+            }
+        }
+    }
+}
+
+impl<'a> From<&InputTensor<'a>> for OutputTensor {
+    fn from(input: &InputTensor<'a>) -> Self {
+        match input {
+            InputTensor::F32(fs) => OutputTensor::F32(fs.to_vec()),
+            InputTensor::I32(fs) => OutputTensor::I32(fs.to_vec()),
+            InputTensor::I64(fs) => OutputTensor::I64(fs.to_vec()),
+        }
     }
 }
 
@@ -466,7 +530,7 @@ impl From<onnx::AttributeProto> for String {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{attribute, graph, initializer, model, node, tensor};
+    use crate::utils::{attribute, graph, initializer, model, node, tensor, OutputTensor};
 
     #[test]
     fn test_model() {
@@ -507,7 +571,7 @@ mod tests {
 
         assert_eq!(
             result["Y"],
-            [54., 63., 72., 99., 108., 117., 144., 153., 162.]
+            OutputTensor::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.])
         );
     }
 }

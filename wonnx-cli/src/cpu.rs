@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use crate::{InferOptions, Inferer, NNXError};
 use async_trait::async_trait;
 use tract_onnx::prelude::*;
-use wonnx::{onnx::ModelProto, utils::Shape};
+use wonnx::{
+    onnx::ModelProto,
+    utils::{OutputTensor, Shape},
+};
 
 type RunnableOnnxModel =
     SimplePlan<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
@@ -62,7 +65,7 @@ impl Inferer for CPUInferer {
         infer_opt: &InferOptions,
         inputs: &HashMap<String, crate::Tensor>,
         model: &ModelProto,
-    ) -> Result<Vec<f32>, NNXError> {
+    ) -> Result<OutputTensor, NNXError> {
         let mut cpu_inputs: HashMap<usize, tract_onnx::prelude::Tensor> = HashMap::new();
 
         for (input_name, input_tensor) in inputs {
@@ -119,6 +122,6 @@ impl Inferer for CPUInferer {
         };
 
         let av = result_vector.to_array_view()?;
-        Ok(av.as_slice().unwrap().to_vec())
+        Ok(OutputTensor::F32(av.as_slice().unwrap().to_vec()))
     }
 }
