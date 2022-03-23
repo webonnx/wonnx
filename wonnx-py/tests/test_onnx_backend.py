@@ -169,6 +169,10 @@ backend_test.include(f"test_reduce_max_[a-z,_]*")
 backend_test.include(f"test_reduce_log_sum_[a-z,_]*")
 backend_test.include(f"test_reduce_log_sum_exp_[a-z,_]*")
 
+# Aggregation Test
+backend_test.include(f"test_maxpool_2d_[a-z,_]*_[a-z,_]*")
+backend_test.include(f"test_averagepool_2d_[a-z,_]*")
+backend_test.include(f"test_globalaveragepool_[a-z,_]*")
 
 globals().update(backend_test.enable_report().test_cases)
 

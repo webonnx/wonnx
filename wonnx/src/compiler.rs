@@ -671,36 +671,23 @@ pub fn compile(
             };
             let strides = get_attribute("strides", Some(vec![1, 1]), node)?;
             let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node)?;
+            let count_include_pad = get_attribute("count_include_pad", Some(0), node)?;
 
             let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
                 "SAME_UPPER" => {
-                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
-                    let slack_0_div_2 = slack_0 / 2;
-                    let slack_rest_0 = slack_0 % 2;
-                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
-                    let slack_1_div_2 = slack_1 / 2;
-                    let slack_rest_1 = slack_1 % 2;
-                    vec![
-                        slack_0_div_2,
-                        slack_1_div_2,
-                        slack_0_div_2 + slack_rest_0,
-                        slack_1_div_2 + slack_rest_1,
-                    ]
+                    let pad_0 = (output_shapes[0].dim(0) as i64 - 1) * strides[0] + kernel_shape[0]
+                        - input_shapes[0].dim(0) as i64;
+                    let pad_1 = (output_shapes[0].dim(1) as i64 - 1) * strides[1] + kernel_shape[1]
+                        - input_shapes[0].dim(1) as i64;
+                    vec![pad_0 / 2, pad_1 / 2]
                 }
                 "SAME_LOWER" => {
-                    let slack_0 = -strides[0] + ((kernel_shape[0] - 1) * dilations[0] + 1);
-                    let slack_0_div_2 = slack_0 / 2;
-                    let slack_rest_0 = slack_0 % 2;
-                    let slack_1 = -strides[1] + ((kernel_shape[1] - 1) * dilations[1] + 1);
-                    let slack_1_div_2 = slack_1 / 2;
-                    let slack_rest_1 = slack_1 % 2;
-                    vec![
-                        slack_0_div_2 + slack_rest_0,
-                        slack_1_div_2 + slack_rest_1,
-                        slack_0_div_2,
-                        slack_1_div_2,
-                    ]
+                    let pad_0 = (output_shapes[0].dim(0) as i64 - 1) * strides[0] + kernel_shape[0]
+                        - input_shapes[0].dim(0) as i64;
+                    let pad_1 = (output_shapes[0].dim(1) as i64 - 1) * strides[1] + kernel_shape[1]
+                        - input_shapes[0].dim(1) as i64;
+                    vec![pad_0 - pad_0 / 2, pad_1 - pad_1 / 2]
                 }
                 _ => {
                     return Err(CompileError::UnimplementedVariant {
@@ -727,15 +714,26 @@ pub fn compile(
                 &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * input_shape.dim(1)),
             );
             context.insert("pad", &pads);
+            context.insert("count_include_pad", &count_include_pad);
             context.insert("dilation", &dilations);
 
             // GLSL shader for convolution computation
             match op {
-                "MaxPool" | "AveragePool" | "GlobalAveragePool" => NodeTemplate {
-                    scalar_type: agreed_type(input_shapes, &output_shapes[0..1])?,
-                    template: "pool/aggregate.wgsl",
-                    threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
-                },
+                "MaxPool" | "AveragePool" | "GlobalAveragePool" => {
+                    if input_shape.dim(1) % 4 == 0 {
+                        NodeTemplate {
+                            scalar_type: agreed_type(input_shapes, &output_shapes[0..1])?,
+                            template: "pool/aggregate.wgsl",
+                            threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
+                        }
+                    } else {
+                        NodeTemplate {
+                            scalar_type: agreed_type(input_shapes, &output_shapes[0..1])?,
+                            template: "pool/aggregate.wgsl",
+                            threads: (ceil(output_lengths[0], 256) as _, 1, 1),
+                        }
+                    }
+                }
                 "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish" => {
                     // Alpha is the Leaky Relu attribute
                     let alpha = get_attribute("alpha", Some(0.01), node)?;
