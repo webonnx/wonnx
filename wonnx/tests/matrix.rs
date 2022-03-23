@@ -118,7 +118,7 @@ fn test_resize() {
         vec![tensor("X", &[1, 1, 2, 4])],
         vec![tensor("Y", &[1, 1, 1, 2])],
         vec![],
-        vec![initializer("scales", vec![1., 1., 0.6, 0.6])],
+        vec![initializer("scales", vec![1., 1., 0.6, 0.6], vec![4])],
         vec![node(
             vec!["X", "" /* roi */, "scales"],
             vec!["Y"],
@@ -143,7 +143,7 @@ fn test_resize() {
         vec![tensor("X", &[1, 1, 2, 2])],
         vec![tensor("Y", &[1, 1, 4, 6])],
         vec![],
-        vec![initializer("scales", vec![1., 1., 2., 3.])],
+        vec![initializer("scales", vec![1., 1., 2., 3.], vec![4])],
         vec![node(
             vec!["X", "" /* roi */, "scales"],
             vec!["Y"],

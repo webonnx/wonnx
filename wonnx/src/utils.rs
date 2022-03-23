@@ -311,8 +311,13 @@ pub fn tensor_of_type(
     tensor
 }
 
-pub fn initializer(name: &str, data: Vec<f32>) -> onnx::TensorProto {
+pub fn initializer(name: &str, data: Vec<f32>, dimensions: Vec<i64>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
+    debug_assert_eq!(
+        dimensions.iter().cloned().product::<i64>() as usize,
+        data.len()
+    );
+    initializer.set_dims(dimensions);
     initializer.set_name(name.to_string());
     initializer.set_data_type(TensorProto_DataType::FLOAT.value());
     initializer.set_float_data(data);
@@ -488,7 +493,7 @@ mod tests {
             vec![tensor("X", &shape)],
             vec![tensor("Y", &[1, 1, 3, 3])],
             vec![tensor("W", &[2, c, 3, 3])],
-            vec![initializer("W", data_w)],
+            vec![initializer("W", data_w, vec![2, c, 3, 3])],
             vec![node(
                 vec!["X", "W"],
                 vec!["Y"],
