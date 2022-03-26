@@ -100,7 +100,7 @@ fn test_int64_initializers() {
     let model = model(graph(
         vec![tensor_of_type("X", &dims, TensorProto_DataType::INT64)],
         vec![tensor_of_type("Z", &dims, TensorProto_DataType::INT64)],
-        vec![tensor_of_type("Y", &dims, TensorProto_DataType::INT64)],
+        vec![],
         vec![initializer_int64("Y", right)],
         vec![node(vec!["X", "Y"], vec!["Z"], "adder", "Add", vec![])],
     ));

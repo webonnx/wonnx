@@ -33,17 +33,12 @@ fn batch_normalization() {
     let bn_model = model(graph(
         vec![tensor("X", &shape)],
         vec![tensor("Y", &shape)],
+        vec![],
         vec![
-            tensor("scale", &[channels as i64]),
-            tensor("B", &[channels as i64]),
-            tensor("input_mean", &[channels as i64]),
-            tensor("input_var", &[channels as i64]),
-        ],
-        vec![
-            initializer("scale", scale),
-            initializer("B", b),
-            initializer("input_mean", mean),
-            initializer("input_var", var),
+            initializer("scale", scale, vec![channels as i64]),
+            initializer("B", b, vec![channels as i64]),
+            initializer("input_mean", mean, vec![channels as i64]),
+            initializer("input_var", var, vec![channels as i64]),
         ],
         vec![node(
             vec!["X", "scale", "B", "input_mean", "input_var"],
