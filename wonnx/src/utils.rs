@@ -432,16 +432,26 @@ pub fn node(
 pub fn graph(
     inputs: Vec<onnx::ValueInfoProto>,
     outputs: Vec<onnx::ValueInfoProto>,
-    infos: Vec<onnx::ValueInfoProto>,
+    mut infos: Vec<onnx::ValueInfoProto>,
     initializers: Vec<onnx::TensorProto>,
     nodes: Vec<onnx::NodeProto>,
 ) -> onnx::GraphProto {
     let mut graph = onnx::GraphProto::new();
     graph.set_node(protobuf::RepeatedField::from(nodes));
     graph.set_input(protobuf::RepeatedField::from(inputs));
-    graph.set_value_info(protobuf::RepeatedField::from(infos));
     graph.set_output(protobuf::RepeatedField::from(outputs));
+
+    // Auto-generate tensor information for initializers so users don't have to specify those
+    for i in &initializers {
+        infos.push(tensor_of_type(
+            i.get_name(),
+            i.get_dims(),
+            onnx::TensorProto_DataType::from_i32(i.get_data_type()).unwrap(),
+        ));
+    }
+
     graph.set_initializer(protobuf::RepeatedField::from(initializers));
+    graph.set_value_info(protobuf::RepeatedField::from(infos));
     graph
 }
 
@@ -556,8 +566,8 @@ mod tests {
         let conv_model = model(graph(
             vec![tensor("X", &shape)],
             vec![tensor("Y", &[1, 1, 3, 3])],
-            vec![tensor("W", &[2, c, 3, 3])],
-            vec![initializer("W", data_w, vec![2, c, 3, 3])],
+            vec![],
+            vec![initializer("W", data_w, vec![m, c, 3, 3])],
             vec![node(
                 vec!["X", "W"],
                 vec!["Y"],
