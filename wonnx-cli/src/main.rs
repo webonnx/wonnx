@@ -231,7 +231,7 @@ async fn run() -> Result<(), NNXError> {
                     println!(
                         "time for 100 inferences: {}ms ({}/s)",
                         benchmark_time.as_millis(),
-                        1000 / benchmark_time.as_millis()
+                        1000 / (benchmark_time.as_millis() / 100)
                     );
                 }
                 backend.infer(&infer_opt, &inputs, &model).await
