@@ -160,7 +160,7 @@ impl GpuModel {
         nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
     ) -> Result<(), GpuError> {
         let node_identifier = node.identifier();
-        let outputs_readable = nodes_readable.contains(&node_identifier);
+        let mut outputs_readable = nodes_readable.contains(&node_identifier);
 
         // Sequence inputs
         let mut input_tensors: Vec<GpuTensor> = vec![];
@@ -169,12 +169,15 @@ impl GpuModel {
             // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
             if let NodeDefinition::Outputs { .. } = &node.definition {
                 nodes_readable.insert(identifier.clone());
+                outputs_readable = true;
             }
 
-            if let NodeDefinition::Operator(op_def) = &node.definition {
-                // For these ops we just forward the buffer (so we should also forward readability)
-                if op_def.proto.get_op_type() == "Reshape" {
-                    nodes_readable.insert(identifier.clone());
+            if outputs_readable {
+                if let NodeDefinition::Operator(op_def) = &node.definition {
+                    // For these ops we just forward the buffer (so we should also forward readability)
+                    if op_forwards_input(op_def.proto.get_op_type()) {
+                        nodes_readable.insert(identifier.clone());
+                    }
                 }
             }
 
@@ -422,6 +425,15 @@ fn buffer_with_bytes(
     })
 }
 
+/// Returns whether the op of the specified type will forward inputs unchanged. If this is the case, the inputs of such
+/// an op should be marked as 'outputs readable' if the output of the op itself is to be readable.
+fn op_forwards_input(op_type: &str) -> bool {
+    matches!(
+        op_type,
+        "Reshape" | "Identity" | "Flatten" | "Squeeze" | "Unsqueeze" | "Dropout"
+    )
+}
+
 impl<'model> OperatorDefinition<'model> {
     fn gpu_op(
         &self,
@@ -433,17 +445,14 @@ impl<'model> OperatorDefinition<'model> {
         let proto = &self.proto;
 
         // Some nodes have specific GPU implementations, match these here
-        match proto.get_op_type() {
+        if op_forwards_input(proto.get_op_type()) {
             // Some ops do nothing but forward their input
-            "Reshape" | "Identity" | "Flatten" | "Squeeze" | "Unsqueeze" | "Dropout" => {
-                let value_shape = &self.output_shapes[0];
-                let output_tensor = GpuTensor {
-                    buffer: input_tensors[0].buffer.clone(),
-                    shape: value_shape.clone(),
-                };
-                return Ok(GpuStep::Forward(output_tensor));
-            }
-            _ => {}
+            let value_shape = &self.output_shapes[0];
+            let output_tensor = GpuTensor {
+                buffer: input_tensors[0].buffer.clone(),
+                shape: value_shape.clone(),
+            };
+            return Ok(GpuStep::Forward(output_tensor));
         }
 
         let label = Some(proto.get_name());
