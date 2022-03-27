@@ -445,8 +445,7 @@ pub fn compile(
             };
 
             /* Describes the axis of the inputs when coerced to 2D; defaults to one because the 0th axis most likely
-            describes the batch_size. From version 13 onwards, counting backwards is also allowed. We only support the
-            variant with [1,n] input tensors, where axis is 1 or -1 */
+            describes the batch_size. From version 13 onwards, counting backwards is also allowed. */
             let mut axis = get_attribute("axis", Some(default_axis), node)?;
             if axis < 0 {
                 if opset_version >= 13 {
@@ -460,7 +459,7 @@ pub fn compile(
                 }
             }
 
-            if axis >= (input_shapes[0].rank() as i64) {
+            if axis >= (input_shapes[0].rank() as i64) || axis < 0 {
                 return Err(CompileError::InvalidAttributeValue {
                     attribute: "axis".to_string(),
                     value: format!("{}", axis),
@@ -468,20 +467,57 @@ pub fn compile(
                 });
             }
 
-            if axis != 1 {
-                return Err(CompileError::UnimplementedVariant {
-                    variant: format!(
-                        "softmax on an axis ({}) other than the second with [1,n] inputs",
-                        axis,
-                    ),
-                    op: "Softmax".to_string(),
-                });
-            }
+            let left_of_axis = input_shapes[0].dims[0..(axis as usize)]
+                .iter()
+                .product::<u64>();
+            let axis_chunk = input_shapes[0].dims[(axis as usize)..]
+                .iter()
+                .product::<u64>();
+            let right_of_axis_chunk = input_shapes[0].dims[((axis + 1) as usize)..]
+                .iter()
+                .product::<u64>();
+            log::info!(
+                "axis={}, left_of_axis={:?} slice={:?} axis_chunk={:?} slice={:?} right_of_axis_chunk={:?}",
+                axis,
+                left_of_axis,
+                &input_shapes[0].dims[0..(axis as usize)],
+                axis_chunk,
+                &input_shapes[0].dims[(axis as usize)..],
+                right_of_axis_chunk
+            );
 
-            NodeTemplate {
-                scalar_type: agreed_type(input_shapes, output_shapes)?,
-                template: "endomorphism/softmax.wgsl",
-                threads: (1, 1, 1),
+            context.insert("axis_chunk", &axis_chunk);
+
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                left_of_axis,
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+            context.insert("workgroup_size_x", &workgroup_size_x);
+
+            // For opset version < 11, Softmax simply aggregates all values in an axis layer. For later opsets, Softmax
+            // calculates it per-layer.
+            if opset_version < 11 {
+                context.insert("workgroup_size_y", &1);
+                NodeTemplate {
+                    scalar_type: agreed_type(input_shapes, output_shapes)?,
+                    template: "endomorphism/softmax.wgsl",
+                    threads: (x_threads, 1, 1),
+                }
+            } else {
+                context.insert("right_of_axis_chunk", &right_of_axis_chunk);
+                context.insert("axis_dims", &input_shapes[0].dims[axis as usize]);
+                let (y_threads, workgroup_size_y) = workgroup_size(
+                    right_of_axis_chunk,
+                    MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                    MAX_WORKGROUP_SIZE_Y,
+                )?;
+                context.insert("workgroup_size_y", &workgroup_size_y);
+                NodeTemplate {
+                    scalar_type: agreed_type(input_shapes, output_shapes)?,
+                    template: "endomorphism/softmax.wgsl",
+                    threads: (x_threads, y_threads, 1),
+                }
             }
         }
 

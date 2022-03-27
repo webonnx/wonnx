@@ -174,6 +174,17 @@ backend_test.include(f"test_maxpool_2d_[a-z,_]*_[a-z,_]*")
 backend_test.include(f"test_averagepool_2d_[a-z,_]*")
 backend_test.include(f"test_globalaveragepool_[a-z,_]*")
 
+# Softmax
+# For some reason, these test cases are expanded to "_expanded_cpu" (they appear to do Softmax followed by ReduceMax and
+# some other operations) which currently appear to fail. Therefore only execute the test cases specific to Softmax for now
+backend_test.include(f"test_softmax_axis_0_cpu$")
+backend_test.include(f"test_softmax_axis_1_cpu$")
+backend_test.include(f"test_softmax_axis_2_cpu$")
+backend_test.include(f"test_softmax_large_number_cpu$")
+backend_test.include(f"test_softmax_example_cpu$")
+backend_test.include(f"test_softmax_negative_axis_cpu$")
+backend_test.include(f"test_softmax_default_axis_cpu$")
+
 globals().update(backend_test.enable_report().test_cases)
 
 if __name__ == "__main__":
