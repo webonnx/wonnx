@@ -102,7 +102,7 @@ jobs:
       - name: checkout repo
         uses: actions/checkout@v2
         with:
-          lfs: true
+          lfs: false
 
       # Only run clippy on MSRV
       - name: install rust stable
@@ -161,6 +161,10 @@ jobs:
         if: matrix.kind == 'local'
         shell: bash
         run: |
+          # Download model and image data 
+          wget https://wonnx.s3.eu-west-3.amazonaws.com/data.zip
+          rm -rf data
+          unzip data.zip
           # run unit and player tests
           cargo test --no-fail-fast -- --nocapture
           # run native tests
