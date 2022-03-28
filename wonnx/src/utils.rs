@@ -455,14 +455,18 @@ pub fn graph(
     graph
 }
 
-pub fn model(graph: onnx::GraphProto) -> onnx::ModelProto {
+pub fn model_with_opset(graph: onnx::GraphProto, opset_version: i64) -> onnx::ModelProto {
     let mut model = crate::onnx::ModelProto::new();
     let mut onnx_opset_import = OperatorSetIdProto::new();
     onnx_opset_import.set_domain("".to_string());
-    onnx_opset_import.set_version(13);
+    onnx_opset_import.set_version(opset_version);
     model.set_opset_import(RepeatedField::from_slice(&[onnx_opset_import]));
     model.set_graph(graph);
     model
+}
+
+pub fn model(graph: onnx::GraphProto) -> onnx::ModelProto {
+    model_with_opset(graph, 13)
 }
 
 impl From<Vec<i64>> for onnx::AttributeProto {

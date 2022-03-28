@@ -53,6 +53,7 @@ impl PySession {
 /// This module is implemented in Rust.
 #[pymodule]
 fn wonnx(_py: Python, m: &PyModule) -> PyResult<()> {
+    env_logger::init();
     m.add_class::<PySession>().unwrap();
     Ok(())
 }

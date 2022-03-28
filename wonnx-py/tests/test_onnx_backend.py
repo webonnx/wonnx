@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import absolute_import
+import numpy as np
+import wonnx
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
@@ -34,9 +36,6 @@ import numpy  # type: ignore
 
 # This is a pytest magic variable to load extra plugins
 pytest_plugins = ("onnx.backend.test.report",)
-
-import wonnx
-import numpy as np
 
 
 class DummyRep(BackendRep):
@@ -179,6 +178,17 @@ backend_test.include(f"test_globalaveragepool_[a-z,_]*")
 # - test_pow_types (WGSL doesn't support pow(x,y) with non-f32 arguments)
 backend_test.include(f"^test_pow_example")
 backend_test.include(f"^test_pow_cpu$")
+
+# Softmax
+# For some reason, these test cases are expanded to "_expanded_cpu" (they appear to do Softmax followed by ReduceMax and
+# some other operations) which currently appear to fail. Therefore only execute the test cases specific to Softmax for now
+backend_test.include(f"test_softmax_axis_0_cpu$")
+backend_test.include(f"test_softmax_axis_1_cpu$")
+backend_test.include(f"test_softmax_axis_2_cpu$")
+backend_test.include(f"test_softmax_large_number_cpu$")
+backend_test.include(f"test_softmax_example_cpu$")
+backend_test.include(f"test_softmax_negative_axis_cpu$")
+backend_test.include(f"test_softmax_default_axis_cpu$")
 
 globals().update(backend_test.enable_report().test_cases)
 

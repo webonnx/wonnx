@@ -3713,6 +3713,7 @@ dependencies = [
 name = "wonnx-py"
 version = "0.1.1"
 dependencies = [
+ "env_logger",
  "pollster",
  "protobuf",
  "pyo3",
