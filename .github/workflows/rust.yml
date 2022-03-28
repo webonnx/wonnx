@@ -162,7 +162,7 @@ jobs:
         shell: bash
         run: |
           # Download model and image data 
-          wget https://wonnx.s3.eu-west-3.amazonaws.com/data.zip
+          curl https://wonnx.s3.eu-west-3.amazonaws.com/data.zip -J -O
           rm -rf data
           unzip data.zip
           # run unit and player tests
