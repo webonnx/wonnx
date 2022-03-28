@@ -676,17 +676,17 @@ pub fn compile(
             let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
                 "SAME_UPPER" => {
-                    let pad_0 = (output_shapes[0].dim(0) as i64 - 1) * strides[0] + kernel_shape[0]
-                        - input_shapes[0].dim(0) as i64;
-                    let pad_1 = (output_shapes[0].dim(1) as i64 - 1) * strides[1] + kernel_shape[1]
-                        - input_shapes[0].dim(1) as i64;
+                    let pad_0 = (output_shapes[0].dim(2) as i64 - 1) * strides[0] + kernel_shape[0]
+                        - input_shapes[0].dim(3) as i64;
+                    let pad_1 = (output_shapes[0].dim(2) as i64 - 1) * strides[1] + kernel_shape[1]
+                        - input_shapes[0].dim(3) as i64;
                     vec![pad_0 / 2, pad_1 / 2]
                 }
                 "SAME_LOWER" => {
-                    let pad_0 = (output_shapes[0].dim(0) as i64 - 1) * strides[0] + kernel_shape[0]
-                        - input_shapes[0].dim(0) as i64;
-                    let pad_1 = (output_shapes[0].dim(1) as i64 - 1) * strides[1] + kernel_shape[1]
-                        - input_shapes[0].dim(1) as i64;
+                    let pad_0 = (output_shapes[0].dim(2) as i64 - 1) * strides[0] + kernel_shape[0]
+                        - input_shapes[0].dim(3) as i64;
+                    let pad_1 = (output_shapes[0].dim(2) as i64 - 1) * strides[1] + kernel_shape[1]
+                        - input_shapes[0].dim(3) as i64;
                     vec![pad_0 - pad_0 / 2, pad_1 - pad_1 / 2]
                 }
                 _ => {

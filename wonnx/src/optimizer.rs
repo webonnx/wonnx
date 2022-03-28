@@ -239,6 +239,7 @@ impl<'model> Optimizer<'model> {
                                     &op_def.proto,
                                 )? == "SAME_UPPER")
                             && get_attribute("strides", Some(vec![1, 1]), &op_def.proto)? == [1, 1]
+                            && op_def.output_shapes[0].dim(1) % 4 == 0
                         {
                             if let NodeDefinition::Tensor(tensor) =
                                 &new_inputs[1].source_node.definition
