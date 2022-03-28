@@ -174,6 +174,12 @@ backend_test.include(f"test_maxpool_2d_[a-z,_]*_[a-z,_]*")
 backend_test.include(f"test_averagepool_2d_[a-z,_]*")
 backend_test.include(f"test_globalaveragepool_[a-z,_]*")
 
+# Pow: not supported are:
+# - test_pow_bcast* (Pow with broadcast!=0 is not implemented)
+# - test_pow_types (WGSL doesn't support pow(x,y) with non-f32 arguments)
+backend_test.include(f"^test_pow_example")
+backend_test.include(f"^test_pow_cpu$")
+
 globals().update(backend_test.enable_report().test_cases)
 
 if __name__ == "__main__":

@@ -486,13 +486,21 @@ pub fn compile(
         }
 
         // Arithmetic operation
-        "Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less" | "LessOrEqual"
-        | "Mod" | "Mul" | "Or" | "Sub" => {
+        op @ ("Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less"
+        | "LessOrEqual" | "Mod" | "Mul" | "Or" | "Sub" | "Pow") => {
+            let broadcast = get_attribute("broadcast", Some(0), node)?;
+            if broadcast != 0 {
+                return Err(CompileError::UnimplementedVariant {
+                    op: op.to_string(),
+                    variant: "broadcast".to_string(),
+                });
+            }
+
             let coefficient = get_attribute("coefficient", Some(1.0), node)?;
             context.insert("coefficient", &coefficient);
             context.insert(
                 "op_type",
-                match node.get_op_type() {
+                match op {
                     "Add" => "+",
                     "And" => "&",
                     "Div" => "/",
@@ -505,6 +513,7 @@ pub fn compile(
                     "Mul" => "*",
                     "Or" => "|",
                     "Sub" => "-",
+                    "Pow" => "Pow",
                     _ => {
                         return Err(CompileError::UnimplementedOp(
                             node.get_op_type().to_string(),
