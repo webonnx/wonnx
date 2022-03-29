@@ -92,12 +92,18 @@ To work on wonnx itself, follow the following steps:
 
 - Install Rust
 - Install Vulkan, Metal, or DX12 for the GPU API.
-- Ensure Git LFS is installed
+- Ensure Git LFS is installed or use the download link: https://wonnx.s3.eu-west-3.amazonaws.com/data.zip 
+> Please avoid heavy-usage of this community hosting.
 - git clone this repo.
 
-```bash
+```bash 
 git clone https://github.com/webonnx/wonnx.git
+# With Git LFS
 git lfs install
+# With Download link
+wget https://wonnx.s3.eu-west-3.amazonaws.com/data.zip
+rm -rf data
+unzip data.zip
 ```
 
 Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then, you're all set!
