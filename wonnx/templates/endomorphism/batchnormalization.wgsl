@@ -2,35 +2,35 @@
 {%- include "structs.wgsl" -%}
 
 struct Block {
-	data: [[stride({{ elem_stride }})]] array<{{ elem_type }}>;
+	data: array<{{ elem_type }}>,
 };
 
 // X (input)
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: Block;
 
 // Scale
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, read> input_1: Array;
 
 // B (bias)
-[[group(0), binding(2)]]
+@group(0) @binding(2)
 var<storage, read> input_2: Array;
 
 // Input mean
-[[group(0), binding(3)]]
+@group(0) @binding(3)
 var<storage, read> input_3: Array;
 
 // Input variance
-[[group(1), binding(0)]]
+@group(1) @binding(0)
 var<storage, read> input_4: Array;
 
 // Y (Output)
-[[group(1), binding(1)]]
+@group(1) @binding(1)
 var<storage, write> output_0: Block;
 
-[[stage(compute), workgroup_size(1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@stage(compute) @workgroup_size(1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let channel = global_id.y;
 	let batch = global_id.z;
 	let index = global_id.x + batch * {{ batch_size }}u + channel * {{ channel_size }}u;
