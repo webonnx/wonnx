@@ -1,13 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-
-import numpy as np
-import wonnx
-
 import itertools
 import os
 import platform
@@ -21,7 +13,8 @@ import onnx.shape_inference
 import onnx.version_converter
 from typing import NamedTuple, Optional, Text, Any, Tuple, Sequence
 from onnx import NodeProto, ModelProto, TensorProto
-import numpy  # type: ignore
+import numpy as np
+import wonnx
 
 # The following just executes the fake backend through the backend test
 # infrastructure. Since we don't have full reference implementation of all ops
