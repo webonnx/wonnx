@@ -37,9 +37,7 @@ pub enum WonnxError {
     TypeError(#[from] DataTypeError),
 }
 
-/// Creates a new session connected to the GPU.
-///
-/// Generate a session that will translate the onnx format into WGSL instructions.
+/// An inference [session](Session) represents a model that is loaded and ready to perform inference on the GPU.
 ///
 /// # Examples
 ///
@@ -89,6 +87,7 @@ pub enum SessionError {
     OptimizerError(#[from] OptimizerError),
 }
 
+/// Provides optional configuration when creating an inference [Session].
 #[non_exhaustive]
 pub struct SessionOptions {
     /// When set, only the specified outputs will be calculated, and nodes that are not inputs to these outputs may not be processed
@@ -96,10 +95,12 @@ pub struct SessionOptions {
 }
 
 impl SessionOptions {
+    /// Creates a new [SessionOptions] struct with the default options set.
     pub fn new() -> Self {
         Self { outputs: None }
     }
 
+    /// Sets [`SessionOptions::outputs`] to the specified value and returns [Self].
     pub fn with_outputs(mut self, outputs: Option<Vec<String>>) -> Self {
         self.outputs = outputs;
         self
@@ -113,13 +114,13 @@ impl Default for SessionOptions {
 }
 
 impl Session {
-    // Read an ONNX model from a path and create a session.
+    // Read an ONNX model from a path and create a session, using default [session options](SessionOptions).
     pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Session, SessionError> {
         let model = onnx::ModelProto::parse_from_bytes(&std::fs::read(path)?)?;
         Session::from_model(model).await
     }
 
-    // Read an ONNX model from a path and create a session.
+    // Read an ONNX model from a path and create a session using the specified [session options](SessionOptions).
     pub async fn from_path_with_options<P: AsRef<Path>>(
         path: P,
         options: &SessionOptions,
@@ -128,13 +129,13 @@ impl Session {
         Session::from_model_with_options(model, options).await
     }
 
-    /// Read an ONNX model from bytes and create a session
+    /// Read an ONNX model from bytes and create a session, using default [session options](SessionOptions).
     pub async fn from_bytes(bytes: &[u8]) -> Result<Session, SessionError> {
         let model = onnx::ModelProto::parse_from_bytes(bytes)?;
         Session::from_model(model).await
     }
 
-    /// Read an ONNX model from bytes and create a session with the specified options
+    /// Read an ONNX model from bytes and create a session with the specified [session options](SessionOptions).
     pub async fn from_bytes_with_options(
         bytes: &[u8],
         options: &SessionOptions,
@@ -143,6 +144,7 @@ impl Session {
         Session::from_model_with_options(model, options).await
     }
 
+    /// Create a session using the provided [`onnx::ModelProto`] and [session options](SessionOptions).
     pub async fn from_model_with_options(
         model: onnx::ModelProto,
         options: &SessionOptions,
@@ -184,7 +186,7 @@ impl Session {
         Ok(Session { gpu_model })
     }
 
-    // Create a Session given an ONNX model.
+    /// Create a Session given an ONNX model, using default [session options](SessionOptions).
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session, SessionError> {
         Self::from_model_with_options(model, &SessionOptions::new()).await
     }
