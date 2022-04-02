@@ -115,6 +115,10 @@ pub struct InferOptions {
     #[structopt(long)]
     pub output_name: Option<String>,
 
+    /// Whether to attempt to only partially execute the model for the specified output
+    #[structopt(long)]
+    pub partial: bool,
+
     /// Vocab file for text encoding
     #[structopt(
         long = "vocab",

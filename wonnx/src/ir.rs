@@ -38,7 +38,7 @@ pub enum NodeDefinition<'model> {
     Operator(Box<OperatorDefinition<'model>>),
     Tensor(Box<Cow<'model, TensorProto>>),
     Input(&'model ValueInfoProto),
-    Outputs { names: Vec<&'model str> },
+    Outputs { names: Vec<String> },
     Missing, // A missing input (optional)
 }
 
@@ -179,7 +179,10 @@ impl<'model> Node<'model> {
     }
 
     /// Construct an intermediate representation graph for calculating the output with the specified name.
-    pub fn from_model(model: &'model ModelProto) -> Result<Arc<Node<'model>>, IrError> {
+    pub fn from_model(
+        model: &'model ModelProto,
+        outputs: Option<&[String]>,
+    ) -> Result<Arc<Node<'model>>, IrError> {
         // Collect value shapes
         let mut value_shapes: HashMap<&'model str, Shape> = HashMap::new();
         for vi in model.get_graph().get_value_info() {
@@ -216,6 +219,16 @@ impl<'model> Node<'model> {
             );
         }
 
+        let output_names: Vec<String> = match outputs {
+            Some(outputs) => outputs.to_vec(),
+            None => model
+                .get_graph()
+                .get_output()
+                .iter()
+                .map(|x| x.get_name().to_string())
+                .collect(),
+        };
+
         // Collect input name
         for input in model.get_graph().get_input().iter() {
             if !node_definitions_by_output.contains_key(input.get_name()) {
@@ -232,18 +245,15 @@ impl<'model> Node<'model> {
 
         let mut nodes_by_name = HashMap::new();
 
-        let output_nodes: Result<Vec<Input<'model>>, IrError> = model
-            .get_graph()
-            .get_output()
+        let output_nodes: Result<Vec<Input<'model>>, IrError> = output_names
             .iter()
-            .map(|output_def| {
-                let output_name_string = output_def.get_name().to_string();
+            .map(|output_name| {
                 let output_node = model
                     .get_graph()
                     .get_node()
                     .iter()
-                    .find(|x| -> bool { x.get_output().contains(&output_name_string) })
-                    .ok_or(IrError::OutputNodeNotFound(output_name_string))?;
+                    .find(|x| -> bool { x.get_output().contains(output_name) })
+                    .ok_or_else(|| IrError::OutputNodeNotFound(output_name.clone()))?;
 
                 let source_node = Node::<'model>::from_node(
                     model,
@@ -256,23 +266,14 @@ impl<'model> Node<'model> {
                 let output_index = output_node
                     .get_output()
                     .iter()
-                    .position(|s| s == output_def.get_name())
-                    .ok_or_else(|| {
-                        IrError::OutputNodeNotFound(output_def.get_name().to_string())
-                    })?;
+                    .position(|s| s == output_name)
+                    .ok_or_else(|| IrError::OutputNodeNotFound(output_name.clone()))?;
 
                 Ok(Input {
                     source_node,
                     output_index,
                 })
             })
-            .collect();
-
-        let output_names: Vec<&str> = model
-            .get_graph()
-            .get_output()
-            .iter()
-            .map(|output_def| output_def.get_name())
             .collect();
 
         Ok(Arc::new(Node {
