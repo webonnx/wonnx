@@ -145,5 +145,6 @@ fn test_pow() {
         1.0, 2.0, 8.999998, 64.0, 1.0, 6.0, 48.999985, 512.0, 1.0, 10.0, 120.99996, 1727.9989, 1.0,
         14.0, 224.99994, 4096.0,
     ];
-    assert_eq!(result["Z"], OutputTensor::F32(expected));
+
+    common::assert_eq_vector((&result["Z"]).try_into().unwrap(), expected.as_slice());
 }
