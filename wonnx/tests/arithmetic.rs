@@ -120,8 +120,8 @@ fn test_pow() {
     let n: usize = 16;
     let mut input_data = HashMap::new();
 
-    // Output should be 0^0, 1^2, 2^3, 3^0, 4^1, ..
-    let x: Vec<f32> = (0..n).map(|x| x as f32).collect();
+    // Output should be 1^0, 2^1, 3^2, 4^3, 5^0, ..
+    let x: Vec<f32> = (0..n).map(|x| (x + 1) as f32).collect();
     let y: Vec<f32> = (0..n).map(|x| (x % 4) as f32).collect();
 
     let shape = vec![n as i64];
@@ -142,8 +142,8 @@ fn test_pow() {
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     let expected = vec![
-        1.0, 1.0, 4.0, 26.999992, 1.0, 5.0, 35.999992, 342.9998, 1.0, 9.0, 99.99999, 1330.9991,
-        1.0, 13.0, 195.99994, 3374.9976,
+        1.0, 2.0, 8.999998, 64.0, 1.0, 6.0, 48.999985, 512.0, 1.0, 10.0, 120.99996, 1727.9989, 1.0,
+        14.0, 224.99994, 4096.0,
     ];
     assert_eq!(result["Z"], OutputTensor::F32(expected));
 }
