@@ -89,6 +89,7 @@ pub enum SessionError {
     OptimizerError(#[from] OptimizerError),
 }
 
+#[non_exhaustive]
 pub struct SessionOptions {
     /// When set, only the specified outputs will be calculated, and nodes that are not inputs to these outputs may not be processed
     pub outputs: Option<Vec<String>>,
@@ -97,6 +98,11 @@ pub struct SessionOptions {
 impl SessionOptions {
     pub fn new() -> Self {
         Self { outputs: None }
+    }
+
+    pub fn with_outputs(mut self, outputs: Option<Vec<String>>) -> Self {
+        self.outputs = outputs;
+        self
     }
 }
 
