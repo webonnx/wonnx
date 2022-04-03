@@ -84,6 +84,73 @@ async fn run() -> Result<(), NNXError> {
             let mut inputs: HashMap<String, Tensor> = HashMap::new();
             let mut input_shapes = HashMap::with_capacity(inputs.len());
 
+            // Do we have question and context?
+            if let (Some(question), Some(context)) = (&infer_opt.question, &infer_opt.context) {
+                let tokens_input_shape = model
+                    .get_input_shape(&infer_opt.qa_tokens_input)?
+                    .ok_or_else(|| NNXError::InputNotFound(infer_opt.qa_tokens_input.clone()))?;
+                let mask_input_shape = model
+                    .get_input_shape(&infer_opt.qa_mask_input)?
+                    .ok_or_else(|| NNXError::InputNotFound(infer_opt.qa_mask_input.clone()))?;
+                let segment_input_shape = model
+                    .get_input_shape(&infer_opt.qa_segment_input)?
+                    .ok_or_else(|| NNXError::InputNotFound(infer_opt.qa_segment_input.clone()))?;
+
+                let segment_length = tokens_input_shape.element_count() as usize;
+
+                if segment_length != mask_input_shape.element_count() as usize {
+                    return Err(NNXError::InvalidInputShape);
+                }
+                if segment_length != segment_input_shape.element_count() as usize {
+                    return Err(NNXError::InvalidInputShape);
+                }
+
+                log::info!(
+                    "QA: writing question '{}', context '{}' to {}/{}/{} (segment length: {})",
+                    question,
+                    context,
+                    infer_opt.qa_tokens_input,
+                    infer_opt.qa_mask_input,
+                    infer_opt.qa_segment_input,
+                    segment_length
+                );
+
+                let tok = text::BertTokenizer::new(Path::new(&infer_opt.vocab));
+                let encoding = tok.tokenize_question_answer(question, context)?;
+
+                let mut tokens_input = encoding.get_tokens();
+                let mut mask_input = encoding.get_mask();
+                let mut segment_input = encoding.get_segments();
+                log::info!(
+                    "tokens={:?} mask={:?} segments={:?}",
+                    tokens_input,
+                    mask_input,
+                    segment_input
+                );
+
+                tokens_input.resize(segment_length, 0);
+                mask_input.resize(segment_length, 0);
+                segment_input.resize(segment_length, 0);
+                let tokens_input_data =
+                    ndarray::Array::from_iter(tokens_input.iter().map(|x| (*x) as i64)).into_dyn();
+                let mask_input_data =
+                    ndarray::Array::from_iter(mask_input.iter().map(|x| (*x) as i64)).into_dyn();
+                let segment_input_data =
+                    ndarray::Array::from_iter(segment_input.iter().map(|x| (*x) as i64)).into_dyn();
+                inputs.insert(
+                    infer_opt.qa_tokens_input.clone(),
+                    Tensor::I64(tokens_input_data),
+                );
+                inputs.insert(
+                    infer_opt.qa_mask_input.clone(),
+                    Tensor::I64(mask_input_data),
+                );
+                inputs.insert(
+                    infer_opt.qa_segment_input.clone(),
+                    Tensor::I64(segment_input_data),
+                );
+            }
+
             // Process text inputs
             if !infer_opt.text.is_empty() || !infer_opt.text_mask.is_empty() {
                 let tok = text::BertTokenizer::new(Path::new(&infer_opt.vocab));
@@ -98,7 +165,7 @@ async fn run() -> Result<(), NNXError> {
                     input_shapes.insert(text_input_name.clone(), text_input_shape);
                 }
 
-                // Tokenized text input
+                // Tokenized text input: mask
                 for (text_input_name, text) in &infer_opt.text_mask {
                     let text_input_shape = model
                         .get_input_shape(text_input_name)?

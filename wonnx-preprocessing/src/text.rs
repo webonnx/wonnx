@@ -98,6 +98,25 @@ impl BertTokenizer {
         BertTokenizer { tokenizer }
     }
 
+    pub fn tokenize_question_answer(
+        &self,
+        question: &str,
+        context: &str,
+    ) -> Result<BertEncodedText, PreprocessingError> {
+        Ok(BertEncodedText {
+            encoding: self
+                .tokenizer
+                .encode(
+                    EncodeInput::Dual(
+                        InputSequence::Raw(Cow::from(question)),
+                        InputSequence::Raw(Cow::from(context)),
+                    ),
+                    true,
+                )
+                .map_err(PreprocessingError::TextTokenizationError)?,
+        })
+    }
+
     fn tokenize(&self, text: &str) -> Result<BertEncodedText, PreprocessingError> {
         let encoding = self
             .tokenizer
@@ -143,6 +162,15 @@ impl BertEncodedText {
 
     pub fn get_tokens(&self) -> Vec<i64> {
         self.encoding.get_ids().iter().map(|x| *x as i64).collect()
+    }
+
+    pub fn get_segments(&self) -> Vec<i64> {
+        log::debug!("segment_ids={:?}", self.encoding.get_sequence_ids());
+        self.encoding
+            .get_sequence_ids()
+            .iter()
+            .map(|x| x.unwrap_or(0) as i64)
+            .collect()
     }
 }
 

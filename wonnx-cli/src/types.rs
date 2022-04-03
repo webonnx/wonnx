@@ -127,6 +127,26 @@ pub struct InferOptions {
     )]
     pub vocab: PathBuf,
 
+    /// Sets question for question-answering
+    #[structopt(short = "q")]
+    pub question: Option<String>,
+
+    /// Sets context for question-answering
+    #[structopt(short = "c")]
+    pub context: Option<String>,
+
+    /// When question and context are set: model input to write tokens to
+    #[structopt(default_value = "input_ids:0")]
+    pub qa_tokens_input: String,
+
+    /// When question and context are set: model input to write mask to
+    #[structopt(default_value = "input_mask:0")]
+    pub qa_mask_input: String,
+
+    /// When question and context are set: model input to write segment IDs to
+    #[structopt(default_value = "segment_ids:0")]
+    pub qa_segment_input: String,
+
     /// Set an input to tokenized text (-t input_name="some text")
     #[structopt(short = "t", parse(try_from_str = parse_key_val), number_of_values = 1)]
     pub text: Vec<(String, String)>,
@@ -159,6 +179,7 @@ pub struct InferOptions {
 }
 
 #[derive(Debug, StructOpt)]
+#[allow(clippy::large_enum_variant)]
 pub enum Command {
     /// List available GPU devices
     Devices,
