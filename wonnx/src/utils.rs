@@ -19,7 +19,7 @@ use thiserror::Error;
 * error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
 pub const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Shape {
     pub dims: Vec<u64>,
     pub data_type: ScalarType,
@@ -63,6 +63,100 @@ impl Shape {
         chunk.push(1);
         chunk
     }
+
+    /// Computes the shape to which all provided shapes can be broadcast (if it exists)
+    /// Inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L5
+    pub(crate) fn multi_broadcast(shapes: &[Shape]) -> Option<Shape> {
+        if shapes.is_empty() {
+            return None;
+        }
+
+        let max_rank = shapes.iter().map(|x| x.rank()).max().unwrap_or(0);
+        let mut shape: Vec<i64> = Vec::with_capacity(max_rank);
+
+        // Shapes must all have the same data type
+        let data_type = shapes[0].data_type;
+        for s in shapes {
+            if s.data_type != data_type {
+                return None;
+            }
+        }
+
+        for i in 0..max_rank {
+            let mut wanted_size = 1;
+            for shape in shapes {
+                let rank = shape.rank();
+                let dim = if i < rank { shape.dim(rank - i - 1) } else { 1 };
+
+                if dim != 1 {
+                    if wanted_size != 1 && dim != wanted_size {
+                        return None;
+                    }
+                    wanted_size = dim;
+                }
+            }
+            shape.push(wanted_size as i64);
+        }
+
+        shape.reverse();
+        Some(Shape::from(data_type, &shape))
+    }
+
+    pub(crate) fn left_padded_to(&self, x: u64, rank: usize) -> Shape {
+        let mut dims = self.dims.clone();
+        let current_rank = dims.len();
+        dims.resize(rank, x);
+        if rank > current_rank {
+            dims.rotate_right(rank - current_rank);
+        }
+        Shape {
+            dims,
+            data_type: self.data_type,
+        }
+    }
+}
+
+// Test cases for Shape::multi_broadcast, some inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L31
+#[test]
+pub fn broadcasting() {
+    fn shape(s: &[i64]) -> Shape {
+        Shape::from(ScalarType::F32, s)
+    }
+
+    assert_eq!(
+        Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[])]),
+        Some(shape(&[2, 3, 4, 5])),
+    );
+
+    assert_eq!(
+        Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[5])]),
+        Some(shape(&[2, 3, 4, 5])),
+    );
+
+    assert_eq!(
+        Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[4, 5])]),
+        Some(shape(&[2, 3, 4, 5])),
+    );
+
+    assert_eq!(
+        Shape::multi_broadcast(&[shape(&[4, 5]), shape(&[2, 3, 4, 5])]),
+        Some(shape(&[2, 3, 4, 5])),
+    );
+
+    assert_eq!(
+        Shape::multi_broadcast(&[shape(&[1, 4, 5]), shape(&[2, 3, 4, 1])]),
+        Some(shape(&[2, 3, 4, 5])),
+    );
+
+    assert_eq!(
+        Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 1, 1, 1])]),
+        Some(shape(&[2, 3, 4, 5])),
+    );
+
+    assert_eq!(
+        Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 4, 1, 1])]),
+        None
+    );
 }
 
 pub enum InputTensor<'a> {
