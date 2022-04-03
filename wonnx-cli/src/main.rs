@@ -290,7 +290,24 @@ async fn run() -> Result<(), NNXError> {
                     }
                 }
                 None => {
-                    println!("{:?}", output);
+                    // Just print the output tensor values, one a line
+                    match output {
+                        wonnx::utils::OutputTensor::F32(fs) => {
+                            for i in fs {
+                                println!("{}", i)
+                            }
+                        }
+                        wonnx::utils::OutputTensor::I32(ints) => {
+                            for i in ints {
+                                println!("{}", i)
+                            }
+                        }
+                        wonnx::utils::OutputTensor::I64(ints) => {
+                            for i in ints {
+                                println!("{}", i)
+                            }
+                        }
+                    }
                 }
             }
 
