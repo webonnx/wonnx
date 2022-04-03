@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use prettytable::{cell, row, table, Table};
 use wonnx::{
@@ -135,10 +135,10 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
 
     // List ops used
     struct Usage {
-        attributes: HashSet<String>,
+        attributes: BTreeSet<String>,
     }
 
-    let mut usage: HashMap<&str, Usage> = HashMap::new();
+    let mut usage: BTreeMap<&str, Usage> = BTreeMap::new();
 
     let graph = model.get_graph();
     for node in graph.get_node() {
@@ -148,7 +148,7 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
             usage.insert(
                 node.get_op_type(),
                 Usage {
-                    attributes: HashSet::new(),
+                    attributes: BTreeSet::new(),
                 },
             );
             usage.get_mut(node.get_op_type()).unwrap()
