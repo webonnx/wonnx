@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use wonnx::onnx::ModelProto;
-use wonnx::SessionOptions;
+use wonnx::SessionConfig;
 
 use async_trait::async_trait;
 use wonnx::utils::OutputTensor;
@@ -19,10 +19,10 @@ impl GPUInferer {
         model_path: &str,
         outputs: Option<Vec<String>>,
     ) -> Result<GPUInferer, NNXError> {
-        let session_opts = SessionOptions { outputs };
+        let session_config = SessionConfig::new().with_outputs(outputs);
 
         Ok(GPUInferer {
-            session: wonnx::Session::from_path_with_options(model_path, &session_opts).await?,
+            session: wonnx::Session::from_path_with_config(model_path, &session_config).await?,
         })
     }
 }
