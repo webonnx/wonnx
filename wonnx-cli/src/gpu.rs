@@ -49,7 +49,7 @@ impl Inferer for GPUInferer {
             None => result.values().next().unwrap().clone(),
         };
 
-        log::info!("gpu result: {:?}", result);
+        log::debug!("gpu result: {:?}", result);
         Ok(result)
     }
 }
