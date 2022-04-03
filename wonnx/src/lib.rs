@@ -89,65 +89,65 @@ pub enum SessionError {
 
 /// Provides optional configuration when creating an inference [Session].
 #[non_exhaustive]
-pub struct SessionOptions {
+pub struct SessionConfig {
     /// When set, only the specified outputs will be calculated, and nodes that are not inputs to these outputs may not be processed
     pub outputs: Option<Vec<String>>,
 }
 
-impl SessionOptions {
-    /// Creates a new [SessionOptions] struct with the default options set.
+impl SessionConfig {
+    /// Creates a new [SessionConfig] struct with the default options set.
     pub fn new() -> Self {
         Self { outputs: None }
     }
 
-    /// Sets [`SessionOptions::outputs`] to the specified value and returns [Self].
+    /// Sets [`SessionConfig::outputs`] to the specified value and returns [Self].
     pub fn with_outputs(mut self, outputs: Option<Vec<String>>) -> Self {
         self.outputs = outputs;
         self
     }
 }
 
-impl Default for SessionOptions {
+impl Default for SessionConfig {
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl Session {
-    // Read an ONNX model from a path and create a session, using default [session options](SessionOptions).
+    // Read an ONNX model from a path and create a session, using default [session config](SessionConfig).
     pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Session, SessionError> {
         let model = onnx::ModelProto::parse_from_bytes(&std::fs::read(path)?)?;
         Session::from_model(model).await
     }
 
-    // Read an ONNX model from a path and create a session using the specified [session options](SessionOptions).
-    pub async fn from_path_with_options<P: AsRef<Path>>(
+    // Read an ONNX model from a path and create a session using the specified [session config](SessionConfig).
+    pub async fn from_path_with_config<P: AsRef<Path>>(
         path: P,
-        options: &SessionOptions,
+        config: &SessionConfig,
     ) -> Result<Session, SessionError> {
         let model = onnx::ModelProto::parse_from_bytes(&std::fs::read(path)?)?;
-        Session::from_model_with_options(model, options).await
+        Session::from_model_with_config(model, config).await
     }
 
-    /// Read an ONNX model from bytes and create a session, using default [session options](SessionOptions).
+    /// Read an ONNX model from bytes and create a session, using default [session config](SessionConfig).
     pub async fn from_bytes(bytes: &[u8]) -> Result<Session, SessionError> {
         let model = onnx::ModelProto::parse_from_bytes(bytes)?;
         Session::from_model(model).await
     }
 
-    /// Read an ONNX model from bytes and create a session with the specified [session options](SessionOptions).
-    pub async fn from_bytes_with_options(
+    /// Read an ONNX model from bytes and create a session with the specified [session config](SessionConfig).
+    pub async fn from_bytes_with_config(
         bytes: &[u8],
-        options: &SessionOptions,
+        config: &SessionConfig,
     ) -> Result<Session, SessionError> {
         let model = onnx::ModelProto::parse_from_bytes(bytes)?;
-        Session::from_model_with_options(model, options).await
+        Session::from_model_with_config(model, config).await
     }
 
-    /// Create a session using the provided [`onnx::ModelProto`] and [session options](SessionOptions).
-    pub async fn from_model_with_options(
+    /// Create a session using the provided [`onnx::ModelProto`] and [session config](SessionConfig).
+    pub async fn from_model_with_config(
         model: onnx::ModelProto,
-        options: &SessionOptions,
+        config: &SessionConfig,
     ) -> Result<Session, SessionError> {
         let (device, queue) = resource::request_device_queue().await;
 
@@ -180,15 +180,15 @@ impl Session {
         let onnx_opset_version = onnx_opset_version.ok_or(SessionError::UnknownOnnxOpsetVersion)?;
 
         let mut optimizer = Optimizer::new();
-        let ir = optimizer.optimize(ir::Node::from_model(&model, options.outputs.as_deref())?)?;
+        let ir = optimizer.optimize(ir::Node::from_model(&model, config.outputs.as_deref())?)?;
         let gpu_model = GpuModel::from(ir, device, queue, onnx_opset_version)?;
 
         Ok(Session { gpu_model })
     }
 
-    /// Create a Session given an ONNX model, using default [session options](SessionOptions).
+    /// Create a Session given an ONNX model, using default configuration.
     pub async fn from_model(model: onnx::ModelProto) -> Result<Session, SessionError> {
-        Self::from_model_with_options(model, &SessionOptions::new()).await
+        Self::from_model_with_config(model, &SessionConfig::new()).await
     }
 
     /// Perform inference given the inputs provided and return all the outputs the model was compiled to return.
