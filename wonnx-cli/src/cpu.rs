@@ -54,6 +54,14 @@ impl ToTract for wonnx_preprocessing::Tensor {
                 dims,
                 d.as_slice().unwrap(),
             )?),
+            wonnx_preprocessing::Tensor::I32(d) => Ok(tract_onnx::prelude::Tensor::from_shape(
+                dims,
+                d.as_slice().unwrap(),
+            )?),
+            wonnx_preprocessing::Tensor::I64(d) => Ok(tract_onnx::prelude::Tensor::from_shape(
+                dims,
+                d.as_slice().unwrap(),
+            )?),
         }
     }
 }
