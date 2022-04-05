@@ -482,9 +482,14 @@ pub fn initializer(name: &str, data: Vec<f32>, dimensions: Vec<i64>) -> onnx::Te
     initializer
 }
 
-pub fn initializer_int64(name: &str, data: Vec<i64>) -> onnx::TensorProto {
+pub fn initializer_int64(name: &str, data: Vec<i64>, dimensions: Vec<i64>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
+    debug_assert_eq!(
+        dimensions.iter().cloned().product::<i64>() as usize,
+        data.len()
+    );
     initializer.set_name(name.to_string());
+    initializer.set_dims(dimensions);
     initializer.set_data_type(TensorProto_DataType::INT64.value());
     initializer.set_int64_data(data);
     initializer

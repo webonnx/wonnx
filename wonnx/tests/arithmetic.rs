@@ -102,7 +102,7 @@ fn test_int64_initializers() {
         vec![tensor_of_type("X", &dims, TensorProto_DataType::INT64)],
         vec![tensor_of_type("Z", &dims, TensorProto_DataType::INT64)],
         vec![],
-        vec![initializer_int64("Y", right)],
+        vec![initializer_int64("Y", right, dims.clone())],
         vec![node(vec!["X", "Y"], vec!["Z"], "adder", "Add", vec![])],
     ));
 
