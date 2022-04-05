@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use wonnx::onnx::ModelProto;
+use wonnx::SessionConfig;
 
 use async_trait::async_trait;
 use wonnx::utils::OutputTensor;
@@ -14,9 +15,14 @@ pub struct GPUInferer {
 }
 
 impl GPUInferer {
-    pub async fn new(model_path: &str) -> Result<GPUInferer, NNXError> {
+    pub async fn new(
+        model_path: &str,
+        outputs: Option<Vec<String>>,
+    ) -> Result<GPUInferer, NNXError> {
+        let session_config = SessionConfig::new().with_outputs(outputs);
+
         Ok(GPUInferer {
-            session: wonnx::Session::from_path(model_path).await?,
+            session: wonnx::Session::from_path_with_config(model_path, &session_config).await?,
         })
     }
 }

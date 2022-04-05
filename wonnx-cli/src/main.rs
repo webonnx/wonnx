@@ -148,10 +148,15 @@ async fn run() -> Result<(), NNXError> {
                 input_shapes.insert(input_name.clone(), input_shape.clone());
             }
 
+            let partial_outputs: Option<Vec<String>> = match infer_opt.partial {
+                true => Some(vec![infer_opt.output_name.clone().unwrap()]),
+                false => None,
+            };
+
             #[cfg(feature = "cpu")]
             if infer_opt.compare {
                 let gpu_backend = Backend::Gpu
-                    .inferer_for_model(&model_path, &input_shapes)
+                    .inferer_for_model(&model_path, &input_shapes, partial_outputs.clone())
                     .await?;
                 let gpu_start = std::time::Instant::now();
                 if infer_opt.benchmark {
@@ -168,7 +173,7 @@ async fn run() -> Result<(), NNXError> {
                 drop(gpu_backend);
 
                 let cpu_backend = Backend::Cpu
-                    .inferer_for_model(&model_path, &input_shapes)
+                    .inferer_for_model(&model_path, &input_shapes, partial_outputs.clone())
                     .await?;
                 let cpu_start = std::time::Instant::now();
                 if infer_opt.benchmark {
@@ -219,7 +224,7 @@ async fn run() -> Result<(), NNXError> {
             let first_result = async {
                 let backend = infer_opt
                     .backend
-                    .inferer_for_model(&model_path, &input_shapes)
+                    .inferer_for_model(&model_path, &input_shapes, partial_outputs.clone())
                     .await?;
 
                 if infer_opt.benchmark {
@@ -251,7 +256,7 @@ async fn run() -> Result<(), NNXError> {
                                 );
                                 log::warn!("trying {:?} backend instead", fallback_backend);
                                 let fallback_inferer = fallback_backend
-                                    .inferer_for_model(&model_path, &input_shapes)
+                                    .inferer_for_model(&model_path, &input_shapes, partial_outputs)
                                     .await?;
                                 fallback_inferer.infer(&infer_opt, &inputs, &model).await?
                             }
@@ -318,9 +323,10 @@ impl Backend {
         &self,
         model_path: &str,
         #[allow(unused_variables)] input_shapes: &HashMap<String, Shape>,
+        outputs: Option<Vec<String>>,
     ) -> Result<Box<dyn Inferer>, NNXError> {
         Ok(match self {
-            Backend::Gpu => Box::new(gpu::GPUInferer::new(model_path).await?),
+            Backend::Gpu => Box::new(gpu::GPUInferer::new(model_path, outputs).await?),
             #[cfg(feature = "cpu")]
             Backend::Cpu => Box::new(cpu::CPUInferer::new(model_path, input_shapes).await?),
         })
