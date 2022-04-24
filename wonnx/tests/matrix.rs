@@ -273,3 +273,37 @@ fn test_resize() {
     //];
     //assert_eq!(result["Y"], test_y);
 }
+
+// Multiply a 2x2 matrix with an identity matrix of size 2x2.
+#[test]
+fn test_matmul_square_matrix_small() {
+    let n = 2;
+    let mut input_data = HashMap::new();
+
+    let data_a = ndarray::Array2::eye(n);
+    let mut data_b = ndarray::Array2::<f32>::zeros((n, n));
+    data_b[[0, 0]] = 0.0;
+    data_b[[0, 1]] = 0.5;
+    data_b[[1, 0]] = 1.0;
+    data_b[[1, 1]] = 1.5;
+
+    let sum = data_a.dot(&data_b);
+
+    input_data.insert("A".to_string(), data_a.as_slice().unwrap().into());
+    input_data.insert("B".to_string(), data_b.as_slice().unwrap().into());
+
+    let n = n as i64;
+    let model = model(graph(
+        vec![tensor("A", &[n, n]), tensor("B", &[n, n])],
+        vec![tensor("C", &[n, n])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    common::assert_eq_vector((&result["C"]).try_into().unwrap(), sum.as_slice().unwrap());
+}
