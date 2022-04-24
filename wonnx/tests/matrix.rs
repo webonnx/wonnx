@@ -197,3 +197,34 @@ fn test_matmul_square_matrix_small() {
 
     common::assert_eq_vector((&result["C"]).try_into().unwrap(), sum.as_slice().unwrap());
 }
+
+// Multiply a 4x4 matrix with a ones matrix of size 4x2.
+// a = np.arange(0,16).reshape((4,4))
+// b = np.ones((4,2))
+// c = np.matmul(a, b)
+// array([[ 6.,  6.], [22., 22.], [38., 38.], [54., 54.]])
+#[test]
+fn test_matmul_nonsquare_matrix_small() {
+    let a_data: Vec<f32> = (0..16).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..8).map(|_| 1.0).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+
+    let model = model(graph(
+        vec![tensor("A", &[4, 4]), tensor("B", &[4, 2])],
+        vec![tensor("C", &[4, 2])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    let out = &[6., 6., 22., 22., 38., 38., 54., 54.];
+    println!("Result: {:?}", result["C"]);
+    common::assert_eq_vector((&result["C"]).try_into().unwrap(), out);
+}
