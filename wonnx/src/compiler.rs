@@ -938,7 +938,7 @@ pub fn compile(
                     scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm.wgsl",
                     threads: (
-                        (input_shapes[0].dim(0) * input_shapes[1].dim(1) / 16) as _,
+                        (input_shapes[0].dim(0) * input_shapes[1].dim(1).max(16) / 16) as _,
                         1,
                         1,
                     ),
