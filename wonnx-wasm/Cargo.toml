@@ -26,17 +26,17 @@ lto = true
 
 [dependencies]
 wonnx = { path = "../wonnx" }
-log = "0.4.14" 
+log = "0.4.16"
 #wgpu = { version = "0.12.0" }
 console_log = "0.2.0"
-console_error_panic_hook = "0.1.6"
-wasm-bindgen-console-logger = "0.1"
-getrandom = { version = "0.2", features = ["js"] }
-wasm-bindgen = { version = "0.2.78", features = ["serde-serialize"] } # remember to change version in wiki as well
-wasm-bindgen-futures = "0.4.23"
-wasm-bindgen-test = "0.3.28"
-js-sys = "0.3.50"
-web-sys = { version = "0.3.55", features = [
+console_error_panic_hook = "0.1.7"
+wasm-bindgen-console-logger = "0.1.1"
+getrandom = { version = "0.2.6", features = ["js"] }
+wasm-bindgen = { version = "0.2.80", features = ["serde-serialize"] } # remember to change version in wiki as well
+wasm-bindgen-futures = "0.4.30"
+wasm-bindgen-test = "0.3.30"
+js-sys = "0.3.57"
+web-sys = { version = "0.3.57", features = [
     "Document",
     "Navigator",
     "Node",
@@ -159,4 +159,4 @@ web-sys = { version = "0.3.55", features = [
     "HtmlCanvasElement",
     "OffscreenCanvas",
     "Window",
-]}
+] }
