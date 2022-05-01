@@ -944,14 +944,20 @@ pub fn compile(
                     threads: (output_shapes[0].dim(1) as _, 1, 1),
                 }
             } else {
+                let kernel_size = 2;
+                let n_x_threads = input_shapes[0].dim(0)
+                    * input_shapes[1].dim(1).max(kernel_size * kernel_size)
+                    / (kernel_size * kernel_size);
+                log::info!(
+                    "n_x_threads={} input_shapes={:?}",
+                    n_x_threads,
+                    input_shapes
+                );
+                context.insert("kernel_size", &kernel_size);
                 NodeTemplate {
                     scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm.wgsl",
-                    threads: (
-                        (input_shapes[0].dim(0) * input_shapes[1].dim(1).max(16) / 16) as _,
-                        1,
-                        1,
-                    ),
+                    threads: (n_x_threads as _, 1, 1),
                 }
             }
         }
