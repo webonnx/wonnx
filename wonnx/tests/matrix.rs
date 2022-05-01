@@ -4,6 +4,7 @@ mod common;
 
 #[test]
 fn test_matmul_square_matrix() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let n = 16;
     let mut input_data = HashMap::new();
 
@@ -79,6 +80,7 @@ fn test_two_transposes() {
 
 #[test]
 fn test_split() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let mut input_data = HashMap::new();
     let data = (1..=2 * 6).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
@@ -277,6 +279,7 @@ fn test_resize() {
 // Multiply a 2x2 matrix with an identity matrix of size 2x2.
 #[test]
 fn test_matmul_square_matrix_small() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let n = 2;
     let mut input_data = HashMap::new();
 
@@ -315,6 +318,7 @@ fn test_matmul_square_matrix_small() {
 // array([[ 6.,  6.], [22., 22.], [38., 38.], [54., 54.]])
 #[test]
 fn test_matmul_nonsquare_matrix_small() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let a_data: Vec<f32> = (0..16).map(|x| x as f32).collect();
     let b_data: Vec<f32> = (0..8).map(|_| 1.0).collect();
 
