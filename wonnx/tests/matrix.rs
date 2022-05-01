@@ -203,14 +203,14 @@ fn test_matmul_square_matrix_small() {
 
 // Multiply a 4x4 matrix with a ones matrix of size 4x2.
 // a = np.arange(0,16).reshape((4,4))
-// b = np.ones((4,2))
+// b = np.arange(-8,0).reshape((4,2))
 // c = np.matmul(a, b)
-// array([[ 6.,  6.], [22., 22.], [38., 38.], [54., 54.]])
+//array([[ -20,  -14], [-100,  -78], [-180, -142], [-260, -206]])
 #[test]
 fn test_matmul_nonsquare_matrix_small() {
     let _ = env_logger::builder().is_test(true).try_init();
     let a_data: Vec<f32> = (0..16).map(|x| x as f32).collect();
-    let b_data: Vec<f32> = (0..8).map(|_| 1.0).collect();
+    let b_data: Vec<f32> = (0..8).map(|x| -8.0 + (x as f32)).collect();
 
     let mut input_data = HashMap::new();
     input_data.insert("A".to_string(), a_data.as_slice().into());
@@ -228,7 +228,6 @@ fn test_matmul_nonsquare_matrix_small() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    let out = &[6., 6., 22., 22., 38., 38., 54., 54.];
-    println!("Result: {:?}", result["C"]);
+    let out = &[-20., -14., -100., -78., -180., -142., -260., -206.];
     common::assert_eq_vector((&result["C"]).try_into().unwrap(), out);
 }
