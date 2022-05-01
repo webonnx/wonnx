@@ -23,24 +23,13 @@ var<storage, read> input_1: GemmArrayVector;
 	var<storage, write> output_0: GemmArrayVector;
 {% endif %}
 
-[[stage(compute), workgroup_size(1)]]
+[[stage(compute), workgroup_size({{ workgroup_size_x }})]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
-	{% if i_shape[0][1] < kernel_size %}
-		let n_k = 1u;
-	{% else %}
-		let n_k = {{ i_shape[0][1] / kernel_size | int }}u;
-	{% endif %}
-
-	{% if i_shape[1][1] < kernel_size %}
-		let n_m = 1u;
-	{% else %}
-		let n_m = {{ i_shape[1][1] / kernel_size | int }}u;
-	{% endif %}
-
-	let y = global_id.x % n_m;
-	let x = global_id.x / n_m;
+	let y = global_id.x % {{ n_chunks }}u;
+	let x = global_id.x / {{ n_chunks }}u;
 	let index = x * {{ i_shape[1][1] }}u + y;
 
+	// Create zero vector and matrix of the correct size for later use
 	let zero_vec = GemmVec(
 		{% for i in range(end = kernel_size) %}
 			Scalar(0) {%-if not loop.last -%},{%- endif -%}
@@ -56,19 +45,19 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	var tmpsum = zero_matrix;
 	var product = zero_matrix;
 
-	for(var k: u32 = 0u; k < n_k; k = k + 1u) {
-		let index_left = x * n_k + k;
-		let index_right = k * n_m + y;
+	for(var k: u32 = 0u; k < {{ k_chunks }}u; k = k + 1u) {
+		let index_left = (x * {{ i_shape[0][1] }}u) + k;
+		let index_right = k * {{ i_shape[1][1] }}u + y;
 
 		let mat_left = GemmMat(
 			{% for i in range(end = kernel_size) %}
-				input_0.data[index_left + ({{ i }}u * n_k)] {%-if not loop.last -%},{%- endif -%}
+				input_0.data[index_left + ({{ i }}u * {{ k_chunks }}u)] {%-if not loop.last -%},{%- endif -%}
 			{% endfor %}
 		);
 		
 		let mat_right = GemmMat(
 			{% for i in range(end = kernel_size) %}
-				input_1.data[index_right + ({{ i }}u * n_m)] {%-if not loop.last -%},{%- endif -%}
+				input_1.data[index_right + ({{ i * n_chunks }}u)] {%-if not loop.last -%},{%- endif -%}
 			{% endfor %}
 		);
 	
@@ -87,7 +76,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 			{% endfor %}
 		));
 		for(var index_mat: u32 = 0u; index_mat < {{ kernel_size }}u; index_mat = index_mat + 1u) {
-			output_0.data[index + index_mat * n_m] = 
+			output_0.data[index + index_mat * {{ n_chunks }}u] = 
 				{%- if alpha != 1 -%} {{ alpha | float }} * {%- endif -%} 
 				tmpsum[index_mat] + 
 				{%- if beta != 1 -%} {{ beta | float }} * {%- endif -%} 
@@ -96,7 +85,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		}
 	{% else %}
 		for(var index_mat: u32 = 0u; index_mat < {{ kernel_size }}u; index_mat = index_mat + 1u) {
-			output_0.data[index + (index_mat * n_m)] = {% if alpha != 1 -%} {{ alpha | float }} * {%- endif -%} tmpsum[index_mat];
+			output_0.data[index + (index_mat * {{ n_chunks }}u)] = {% if alpha != 1 -%} {{ alpha | float }} * {%- endif -%} tmpsum[index_mat];
 		}
 	{% endif %}
 }
