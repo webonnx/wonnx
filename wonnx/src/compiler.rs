@@ -1,6 +1,7 @@
 use crate::utils::{
     ceil, get_attribute, AttributeNotFoundError, DataTypeError, MultiType, ScalarType, Shape,
 };
+use num::integer::gcd;
 use tera::{Context, Tera};
 use thiserror::Error;
 
@@ -894,6 +895,24 @@ pub fn compile(
         }
         op @ ("Gemm" | "MatMul") => {
             // Generic matrix multiplication; outputs an M*N matrix from inputs A (M*K) and B (K*N)
+            // Check dimensions
+            let dim_m = output_shapes[0].dim(0);
+            let dim_n = output_shapes[0].dim(1);
+            let dim_k = input_shapes[0].dim(1);
+            if dim_m != input_shapes[0].dim(0) {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 0,
+                    input_shape: input_shapes[0].clone(),
+                });
+            }
+
+            if dim_n != input_shapes[1].dim(1) || dim_k != input_shapes[1].dim(0) {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 1,
+                    input_shape: input_shapes[1].clone(),
+                });
+            }
+
             // Check if A resp. B should be transposed, or C should be broadcast (default: 0 = false)
             if op == "Gemm" {
                 let transpose_a = get_attribute("transA", Some(0), node)?;
@@ -914,44 +933,39 @@ pub fn compile(
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
-            // Check dimensions
-            if output_shapes[0].dim(0) != input_shapes[0].dim(0) {
-                return Err(CompileError::InvalidInputShape {
-                    input_index: 0,
-                    input_shape: input_shapes[0].clone(),
-                });
-            }
-
-            if output_shapes[0].dim(1) != input_shapes[1].dim(1)
-                || input_shapes[0].dim(1) != input_shapes[1].dim(0)
-            {
-                return Err(CompileError::InvalidInputShape {
-                    input_index: 1,
-                    input_shape: input_shapes[1].clone(),
-                });
-            }
-
-            if input_shapes[0].dim(0) == 1 {
+            if dim_m == 1 {
                 NodeTemplate {
                     scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm_1.wgsl",
                     threads: (output_shapes[0].dim(1) as _, 1, 1),
                 }
             } else {
-                let kernel_size = 2;
-                let n_x_threads = input_shapes[0].dim(0)
-                    * input_shapes[1].dim(1).max(kernel_size * kernel_size)
-                    / (kernel_size * kernel_size);
-                log::info!(
-                    "n_x_threads={} input_shapes={:?}",
-                    n_x_threads,
-                    input_shapes
-                );
+                // Matrix multiplication is performed in blocks of 4x4, except when the output matrix or any of the inputs
+                // has a dimension smaller than 4, in which case we can do 3x3 or 2x2
+                let kernel_size = gcd(dim_m, gcd(dim_k, dim_n)).min(4).max(1);
+                if kernel_size == 1 {
+                    return Err(CompileError::UnimplementedVariant {
+                        variant: String::from("with the greatest common divider of dimensions M, N or K not divisible by 2"),
+                        op: op.to_string(),
+                    });
+                }
+
+                let n_blocks = ceil(dim_m * dim_n, kernel_size * kernel_size);
+                let (x_threads, workgroup_size_x) = workgroup_size(
+                    n_blocks,
+                    MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                    MAX_WORKGROUP_SIZE_X,
+                )?;
+
+                context.insert("m_chunks", &(dim_m / kernel_size).max(1));
+                context.insert("n_chunks", &(dim_n / kernel_size).max(1));
+                context.insert("k_chunks", &(dim_k / kernel_size).max(1));
                 context.insert("kernel_size", &kernel_size);
+                context.insert("workgroup_size_x", &workgroup_size_x);
                 NodeTemplate {
                     scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm.wgsl",
-                    threads: (n_x_threads as _, 1, 1),
+                    threads: (x_threads as _, 1, 1),
                 }
             }
         }
