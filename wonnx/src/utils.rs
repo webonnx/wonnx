@@ -605,7 +605,9 @@ impl From<onnx::AttributeProto> for String {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{attribute, graph, initializer, model, node, tensor, OutputTensor};
+    use crate::utils::{
+        attribute, graph, initializer, model, node, tensor, OutputTensor, ScalarType, Shape,
+    };
 
     #[test]
     fn test_model() {
@@ -649,47 +651,47 @@ mod tests {
             OutputTensor::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.])
         );
     }
-}
 
-// Test cases for Shape::multi_broadcast, some inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L31
-#[test]
-pub fn broadcasting() {
-    fn shape(s: &[i64]) -> Shape {
-        Shape::from(ScalarType::F32, s)
+    // Test cases for Shape::multi_broadcast, some inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L31
+    #[test]
+    pub fn test_multi_broadcast() {
+        fn shape(s: &[i64]) -> Shape {
+            Shape::from(ScalarType::F32, s)
+        }
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[5])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[4, 5])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[4, 5]), shape(&[2, 3, 4, 5])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[1, 4, 5]), shape(&[2, 3, 4, 1])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 1, 1, 1])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 4, 1, 1])]),
+            None
+        );
     }
-
-    assert_eq!(
-        Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[])]),
-        Some(shape(&[2, 3, 4, 5])),
-    );
-
-    assert_eq!(
-        Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[5])]),
-        Some(shape(&[2, 3, 4, 5])),
-    );
-
-    assert_eq!(
-        Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[4, 5])]),
-        Some(shape(&[2, 3, 4, 5])),
-    );
-
-    assert_eq!(
-        Shape::multi_broadcast(&[shape(&[4, 5]), shape(&[2, 3, 4, 5])]),
-        Some(shape(&[2, 3, 4, 5])),
-    );
-
-    assert_eq!(
-        Shape::multi_broadcast(&[shape(&[1, 4, 5]), shape(&[2, 3, 4, 1])]),
-        Some(shape(&[2, 3, 4, 5])),
-    );
-
-    assert_eq!(
-        Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 1, 1, 1])]),
-        Some(shape(&[2, 3, 4, 5])),
-    );
-
-    assert_eq!(
-        Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 4, 1, 1])]),
-        None
-    );
 }
