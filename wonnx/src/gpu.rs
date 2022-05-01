@@ -63,11 +63,11 @@ struct GpuTensor {
 
 #[derive(Error, Debug)]
 pub enum GpuError {
-    #[error("compile error: {0}")]
-    CompileError(#[from] CompileError),
+    #[error("compiling node '{node}' failed: {error}")]
+    CompileError { node: String, error: CompileError },
 
-    #[error("input not found: '{0}'")]
-    InputMissing(String),
+    #[error("inference input not found: '{0}'")]
+    InferenceInputMissing(String),
 
     #[error("node output not found: index {0}")]
     OutputMissing(usize),
@@ -503,7 +503,12 @@ impl<'model> OperatorDefinition<'model> {
 
         // Compile shader for node
         let CompiledNode { shader, threads } =
-            compile(proto, &input_shapes, &output_shapes, opset_version)?;
+            compile(proto, &input_shapes, &output_shapes, opset_version).map_err(|ce| {
+                GpuError::CompileError {
+                    node: proto.get_name().to_string(),
+                    error: ce,
+                }
+            })?;
         log::debug!("shader: {}", shader);
 
         // Bind input and output buffers to the shader
@@ -589,7 +594,7 @@ impl GpuStep {
                 // by `GpuModel::from`
                 let input_data = inputs
                     .get(input_name)
-                    .ok_or_else(|| GpuError::InputMissing(input_name.to_string()))?;
+                    .ok_or_else(|| GpuError::InferenceInputMissing(input_name.to_string()))?;
                 log::info!("- write input data for {}", input_name);
 
                 match input_data {
