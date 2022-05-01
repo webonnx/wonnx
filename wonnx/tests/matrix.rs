@@ -231,3 +231,70 @@ fn test_matmul_nonsquare_matrix_small() {
     let out = &[-20., -14., -100., -78., -180., -142., -260., -206.];
     common::assert_eq_vector((&result["C"]).try_into().unwrap(), out);
 }
+
+// Multiply two stacks of 2x2 matrixes
+// a = np.arange(0,16).reshape((4,2,2))
+// b = np.arange(16,32).reshape((4,2,2))
+// c = np.matmul(a, b)
+#[test]
+fn test_matmul_stacks() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..16).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (16..32).map(|x| x as f32).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+
+    let model = model(graph(
+        vec![tensor("A", &[4, 2, 2]), tensor("B", &[4, 2, 2])],
+        vec![tensor("C", &[4, 2, 2])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    let out: Vec<f32> = vec![
+        18, 19, 86, 91, 190, 199, 274, 287, 426, 443, 526, 547, 726, 751, 842, 871,
+    ]
+    .iter()
+    .map(|x| *x as f32)
+    .collect();
+    println!("RESULT={:?}", result["C"]);
+    common::assert_eq_vector((&result["C"]).try_into().unwrap(), &out);
+}
+
+// Multiply a 1x4 matrix with a ones matrix of size 4x2.
+// a = np.arange(0,4).reshape((1,4))
+// b = np.arange(-8,0).reshape((4,2))
+// c = np.matmul(a, b)
+//array([[ -20,  -14]])
+#[test]
+fn test_matmul_1d() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..4).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..8).map(|x| -8.0 + (x as f32)).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+
+    let model = model(graph(
+        vec![tensor("A", &[1, 4]), tensor("B", &[4, 2])],
+        vec![tensor("C", &[1, 2])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    let out = &[-20., -14.];
+    common::assert_eq_vector((&result["C"]).try_into().unwrap(), out);
+}
