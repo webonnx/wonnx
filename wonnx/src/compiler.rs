@@ -945,7 +945,9 @@ pub fn compile(
                 let kernel_size = gcd(dim_m, gcd(dim_k, dim_n)).min(4).max(1);
                 if kernel_size == 1 {
                     return Err(CompileError::UnimplementedVariant {
-                        variant: String::from("with the greatest common divider of dimensions M, N or K not divisible by 2"),
+                        variant: String::from(
+                            "usage with input matrixes whose dimensions are not divisible by 2",
+                        ),
                         op: op.to_string(),
                     });
                 }
