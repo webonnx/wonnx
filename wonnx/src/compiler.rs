@@ -602,7 +602,7 @@ pub fn compile(
                 context.insert("lhs_padded_chunks", &lhs_padded_shape.chunks());
                 context.insert("rhs_padded_chunks", &rhs_padded_shape.chunks());
 
-                log::info!(
+                log::debug!(
                     "padded shapes for broadcast: {:?}, {:?} => {:?}",
                     lhs_padded_shape,
                     rhs_padded_shape,
@@ -1147,11 +1147,12 @@ fn workgroup_size(
         let workgroup_size = ceil(x, max_x) as _;
         let threads = ceil(x, workgroup_size as u64) as _;
         log::info!(
-            "WGS: {} > {}, so workgroup size={} x threads={}",
+            "number of items ({}) exceeds maximum number of threads ({}); adjusting workgroup size={} and threads={} (this will compute {} items)",
             x,
             max_x,
             workgroup_size,
-            threads
+            threads,
+            workgroup_size * threads
         );
 
         if threads > max_threads {
@@ -1170,12 +1171,6 @@ fn workgroup_size(
             ));
         }
 
-        log::info!(
-            "adjusting workgroup size to {}, threads to {} (was {})",
-            workgroup_size,
-            threads,
-            x
-        );
         (threads, workgroup_size)
     } else {
         (x as u32, 1)
