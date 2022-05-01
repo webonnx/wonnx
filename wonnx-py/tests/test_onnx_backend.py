@@ -148,6 +148,17 @@ backend_test.include(f"test_cos_[a-z,_]*")
 backend_test.include(f"test_exp_[a-z,_]*")
 backend_test.include(f"test_floor_[a-z,_]*")
 backend_test.include(f"test_leakyrelu_[a-z,_]*")
+backend_test.include(f"test_mul_bcast_[a-z,_]*")
+backend_test.include(f"test_div_bcast_[a-z,_]*")
+backend_test.include(f"test_add_bcast_[a-z,_]*")
+backend_test.include(f"test_sub_bcast_[a-z,_]*")
+backend_test.include(f"test_pow_bcast_[a-z,_]*")
+
+# Don't support 'bool' type
+# backend_test.include(f"test_and_bcast[a-z0-9,_]*")
+# backend_test.include(f"test_or_bcast[a-z0-9,_]*")
+# backend_test.include(f"test_equal_bcast_[a-z,_]*")
+# backend_test.include(f"test_greater_bcast_[a-z,_]*")
 
 # Disable tests for ReduceSum because ReduceSum accepts the 'axes' list as input instead of as an attribute, and the test
 # case sets the 'axes' input dynamically, which we don't support (yet?).

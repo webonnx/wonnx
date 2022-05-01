@@ -102,7 +102,7 @@ fn test_int64_initializers() {
         vec![tensor_of_type("X", &dims, TensorProto_DataType::INT64)],
         vec![tensor_of_type("Z", &dims, TensorProto_DataType::INT64)],
         vec![],
-        vec![initializer_int64("Y", right)],
+        vec![initializer_int64("Y", right, dims.clone())],
         vec![node(vec!["X", "Y"], vec!["Z"], "adder", "Add", vec![])],
     ));
 
@@ -156,4 +156,35 @@ fn test_pow() {
 
     // The pow(x,y) function in WGSL appears to be rather imprecise. Therefore we use a weaker comparison here (for now).
     assert_eq_vector_weak((&result["Z"]).try_into().unwrap(), expected.as_slice());
+}
+
+#[test]
+fn test_mul_broadcast() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let x = vec![2.0, 3.0];
+    let y = vec![10.0, 20.0, 30.0];
+    let shape_x = [1, 2];
+    let shape_y = [1, 3, 1];
+    let shape_z = [1, 3, 2];
+
+    let mut input_data = HashMap::new();
+    input_data.insert("X".to_string(), x.as_slice().into());
+    input_data.insert("Y".to_string(), y.as_slice().into());
+
+    // Model: X,Y -> Mul -> Z
+    let model = model(graph(
+        vec![tensor("X", &shape_x), tensor("Y", &shape_y)],
+        vec![tensor("Z", &shape_z)],
+        vec![],
+        vec![],
+        vec![node(vec!["X", "Y"], vec!["Z"], "mul", "Mul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    // np.array([[2,3]]) * np.array([[10],[20],[30]]) => [[20, 30], [40, 60], [60, 90]]
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    let expected = vec![20.0, 30.0, 40.0, 60.0, 60.0, 90.0];
+    common::assert_eq_vector((&result["Z"]).try_into().unwrap(), expected.as_slice());
 }

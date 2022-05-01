@@ -19,7 +19,7 @@ use thiserror::Error;
 * error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
 pub const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Shape {
     pub dims: Vec<u64>,
     pub data_type: ScalarType,
@@ -62,6 +62,57 @@ impl Shape {
         }
         chunk.push(1);
         chunk
+    }
+
+    /// Computes the shape to which all provided shapes can be broadcast (if it exists)
+    /// Inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L5
+    pub(crate) fn multi_broadcast(shapes: &[Shape]) -> Option<Shape> {
+        if shapes.is_empty() {
+            return None;
+        }
+
+        let max_rank = shapes.iter().map(|x| x.rank()).max().unwrap_or(0);
+        let mut shape: Vec<i64> = Vec::with_capacity(max_rank);
+
+        // Shapes must all have the same data type
+        let data_type = shapes[0].data_type;
+        for s in shapes {
+            if s.data_type != data_type {
+                return None;
+            }
+        }
+
+        for i in 0..max_rank {
+            let mut wanted_size = 1;
+            for shape in shapes {
+                let rank = shape.rank();
+                let dim = if i < rank { shape.dim(rank - i - 1) } else { 1 };
+
+                if dim != 1 {
+                    if wanted_size != 1 && dim != wanted_size {
+                        return None;
+                    }
+                    wanted_size = dim;
+                }
+            }
+            shape.push(wanted_size as i64);
+        }
+
+        shape.reverse();
+        Some(Shape::from(data_type, &shape))
+    }
+
+    pub(crate) fn left_padded_to(&self, x: u64, rank: usize) -> Shape {
+        let mut dims = self.dims.clone();
+        let current_rank = dims.len();
+        dims.resize(rank, x);
+        if rank > current_rank {
+            dims.rotate_right(rank - current_rank);
+        }
+        Shape {
+            dims,
+            data_type: self.data_type,
+        }
     }
 }
 
@@ -388,9 +439,14 @@ pub fn initializer(name: &str, data: Vec<f32>, dimensions: Vec<i64>) -> onnx::Te
     initializer
 }
 
-pub fn initializer_int64(name: &str, data: Vec<i64>) -> onnx::TensorProto {
+pub fn initializer_int64(name: &str, data: Vec<i64>, dimensions: Vec<i64>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
+    debug_assert_eq!(
+        dimensions.iter().cloned().product::<i64>() as usize,
+        data.len()
+    );
     initializer.set_name(name.to_string());
+    initializer.set_dims(dimensions);
     initializer.set_data_type(TensorProto_DataType::INT64.value());
     initializer.set_int64_data(data);
     initializer
@@ -549,7 +605,9 @@ impl From<onnx::AttributeProto> for String {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{attribute, graph, initializer, model, node, tensor, OutputTensor};
+    use crate::utils::{
+        attribute, graph, initializer, model, node, tensor, OutputTensor, ScalarType, Shape,
+    };
 
     #[test]
     fn test_model() {
@@ -591,6 +649,49 @@ mod tests {
         assert_eq!(
             result["Y"],
             OutputTensor::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.])
+        );
+    }
+
+    // Test cases for Shape::multi_broadcast, some inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L31
+    #[test]
+    pub fn test_multi_broadcast() {
+        fn shape(s: &[i64]) -> Shape {
+            Shape::from(ScalarType::F32, s)
+        }
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[5])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[2, 3, 4, 5]), shape(&[4, 5])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[4, 5]), shape(&[2, 3, 4, 5])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[1, 4, 5]), shape(&[2, 3, 4, 1])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 1, 1, 1])]),
+            Some(shape(&[2, 3, 4, 5])),
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 4, 1, 1])]),
+            None
         );
     }
 }

@@ -124,6 +124,11 @@ lazy_static! {
             include_str!("../templates/endomorphism/onehot.wgsl"),
         )
         .unwrap();
+        tera.add_raw_template(
+            "endomorphism/broadcast.wgsl",
+            include_str!("../templates/endomorphism/broadcast.wgsl"),
+        )
+        .unwrap();
         tera
     };
 }
@@ -177,6 +182,15 @@ pub enum CompileError {
 
     #[error("invalid type encountered: {0}")]
     InvalidType(#[from] DataTypeError),
+
+    #[error("expected {expected} inputs, but there are only {actual}")]
+    InvalidInputCount { expected: usize, actual: usize },
+
+    #[error("cannot broadcast inputs to specified output dimensions")]
+    InvalidBroadcast {
+        input_shapes: Vec<Shape>,
+        output_shape: Shape,
+    },
 }
 
 struct NodeTemplate {
@@ -532,8 +546,7 @@ pub fn compile(
                 });
             }
 
-            let coefficient = get_attribute("coefficient", Some(1.0), node)?;
-            context.insert("coefficient", &coefficient);
+            // Determine the operator to use in the shader for this op
             context.insert(
                 "op_type",
                 match op {
@@ -558,17 +571,79 @@ pub fn compile(
                 },
             );
 
-            let (x_threads, workgroup_size_x) = workgroup_size(
-                ceil(output_lengths[0], 4) as _,
-                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
-                MAX_WORKGROUP_SIZE_X,
-            )?;
-            context.insert("workgroup_size_x", &workgroup_size_x);
+            if input_shapes.len() == 2
+                && (input_shapes[0] != output_shapes[0] || input_shapes[1] != output_shapes[0])
+            {
+                // We are likely broadcasting; check if the broadcast is valid. Compute the possible broadcast output shape
+                let out_shape =
+                    Shape::multi_broadcast(&[input_shapes[0].clone(), input_shapes[1].clone()])
+                        .ok_or(CompileError::InvalidBroadcast {
+                            input_shapes: input_shapes
+                                .iter()
+                                .map(|x| (*x).clone())
+                                .collect::<Vec<Shape>>(),
+                            output_shape: output_shapes[0].clone(),
+                        })?;
 
-            NodeTemplate {
-                scalar_type: agreed_type(input_shapes, output_shapes)?,
-                template: "endomorphism/arithmetic.wgsl",
-                threads: (x_threads, 1, 1),
+                if &out_shape != output_shapes[0] {
+                    return Err(CompileError::InvalidBroadcast {
+                        input_shapes: input_shapes
+                            .iter()
+                            .map(|x| (*x).clone())
+                            .collect::<Vec<Shape>>(),
+                        output_shape: output_shapes[0].clone(),
+                    });
+                }
+
+                let lhs_padded_shape = input_shapes[0].left_padded_to(1, out_shape.rank());
+                let rhs_padded_shape = input_shapes[1].left_padded_to(1, out_shape.rank());
+                context.insert("lhs_padded_shape", &lhs_padded_shape.dims);
+                context.insert("rhs_padded_shape", &rhs_padded_shape.dims);
+                context.insert("lhs_padded_chunks", &lhs_padded_shape.chunks());
+                context.insert("rhs_padded_chunks", &rhs_padded_shape.chunks());
+
+                log::info!(
+                    "padded shapes for broadcast: {:?}, {:?} => {:?}",
+                    lhs_padded_shape,
+                    rhs_padded_shape,
+                    out_shape.dims
+                );
+
+                let (x_threads, workgroup_size_x) = workgroup_size(
+                    output_lengths[0],
+                    MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                    MAX_WORKGROUP_SIZE_X,
+                )?;
+                context.insert("workgroup_size_x", &workgroup_size_x);
+
+                NodeTemplate {
+                    scalar_type: agreed_type(input_shapes, output_shapes)?,
+                    template: "endomorphism/broadcast.wgsl",
+                    threads: (x_threads, 1, 1),
+                }
+            } else if input_shapes[0] != output_shapes[0] {
+                // If we are not broadcasting, the input shape needs to be equal to the output shape
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 0,
+                    input_shape: input_shapes[0].clone(),
+                });
+            } else {
+                // Not broadcasting
+                let coefficient = get_attribute("coefficient", Some(1.0), node)?;
+                context.insert("coefficient", &coefficient);
+
+                let (x_threads, workgroup_size_x) = workgroup_size(
+                    ceil(output_lengths[0], 4) as _,
+                    MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                    MAX_WORKGROUP_SIZE_X,
+                )?;
+                context.insert("workgroup_size_x", &workgroup_size_x);
+
+                NodeTemplate {
+                    scalar_type: agreed_type(input_shapes, output_shapes)?,
+                    template: "endomorphism/arithmetic.wgsl",
+                    threads: (x_threads, 1, 1),
+                }
             }
         }
         // Not taking into account attributes

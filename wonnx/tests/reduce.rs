@@ -261,7 +261,7 @@ fn test_reduce_sum_with_axes_as_input() {
         vec![tensor("X", &[3, 2, 2])],
         vec![tensor("Y", &[3, 2])],
         vec![],
-        vec![initializer_int64("A", vec![-2])],
+        vec![initializer_int64("A", vec![-2], vec![1])],
         vec![node(
             vec!["X", "A"],
             vec!["Y"],
