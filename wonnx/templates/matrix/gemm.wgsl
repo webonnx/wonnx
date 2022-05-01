@@ -51,7 +51,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 		let mat_left = GemmMat(
 			{% for i in range(end = kernel_size) %}
-				input_0.data[index_left + ({{ i }}u * {{ k_chunks }}u)] {%-if not loop.last -%},{%- endif -%}
+				input_0.data[index_left + ({{ i * k_chunks }}u)] {%-if not loop.last -%},{%- endif -%}
 			{% endfor %}
 		);
 		
