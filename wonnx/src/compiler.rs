@@ -904,22 +904,94 @@ pub fn compile(
             }
         }
         op @ ("Gemm" | "MatMul") => {
-            // Generic matrix multiplication; outputs an M*N matrix from inputs A (M*K) and B (K*N)
+            // Generic matrix multiplication; outputs an M*N matrix from inputs A (size M*K) and B (size K*N)
+
+            // MatMul behaves "like numpy.matmul" (https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.matmul.html)
+            // If both arguments are 2-D they are multiplied like conventional matrices. If they are not, special rules are
+            // applied, that may (among others) lead to 'stacking' (basically multiple matrix multiplications are performed
+            // in parallel). Below, these rules are applied. These rewrite the shapes for input and output and in some cases
+            // set a 'stack count' and 'stack stride'.
+            let mut stack_count = 1;
+            let mut input_left_shape = input_shapes[0].clone();
+            let mut input_right_shape = input_shapes[1].clone();
+            let mut output_shape = output_shapes[0].clone();
+            let mut stack_left_stride: u64 = 0;
+            let mut stack_right_stride: u64 = 0;
+            let mut stack_output_stride: u64 = 0;
+
+            if op == "MatMul" {
+                // - If either argument is N-D, N > 2, it is treated as a stack of matrices residing in the last two indexes
+                //   and broadcast accordingly.
+                if input_left_shape.rank() > 2 || input_right_shape.rank() > 2 {
+                    if input_left_shape.rank() != input_right_shape.rank()
+                        || output_shape.rank() != input_left_shape.rank()
+                        || input_left_shape.dims[0..(input_left_shape.dims.len() - 2)]
+                            != input_right_shape.dims[0..(input_right_shape.dims.len() - 2)]
+                        || input_left_shape.dims[0..(input_left_shape.dims.len() - 2)]
+                            != output_shape.dims[0..(output_shape.dims.len() - 2)]
+                    {
+                        return Err(CompileError::UnimplementedVariant {
+                            variant: format!("broadcasting for two stacks of matrixes (left side has shape {}, right side has shape {})", input_left_shape, input_right_shape),
+                            op: op.to_string(),
+                        });
+                    }
+
+                    let stack_dims = input_left_shape.dims.len() - 2;
+                    stack_count = input_left_shape.dims[0..stack_dims].iter().product();
+                    input_left_shape.dims.drain(0..stack_dims);
+                    input_right_shape.dims.drain(0..stack_dims);
+                    output_shape.dims.drain(0..stack_dims);
+                    stack_left_stride = input_left_shape.dims.iter().product();
+                    stack_right_stride = input_right_shape.dims.iter().product();
+                    stack_output_stride = output_shape.dims.iter().product();
+
+                    log::warn!(
+                        "MatMul stacking: left {} right {} stack_dims={} stack_count={} stack_left_stride={} stack_right_stride={} stack_output_stride={}",
+                        input_left_shape,
+                        input_right_shape,
+                        stack_dims,
+                        stack_count,
+                        stack_left_stride,
+                        stack_right_stride,
+                        stack_output_stride
+                    );
+                }
+
+                // If the first argument is 1-D, it is promoted to a matrix by prepending a 1 to its dimensions. After
+                // matrix multiplication the prepended 1 is removed.
+                if input_left_shape.rank() == 1 {
+                    input_left_shape.dims.insert(0, 1);
+                }
+
+                // If the second argument is 1-D, it is promoted to a matrix by appending a 1 to its dimensions. After
+                // matrix multiplication the appended 1 is removed.
+                if input_right_shape.rank() == 1 {
+                    input_left_shape.dims.push(1);
+                }
+            }
+
+            context.insert("stack_left_stride", &stack_left_stride);
+            context.insert("stack_right_stride", &stack_right_stride);
+            context.insert("stack_output_stride", &stack_output_stride);
+            context.insert("left_shape", &input_left_shape.dims);
+            context.insert("right_shape", &input_right_shape.dims);
+            context.insert("output_shape", &output_shape.dims);
+
             // Check dimensions
-            let dim_m = output_shapes[0].dim(0);
-            let dim_n = output_shapes[0].dim(1);
-            let dim_k = input_shapes[0].dim(1);
-            if dim_m != input_shapes[0].dim(0) {
+            let dim_m = output_shape.dim(0);
+            let dim_n = output_shape.dim(1);
+            let dim_k = input_left_shape.dim(1);
+            if dim_m != input_left_shape.dim(0) {
                 return Err(CompileError::InvalidInputShape {
                     input_index: 0,
-                    input_shape: input_shapes[0].clone(),
+                    input_shape: input_left_shape.clone(),
                 });
             }
 
-            if dim_n != input_shapes[1].dim(1) || dim_k != input_shapes[1].dim(0) {
+            if dim_n != input_right_shape.dim(1) || dim_k != input_right_shape.dim(0) {
                 return Err(CompileError::InvalidInputShape {
                     input_index: 1,
-                    input_shape: input_shapes[1].clone(),
+                    input_shape: input_right_shape.clone(),
                 });
             }
 
@@ -943,15 +1015,31 @@ pub fn compile(
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
+            // Determine and set thread count/workgroup size when stacking (shader y dimension)
+            let (y_threads, workgroup_size_y) = workgroup_size(
+                stack_count,
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_Y,
+            )?;
+            context.insert("workgroup_size_y", &workgroup_size_y);
+
             if dim_m == 1 {
+                let n_elements = output_shapes[0].dim(1);
+                let (x_threads, workgroup_size_x) = workgroup_size(
+                    n_elements,
+                    MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                    MAX_WORKGROUP_SIZE_X,
+                )?;
+
+                context.insert("workgroup_size_x", &workgroup_size_x);
                 NodeTemplate {
                     scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm_1.wgsl",
-                    threads: (output_shapes[0].dim(1) as _, 1, 1),
+                    threads: (x_threads as _, y_threads, 1),
                 }
             } else {
-                // Matrix multiplication is performed in blocks of 4x4, except when the output matrix or any of the inputs
-                // has a dimension smaller than 4, in which case we can do 3x3 or 2x2
+                // Matrix multiplication is performed (by the gemm.wgsl shader) in blocks of 4x4, except when the output matrix
+                // or any of the inputs has a dimension smaller than 4, in which case we can do 3x3 or 2x2
                 let kernel_size = gcd(dim_m, gcd(dim_k, dim_n)).min(4).max(1);
                 if kernel_size == 1 {
                     return Err(CompileError::UnimplementedVariant {
@@ -977,7 +1065,7 @@ pub fn compile(
                 NodeTemplate {
                     scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm.wgsl",
-                    threads: (x_threads as _, 1, 1),
+                    threads: (x_threads as _, y_threads, 1),
                 }
             }
         }

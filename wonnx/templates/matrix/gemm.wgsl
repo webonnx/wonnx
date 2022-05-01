@@ -7,10 +7,10 @@ struct GemmArrayVector {
 };
 
 [[group(0), binding(0)]]
-var<storage, read> input_0: GemmArrayVector;
+var<storage, read> input_left: GemmArrayVector;
 
 [[group(0), binding(1)]]
-var<storage, read> input_1: GemmArrayVector;
+var<storage, read> input_right: GemmArrayVector;
 
 {% if i_lens | length == 3 %} // Bias
 	[[group(0), binding(2)]]
@@ -23,13 +23,20 @@ var<storage, read> input_1: GemmArrayVector;
 	var<storage, write> output_0: GemmArrayVector;
 {% endif %}
 
-[[stage(compute), workgroup_size({{ workgroup_size_x }})]]
+[[stage(compute), workgroup_size({{ workgroup_size_x }}, {{ workgroup_size_y }})]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let y = global_id.x % {{ n_chunks }}u;
 	let x = global_id.x / {{ n_chunks }}u;
-	let index = x * {{ i_shape[1][1] }}u + y;
 
-	// Create zero vector and matrix of the correct size for later use
+	{# Calculate stacking offsets #}
+	let stack_index = global_id.y;
+	let left_offset = stack_index * {{ stack_left_stride / kernel_size }}u;
+	let right_offset = stack_index * {{ stack_right_stride / kernel_size }}u;
+	let output_offset = stack_index * {{ stack_output_stride / kernel_size }}u;
+
+	let index = output_offset + (x * {{ right_shape[1] }}u) + y;
+
+	{# Create zero vector and matrix of the correct size for later use #}
 	let zero_vec = GemmVec(
 		{% for i in range(end = kernel_size) %}
 			Scalar(0) {%-if not loop.last -%},{%- endif -%}
@@ -46,18 +53,18 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	var product = zero_matrix;
 
 	for(var k: u32 = 0u; k < {{ k_chunks }}u; k = k + 1u) {
-		let index_left = (x * {{ i_shape[0][1] }}u) + k;
-		let index_right = k * {{ i_shape[1][1] }}u + y;
+		let index_left = left_offset + (x * {{ left_shape[1] }}u) + k;
+		let index_right = right_offset + (k * {{ right_shape[1] }}u) + y;
 
 		let mat_left = GemmMat(
 			{% for i in range(end = kernel_size) %}
-				input_0.data[index_left + ({{ i * k_chunks }}u)] {%-if not loop.last -%},{%- endif -%}
+				input_left.data[index_left + {{ i * k_chunks }}u] {%-if not loop.last -%},{%- endif -%}
 			{% endfor %}
 		);
 		
 		let mat_right = GemmMat(
 			{% for i in range(end = kernel_size) %}
-				input_1.data[index_right + ({{ i * n_chunks }}u)] {%-if not loop.last -%},{%- endif -%}
+				input_right.data[index_right + ({{ i * n_chunks }}u)] {%-if not loop.last -%},{%- endif -%}
 			{% endfor %}
 		);
 	
@@ -71,7 +78,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	{% if i_lens | length == 3 %}
 		let bias_row = input_2.data[x]; 
 		var bias = transpose(GemmMat(
-			{% for i in range(end=kernel_size) %}
+			{% for i in range(end = kernel_size) %}
 				bias_row {%-if not loop.last -%},{%- endif -%}
 			{% endfor %}
 		));
