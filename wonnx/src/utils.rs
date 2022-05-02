@@ -209,6 +209,9 @@ pub enum DataTypeError {
     #[error("the ONNX data type '{0}' is not recognized")]
     NotRecognized(i32),
 
+    #[error("encountered parametrized dimensions '{0}'; this is not currently supported (this may be solved by running onnx-simplifier on the model first)")]
+    ParametrizedDimensionUnsupported(String),
+
     #[error("type is undefined")]
     Undefined,
 }
@@ -377,8 +380,15 @@ impl ValueInfoProto {
                         .get_shape()
                         .get_dim()
                         .iter()
-                        .map(|x| x.get_dim_value() as i64)
-                        .collect::<Vec<i64>>()
+                        .map(|x| {
+                            if x.has_dim_param() {
+                                return Err(DataTypeError::ParametrizedDimensionUnsupported(
+                                    x.get_dim_param().to_string(),
+                                ));
+                            }
+                            Ok(x.get_dim_value() as i64)
+                        })
+                        .collect::<Result<Vec<i64>, DataTypeError>>()?
                         .as_slice(),
                 ),
                 onnx::TypeProto_oneof_value::sequence_type(_) => todo!(),
