@@ -333,6 +333,12 @@ impl Backend {
     }
 }
 
-fn main() -> Result<(), NNXError> {
-    pollster::block_on(run())
+fn main() -> Result<(), std::io::Error> {
+    std::process::exit(match pollster::block_on(run()) {
+        Ok(_) => 0,
+        Err(err) => {
+            eprintln!("Error: {}", err);
+            1
+        }
+    });
 }
