@@ -4,7 +4,8 @@ members = [
 	"wonnx-py",
 	"wonnx-cli",
 	"wonnx-preprocessing",
-	"wonnx-wasm"
+	"wonnx-wasm",
+        "wonnx-tract"
 ]
 
 default-members = ["wonnx", "wonnx-cli"]
