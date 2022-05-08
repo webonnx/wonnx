@@ -93,7 +93,7 @@ fn test_split() {
             vec!["Y", "W"],
             "Split",
             "Split",
-            vec![attribute("axis", 1)],
+            vec![attribute("axis", -1)],
         )],
     ));
 
