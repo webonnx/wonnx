@@ -76,19 +76,18 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	}
 	
 	{% if i_lens | length == 3 %}
-		let bias_row = input_2.data[x]; 
-		var bias = transpose(GemmMat(
-			{% for i in range(end = kernel_size) %}
-				bias_row {%-if not loop.last -%},{%- endif -%}
-			{% endfor %}
-		));
+		let bias_index =
+			{% if not bias_broadcast_x  %} (x * {{ bias_shape[1] }}u) + {% endif %} 
+			{% if not bias_broadcast_y %} y {% else  %} 0u {% endif %};
+
 		for(var index_mat: u32 = 0u; index_mat < {{ kernel_size }}u; index_mat = index_mat + 1u) {
-			output_0.data[index + index_mat * {{ n_chunks }}u] = 
+			let bias = input_2.data[bias_index {% if not bias_broadcast_x %} +(index_mat * {{ n_chunks }}u) {% endif %}];
+
+			output_0.data[index + (index_mat * {{ n_chunks }}u)] = 
 				{%- if alpha != 1 -%} {{ alpha | float }} * {%- endif -%} 
 				tmpsum[index_mat] + 
 				{%- if beta != 1 -%} {{ beta | float }} * {%- endif -%} 
-				bias[index_mat]
-			;
+				bias;
 		}
 	{% else %}
 		for(var index_mat: u32 = 0u; index_mat < {{ kernel_size }}u; index_mat = index_mat + 1u) {

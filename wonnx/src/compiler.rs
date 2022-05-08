@@ -995,17 +995,62 @@ pub fn compile(
                 });
             }
 
-            // Check if A resp. B should be transposed, or C should be broadcast (default: 0 = false)
             if op == "Gemm" {
+                // Check if A resp. B should be transposed, or C should be broadcast (default: 0 = false)
                 let transpose_a = get_attribute("transA", Some(0), node)?;
                 let transpose_b = get_attribute("transB", Some(0), node)?;
                 let broadcast = get_attribute("broadcast", Some(0), node)?;
 
                 if transpose_a != 0 || transpose_b != 0 || broadcast != 0 {
                     return Err(CompileError::UnimplementedVariant {
-                        variant: "Gemm with transA/transB/broadcast not equal to zero".to_string(),
+                        variant: "with transA/transB/broadcast not equal to zero".to_string(),
                         op: op.to_string(),
                     });
+                }
+
+                // If there is a bias input, it should be "unidirectionally broadcastable to M*N". Currently we only support a bias ofM*N though
+                if input_shapes.len() > 2 {
+                    let mut bias_shape = input_shapes[2].clone();
+
+                    // A shape of higher rank than 2 can never be broadcasted
+                    if bias_shape.rank() > 2 || bias_shape.rank() == 0 {
+                        return Err(CompileError::InvalidInputShape {
+                            input_index: 2,
+                            input_shape: bias_shape.clone(),
+                        });
+                    }
+
+                    log::warn!(
+                        "Gemm bias shape={:?} while m={} n={}",
+                        bias_shape,
+                        dim_m,
+                        dim_n
+                    );
+
+                    // For bias shape of rank 1, prepend a 1
+                    if bias_shape.rank() == 1 {
+                        bias_shape.dims.insert(0, 1);
+                    }
+
+                    // First dimension of bias must be either 1 or M
+                    if bias_shape.dim(0) != dim_m && bias_shape.dim(0) != 1 {
+                        return Err(CompileError::InvalidInputShape {
+                            input_index: 2,
+                            input_shape: bias_shape.clone(),
+                        });
+                    }
+
+                    // Second dimension of bias must be either 1 or N
+                    if bias_shape.dim(1) != dim_n && bias_shape.dim(1) != 1 {
+                        return Err(CompileError::InvalidInputShape {
+                            input_index: 2,
+                            input_shape: bias_shape.clone(),
+                        });
+                    }
+
+                    context.insert("bias_shape", &bias_shape.dims);
+                    context.insert("bias_broadcast_x", &(bias_shape.dim(0) == 1));
+                    context.insert("bias_broadcast_y", &(bias_shape.dim(1) == 1));
                 }
             }
 
