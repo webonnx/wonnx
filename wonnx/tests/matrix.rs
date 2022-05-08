@@ -146,7 +146,7 @@ fn test_pad_example() {
 #[test]
 fn test_pad_complex() {
     let mut input_data = HashMap::new();
-    let data = (1..=1 * 3 * 2).map(|x| x as f32).collect::<Vec<f32>>();
+    let data = (1..=3 * 2).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
 
     let kv = 0.5;
@@ -181,24 +181,16 @@ fn test_pad_complex() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    /*
+    /* [[[1,2], [3,4], [5,6]]] ->
     [
-    [[1,2],
-     [3,4],
-     [5,6]],
-    ]
-
-    ->
-
-    [
-    [[0,0,0,0,0],
-     [0,0,1,2,0],
-     [0,0,3,4,0],
-     [0,0,5,6,0]],
-    [[0,0,0,0,0],
-     [0,0,0,0,0],
-     [0,0,0,0,0],
-     [0,0,0,0,0]]
+        [[0,0,0,0,0],
+        [0,0,1,2,0],
+        [0,0,3,4,0],
+        [0,0,5,6,0]],
+        [[0,0,0,0,0],
+        [0,0,0,0,0],
+        [0,0,0,0,0],
+        [0,0,0,0,0]]
     ]
     */
 
@@ -215,6 +207,7 @@ fn test_pad_complex() {
         kv, kv, kv, kv, kv,
     ];
     let actual: &[_] = (&result["Y"]).try_into().unwrap();
+
     // No arithmetic is done, so `assert_eq!` can be used.
     assert_eq!(actual, &test_y);
 }
@@ -407,4 +400,85 @@ fn test_matmul_1d() {
 
     let out = &[-20., -14.];
     common::assert_eq_vector((&result["C"]).try_into().unwrap(), out);
+}
+
+// Test Gemm with matrix bias
+// a = np.arange(24).reshape((4,6))
+// b = np.arange(24).reshape((6,4))
+// c = np.arange(16).reshape((4,4))
+// d = np.dot(a,b) + c
+// d = array([[ 220,  236,  252,  268], [ 584,  636,  688,  740], [ 948, 1036, 1124, 1212], [1312, 1436, 1560, 1684]])
+#[test]
+fn test_gemm_matrix_bias() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let c_data: Vec<f32> = (0..16).map(|x| x as f32).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+    input_data.insert("C".to_string(), c_data.as_slice().into());
+
+    let model = model(graph(
+        vec![
+            tensor("A", &[4, 6]),
+            tensor("B", &[6, 4]),
+            tensor("C", &[4, 4]),
+        ],
+        vec![tensor("D", &[4, 4])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    let out = &[
+        220., 236., 252., 268., 584., 636., 688., 740., 948., 1036., 1124., 1212., 1312., 1436.,
+        1560., 1684.,
+    ];
+    common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
+}
+
+// Test Gemm with broadcasting bias
+// a = np.arange(24).reshape((4,6))
+// b = np.arange(24).reshape((6,4))
+// c = np.arange(4).reshape((1,4))
+// d = np.dot(a,b) + c
+// d = array([[ 220,  236,  252,  268], [ 580,  632,  684,  736], [ 940, 1028, 1116, 1204], [1300, 1424, 1548, 1672]])
+#[test]
+fn test_gemm_broadcasting_bias() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let c_data: Vec<f32> = (0..4).map(|x| x as f32).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+    input_data.insert("C".to_string(), c_data.as_slice().into());
+
+    let model = model(graph(
+        vec![
+            tensor("A", &[4, 6]),
+            tensor("B", &[6, 4]),
+            tensor("C", &[1, 4]),
+        ],
+        vec![tensor("D", &[4, 4])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    let out = &[
+        220., 236., 252., 268., 580., 632., 684., 736., 940., 1028., 1116., 1204., 1300., 1424.,
+        1548., 1672.,
+    ];
+    common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
 }
