@@ -1045,7 +1045,7 @@ pub fn compile(
         "Split" => {
             let mut axis = get_attribute("axis", Some(0), node)?;
             if axis < 0 {
-                axis += input_shapes[0].element_count() as i64
+                axis += input_shapes[0].rank() as i64
             }
             context.insert("axis", &axis);
 
