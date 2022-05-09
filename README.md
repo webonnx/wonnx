@@ -396,4 +396,5 @@ fn test_matmul_square_matrix() {
 * Internally 64-bit integers are not supported (the reason is they are not supported in the current version of WGSL); 
   inputs and initializers with 64-bit scalars are converted to 32-bit values (possibly overflowing).
 
-* For `MatMul` and `Gemm`, the matrix dimensions must be divisible by 2, or the output matrix must be of size (1, N).
+* For `MatMul` and `Gemm`, the matrix dimensions must be divisible by 2, or the output matrix must be of size (1, N). Matrix 
+  multiplication only supports floats, not integers (this is a WebGPU/WGSL limitation).
