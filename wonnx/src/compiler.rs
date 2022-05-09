@@ -1054,6 +1054,19 @@ pub fn compile(
                 }
             }
 
+            // Due to a limitation in WGSL, we currently only support floating-point matrix multiplication
+            // See https://github.com/gfx-rs/naga/issues/1896
+            let scalar_type = agreed_type(input_shapes, output_shapes)?;
+            match scalar_type {
+                ScalarType::I32 | ScalarType::I64 => {
+                    return Err(CompileError::UnimplementedVariant {
+                        variant: "with integers".to_string(),
+                        op: op.to_string(),
+                    })
+                }
+                ScalarType::F32 => (),
+            }
+
             // Obtain alpha and beta coefficients
             let alpha = get_attribute("alpha", Some(1.0), node)?;
             let beta = get_attribute("beta", Some(1.0), node)?;
@@ -1108,7 +1121,7 @@ pub fn compile(
                 context.insert("kernel_size", &kernel_size);
                 context.insert("workgroup_size_x", &workgroup_size_x);
                 NodeTemplate {
-                    scalar_type: agreed_type(input_shapes, output_shapes)?,
+                    scalar_type,
                     template: "matrix/gemm.wgsl",
                     threads: (x_threads as _, y_threads, 1),
                 }
