@@ -164,17 +164,20 @@ fn test_pad_complex() {
             vec!["Y"],
             "Pad",
             "Pad",
-            vec![attribute(
-                "pads",
-                vec![
-                    0, // x1_begin
-                    1, // x2_begin
-                    2, // x3_begin
-                    1, // x1_end
-                    0, // x2_end
-                    1, // x3_end
-                ],
-            ), attribute("constant_value", kv)],
+            vec![
+                attribute(
+                    "pads",
+                    vec![
+                        0, // x1_begin
+                        1, // x2_begin
+                        2, // x3_begin
+                        1, // x1_end
+                        0, // x2_end
+                        1, // x3_end
+                    ],
+                ),
+                attribute("constant_value", kv),
+            ],
         )],
     ));
 
