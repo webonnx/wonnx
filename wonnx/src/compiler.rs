@@ -63,6 +63,10 @@ lazy_static! {
         )
         .unwrap();
         tera.add_raw_template(
+            "matrix/pad.wgsl",
+            include_str!("../templates/matrix/pad.wgsl")
+        ).unwrap();
+        tera.add_raw_template(
             "matrix/resize.wgsl",
             include_str!("../templates/matrix/resize.wgsl"),
         )
@@ -1060,6 +1064,52 @@ pub fn compile(
             NodeTemplate {
                 scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
                 template: "matrix/split.wgsl",
+                threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
+            }
+        }
+        "Pad" => {
+            let mode = get_attribute("mode", Some("constant".to_string()), node)?;
+            match mode.as_str() {
+                "constant" => {}
+                _ => {
+                    return Err(CompileError::UnimplementedVariant {
+                        op: String::from("Pad"),
+                        variant: format!("mode={}", mode),
+                    })
+                }
+            }
+
+            let pads: Vec<i64> = get_attribute("pads", None, node)?;
+            if pads.len() != input_shapes[0].rank() * 2 {
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "pads".into(),
+                    value: format!("{:?}", pads),
+                    opset_version,
+                });
+            }
+            let constant_value = get_attribute("constant_value", Some(0.0), node)?;
+            context.insert("constant_value", &constant_value);
+
+            #[derive(serde::Serialize)]
+            struct PadInfo {
+                copy_start: u64,
+                end_pad_start: u64,
+            }
+            let mut pad_info = Vec::with_capacity(input_shapes[0].rank());
+            for axis in 0..input_shapes[0].rank() {
+                let begin = pads[axis];
+                let end = pads[input_shapes[0].rank() + axis];
+
+                pad_info.push(PadInfo {
+                    copy_start: begin as _,
+                    end_pad_start: input_shapes[0].dim(axis) + begin as u64 - end as u64,
+                });
+            }
+            context.insert("pad_info", &pad_info);
+
+            NodeTemplate {
+                scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
+                template: "matrix/pad.wgsl",
                 threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
             }
         }
