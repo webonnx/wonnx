@@ -14,7 +14,7 @@ var<storage, read> input_right: GemmArrayVector;
 
 {% if i_lens | length == 3 %} // Bias
 	[[group(0), binding(2)]]
-	var<storage, read> input_2: GemmArrayVector;
+	var<storage, read> input_bias: GemmArrayVector;
 
 	[[group(0), binding(3)]]
 	var<storage, write> output_0: GemmArrayVector;
@@ -77,20 +77,20 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	
 	{% if i_lens | length == 3 %}
 		let bias_index =
-			{% if not bias_broadcast_x %} (x * {{ bias_shape[1] }}u) + {% endif %} 
-			{% if not bias_broadcast_y %} y {% else  %} 0u {% endif %};
+			{% if not bias_broadcast_rows %} (x * {{ bias_shape[1] }}u) + {% endif %} 
+			{% if not bias_broadcast_columns %} y {% else  %} 0u {% endif %};
 
 		for(var index_mat: u32 = 0u; index_mat < {{ kernel_size }}u; index_mat = index_mat + 1u) {
-			{% if bias_broadcast_y and bias_broadcast_x %}
+			{% if bias_broadcast_columns and bias_broadcast_rows %}
 				{# Bias is just a single number, broadcast over both dimensions #}
-				let bias_number = input_2.data[bias_index][0];
+				let bias_number = input_bias.data[bias_index][0];
 				let bias = GemmVec(
 					{% for k in range(end = kernel_size) %}
 						bias_number {%-if not loop.last -%},{%- endif -%}
 					{% endfor %}
 				);
-			{% elif bias_broadcast_y %}
-				let bias_number = input_2.data[bias_index][index_mat];
+			{% elif bias_broadcast_columns %}
+				let bias_number = input_bias.data[bias_index][index_mat];
 				let bias = GemmVec(
 					{% for k in range(end = kernel_size) %}
 						bias_number {%-if not loop.last -%},{%- endif -%}
@@ -98,7 +98,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 				);
 			{% else  %}
 				{# Bias is a matrix, no broadcasting, one bias scalar for each output element #}
-				let bias = input_2.data[bias_index {% if not bias_broadcast_x %} + (index_mat * {{ n_chunks }}u) {% endif %}];
+				let bias = input_bias.data[bias_index {% if not bias_broadcast_rows %} + (index_mat * {{ n_chunks }}u) {% endif %}];
 			{% endif %}
 
 			output_0.data[index + (index_mat * {{ n_chunks }}u)] = 

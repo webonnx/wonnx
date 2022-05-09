@@ -1049,8 +1049,8 @@ pub fn compile(
                     }
 
                     context.insert("bias_shape", &bias_shape.dims);
-                    context.insert("bias_broadcast_x", &(bias_shape.dim(0) == 1));
-                    context.insert("bias_broadcast_y", &(bias_shape.dim(1) == 1));
+                    context.insert("bias_broadcast_rows", &(bias_shape.dim(0) == 1));
+                    context.insert("bias_broadcast_columns", &(bias_shape.dim(1) == 1));
                 }
             }
 
