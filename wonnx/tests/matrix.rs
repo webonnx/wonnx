@@ -367,7 +367,6 @@ fn test_matmul_stacks() {
     .iter()
     .map(|x| *x as f32)
     .collect();
-    println!("RESULT={:?}", result["C"]);
     common::assert_eq_vector((&result["C"]).try_into().unwrap(), &out);
 }
 
@@ -479,6 +478,86 @@ fn test_gemm_broadcasting_bias() {
     let out = &[
         220., 236., 252., 268., 580., 632., 684., 736., 940., 1028., 1116., 1204., 1300., 1424.,
         1548., 1672.,
+    ];
+    common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
+}
+
+// Test Gemm with broadcasting bias (same as above but bias is shaped (4,1) instead of (1,4))
+// a = np.arange(24).reshape((4,6))
+// b = np.arange(24).reshape((6,4))
+// c = np.arange(4).reshape((1,4))
+// d = np.dot(a,b) + c
+// d = array([[ 220,  235,  250,  265], [ 581,  632,  683,  734], [ 942, 1029, 1116, 1203], [1303, 1426, 1549, 1672]])
+#[test]
+fn test_gemm_broadcasting_second_bias() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let c_data: Vec<f32> = (0..4).map(|x| x as f32).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+    input_data.insert("C".to_string(), c_data.as_slice().into());
+
+    let model = model(graph(
+        vec![
+            tensor("A", &[4, 6]),
+            tensor("B", &[6, 4]),
+            tensor("C", &[4, 1]),
+        ],
+        vec![tensor("D", &[4, 4])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    let out = &[
+        220., 235., 250., 265., 581., 632., 683., 734., 942., 1029., 1116., 1203., 1303., 1426.,
+        1549., 1672.,
+    ];
+    common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
+}
+
+// Test Gemm with broadcasting bias
+// a = np.arange(24).reshape((4,6))
+// b = np.arange(24).reshape((6,4))
+// c = np.array(-1000)
+// d = np.dot(a,b) + c
+// d = array([[-780, -765, -750, -735], [-420, -369, -318, -267], [ -60,   27,  114,  201], [ 300,  423,  546,  669]])
+#[test]
+fn test_gemm_scalar_bias() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let c_data: Vec<f32> = vec![-1000.0];
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+    input_data.insert("C".to_string(), c_data.as_slice().into());
+
+    let model = model(graph(
+        vec![
+            tensor("A", &[4, 6]),
+            tensor("B", &[6, 4]),
+            tensor("C", &[1]),
+        ],
+        vec![tensor("D", &[4, 4])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    let out = &[
+        -780., -765., -750., -735., -420., -369., -318., -267., -60., 27., 114., 201., 300., 423.,
+        546., 669.,
     ];
     common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
 }
