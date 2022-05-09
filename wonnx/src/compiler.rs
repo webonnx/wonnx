@@ -945,7 +945,7 @@ pub fn compile(
                     stack_right_stride = input_right_shape.dims.iter().product();
                     stack_output_stride = output_shape.dims.iter().product();
 
-                    log::warn!(
+                    log::debug!(
                         "MatMul stacking: left {} right {} stack_dims={} stack_count={} stack_left_stride={} stack_right_stride={} stack_output_stride={}",
                         input_left_shape,
                         input_right_shape,
@@ -1019,13 +1019,6 @@ pub fn compile(
                             input_shape: bias_shape.clone(),
                         });
                     }
-
-                    log::warn!(
-                        "Gemm bias shape={:?} while m={} n={}",
-                        bias_shape,
-                        dim_m,
-                        dim_n
-                    );
 
                     // For bias shape of rank 1, prepend a 1
                     if bias_shape.rank() == 1 {
