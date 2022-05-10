@@ -1,5 +1,5 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
+use wonnx::utils::{attribute, graph, initializer, initializer_int64, model, node, tensor};
 mod common;
 
 #[test]
@@ -122,14 +122,8 @@ fn test_pad_example() {
         vec![tensor("X", &[3, 2])],
         vec![tensor("Y", &[3, 4])],
         vec![],
-        vec![],
-        vec![node(
-            vec!["X"],
-            vec!["Y"],
-            "Pad",
-            "Pad",
-            vec![attribute("pads", vec![0, 2, 0, 0])],
-        )],
+        vec![initializer_int64("pads", vec![0, 2, 0, 0], vec![4])],
+        vec![node(vec!["X", "pads"], vec!["Y"], "Pad", "Pad", vec![])],
     ));
 
     let session =
