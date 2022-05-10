@@ -388,7 +388,7 @@ fn test_matmul_square_matrix() {
 
 ### Known limitations
 
-* The `Clip`, `Resize`, `Reshape`, `Split` and `ReduceSum` ops accept (typically optional) secondary inputs to set various
+* The `Clip`, `Resize`, `Reshape`, `Split`, `Pad` and `ReduceSum` ops accept (typically optional) secondary inputs to set various
   parameters (i.e. axis). These inputs are only supported if they are supplied as initializer tensors (i.e. do not depend 
   on inputs and are not outputs of other ops), because wonnx pre-compiles all operations to shaders in advance (and must know
   these parameters up front).
