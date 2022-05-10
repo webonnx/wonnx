@@ -1,5 +1,5 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
+use wonnx::utils::{attribute, graph, initializer, initializer_int64, model, node, tensor};
 mod common;
 
 #[test]
@@ -105,6 +105,116 @@ fn test_split() {
     common::assert_eq_vector((&result["Y"]).try_into().unwrap(), &test_y);
     let test_w = vec![4., 5., 6., 10., 11., 12.];
     common::assert_eq_vector((&result["W"]).try_into().unwrap(), &test_w);
+}
+
+#[test]
+fn test_pad_example() {
+    let mut input_data = HashMap::new();
+    #[rustfmt::skip]
+    let data = [
+        1.0, 1.2,
+        2.3, 3.4,
+        4.5, 5.7,
+    ].to_vec();
+    input_data.insert("X".to_string(), data.as_slice().into());
+
+    let model = model(graph(
+        vec![tensor("X", &[3, 2])],
+        vec![tensor("Y", &[3, 4])],
+        vec![],
+        vec![initializer_int64("pads", vec![0, 2, 0, 0], vec![4])],
+        vec![node(vec!["X", "pads"], vec!["Y"], "Pad", "Pad", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    #[rustfmt::skip]
+    let test_y = vec![
+        0.0, 0.0, 1.0, 1.2,
+        0.0, 0.0, 2.3, 3.4,
+        0.0, 0.0, 4.5, 5.7,
+    ];
+    let actual: &[_] = (&result["Y"]).try_into().unwrap();
+    // No arithmetic is done, so `assert_eq!` can be used.
+    assert_eq!(actual, &test_y);
+}
+
+#[test]
+fn test_pad_complex() {
+    let mut input_data = HashMap::new();
+    let data = (1..=1 * 3 * 2).map(|x| x as f32).collect::<Vec<f32>>();
+    input_data.insert("X".to_string(), data.as_slice().into());
+
+    let kv = 0.5;
+    let model = model(graph(
+        vec![tensor("X", &[1, 3, 2])],
+        vec![tensor("Y", &[2, 4, 5])],
+        vec![],
+        vec![],
+        vec![node(
+            vec!["X"],
+            vec!["Y"],
+            "Pad",
+            "Pad",
+            vec![
+                attribute(
+                    "pads",
+                    vec![
+                        0, // x1_begin
+                        1, // x2_begin
+                        2, // x3_begin
+                        1, // x1_end
+                        0, // x2_end
+                        1, // x3_end
+                    ],
+                ),
+                attribute("constant_value", kv),
+            ],
+        )],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    /*
+    [
+    [[1,2],
+     [3,4],
+     [5,6]],
+    ]
+
+    ->
+
+    [
+    [[0,0,0,0,0],
+     [0,0,1,2,0],
+     [0,0,3,4,0],
+     [0,0,5,6,0]],
+    [[0,0,0,0,0],
+     [0,0,0,0,0],
+     [0,0,0,0,0],
+     [0,0,0,0,0]]
+    ]
+    */
+
+    #[rustfmt::skip]
+    let test_y = vec![
+        kv, kv, kv, kv, kv,
+        kv, kv, 1., 2., kv,
+        kv, kv, 3., 4., kv,
+        kv, kv, 5., 6., kv,
+
+        kv, kv, kv, kv, kv,
+        kv, kv, kv, kv, kv,
+        kv, kv, kv, kv, kv,
+        kv, kv, kv, kv, kv,
+    ];
+    let actual: &[_] = (&result["Y"]).try_into().unwrap();
+    // No arithmetic is done, so `assert_eq!` can be used.
+    assert_eq!(actual, &test_y);
 }
 
 #[test]
