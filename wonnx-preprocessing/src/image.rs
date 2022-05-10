@@ -31,7 +31,7 @@ pub fn load_bw_image(
     })
 }
 
-// Loads an image as (1, w, h, 3)
+// Loads an image as (1, 3, w, h)
 pub fn load_rgb_image(
     image_path: &Path,
     width: usize,
@@ -51,7 +51,7 @@ pub fn load_rgb_image(
     // See https://github.com/onnx/models/blob/master/vision/classification/imagenet_inference.ipynb
     // for pre-processing image.
     // WARNING: Note order of declaration of arguments: (_,c,j,i)
-    let mut array = ndarray::Array::from_shape_fn((1, 3, 224, 224), |(_, c, j, i)| {
+    let mut array = ndarray::Array::from_shape_fn((1, 3, height, width), |(_, c, j, i)| {
         let pixel = image_buffer.get_pixel(i as u32, j as u32);
         let channels = pixel.channels();
 
