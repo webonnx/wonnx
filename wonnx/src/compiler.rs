@@ -775,7 +775,12 @@ pub fn compile(
         op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
         | "GlobalAveragePool") => {
             // TODO: Conv only support NxCxHxW for the moment.
-            debug_assert!(input_shapes[0].rank() == 4);
+            if input_shapes[0].rank() != 4 {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 0,
+                    input_shape: input_shapes[0].clone(),
+                });
+            }
 
             // GlobalAveragePool is equivalent to AveragePool, with the kernel shape set to the size of the input tensor
             // See https://github.com/onnx/onnx/blob/main/docs/Operators.md#globalaveragepool

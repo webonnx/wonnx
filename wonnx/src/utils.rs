@@ -438,7 +438,7 @@ pub fn tensor_of_type(
 
 pub fn initializer(name: &str, data: Vec<f32>, dimensions: Vec<i64>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
-    debug_assert_eq!(
+    assert_eq!(
         dimensions.iter().cloned().product::<i64>() as usize,
         data.len()
     );
@@ -451,7 +451,7 @@ pub fn initializer(name: &str, data: Vec<f32>, dimensions: Vec<i64>) -> onnx::Te
 
 pub fn initializer_int64(name: &str, data: Vec<i64>, dimensions: Vec<i64>) -> onnx::TensorProto {
     let mut initializer = crate::onnx::TensorProto::new();
-    debug_assert_eq!(
+    assert_eq!(
         dimensions.iter().cloned().product::<i64>() as usize,
         data.len()
     );
