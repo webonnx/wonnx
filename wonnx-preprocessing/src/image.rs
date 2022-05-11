@@ -31,7 +31,7 @@ pub fn load_bw_image(
     })
 }
 
-// Loads an image as (1, 3, w, h)
+// Loads an image as (1, 3, h, w)
 pub fn load_rgb_image(
     image_path: &Path,
     width: usize,
