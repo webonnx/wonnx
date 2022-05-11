@@ -37,6 +37,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 	{% if op_type == "Pow" %}
 		output_0.data[gidx] = pow(lhs, rhs);
+	{% elif op_type == "PRelu" %}
+		output_0.data[gidx] = max(lhs, Scalar(0))
+							+ min(lhs, Scalar(0)) * rhs;
 	{% else %}
 		output_0.data[gidx] = (lhs {{ op_type }} rhs);
 	{% endif %}

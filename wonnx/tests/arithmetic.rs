@@ -188,3 +188,64 @@ fn test_mul_broadcast() {
     let expected = vec![20.0, 30.0, 40.0, 60.0, 60.0, 90.0];
     common::assert_eq_vector((&result["Z"]).try_into().unwrap(), expected.as_slice());
 }
+
+#[test]
+fn test_prelu() {
+    fn test(
+        data: &[f32],
+        data_shape: &[i64],
+        slope: &[f32],
+        slope_shape: &[i64],
+        expected: &[f32],
+    ) {
+        let mut input_data = HashMap::new();
+        input_data.insert("X".to_string(), data.into());
+        input_data.insert("Y".to_string(), slope.into());
+
+        let model = model(graph(
+            vec![tensor("X", data_shape), tensor("Y", slope_shape)],
+            vec![tensor("Z", data_shape)],
+            vec![],
+            vec![],
+            vec![node(vec!["X", "Y"], vec!["Z"], "prelu", "PRelu", vec![])],
+        ));
+
+        let session =
+            pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+        let result = pollster::block_on(session.run(&input_data)).unwrap();
+        common::assert_eq_vector((&result["Z"]).try_into().unwrap(), expected);
+    }
+
+    test(&[1.0], &[1], &[1.0], &[1], &[1.0]);
+    test(&[-1.0], &[1], &[0.5], &[1], &[-0.5]);
+    test(
+        &[-1.0, -0.5, 0.0, 1.0],
+        &[4],
+        &[0.5, 2.0, 100.0, 100.0],
+        &[4],
+        &[-0.5, -1.0, 0.0, 1.0],
+    );
+
+    // Broadcast tests:
+    test(
+        &[-1.0, -0.5, 0.0, 1.0],
+        &[4],
+        &[0.5],
+        &[1],
+        &[-0.5, -0.25, 0.0, 1.0],
+    );
+    test(
+        &[-1.0, -1.0, -1.0, -1.0],
+        &[2, 2],
+        &[0.5, 2.0],
+        &[1, 2],
+        &[-0.5, -2.0, -0.5, -2.0],
+    );
+    test(
+        &[-1.0, -1.0, -1.0, -1.0],
+        &[2, 2],
+        &[0.5, 2.0],
+        &[2, 1],
+        &[-0.5, -0.5, -2.0, -2.0],
+    );
+}
