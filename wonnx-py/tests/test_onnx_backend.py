@@ -139,6 +139,7 @@ def do_enforce_test_coverage_safelist(model):  # type: (ModelProto) -> bool
 backend_test = onnx.backend.test.BackendTest(DummyBackend, __name__)
 
 backend_test.include(f"test_relu_[a-z,_]*")
+backend_test.include(f"test_prelu_[a-z,_]*")
 backend_test.include(f"test_conv_[a-z,_]*")
 backend_test.include(f"test_abs_[a-z,_]*")
 backend_test.include(f"test_acos_[a-z,_]*")

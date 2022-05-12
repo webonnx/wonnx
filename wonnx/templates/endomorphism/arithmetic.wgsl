@@ -25,6 +25,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	{% if i_lens | length == 2 %}
 		{% if op_type == "Pow" %}
 			output_0.data[gidx] = pow(input_0.data[gidx], input_1.data[gidx]);
+		{% elif op_type == "PRelu" %}
+			output_0.data[gidx] = max(input_0.data[gidx], Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)))
+	                            + min(input_0.data[gidx], Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0))) * input_1.data[gidx];
 		{% else %}
 			output_0.data[gidx] = input_0.data[gidx] {{ op_type }} input_1.data[gidx];
 		{% endif %}

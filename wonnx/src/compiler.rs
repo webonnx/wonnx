@@ -541,7 +541,7 @@ pub fn compile(
 
         // Arithmetic operation
         op @ ("Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less"
-        | "LessOrEqual" | "Mod" | "Mul" | "Or" | "Sub" | "Pow") => {
+        | "LessOrEqual" | "Mod" | "Mul" | "Or" | "Sub" | "Pow" | "PRelu") => {
             let broadcast = get_attribute("broadcast", Some(0), node)?;
             if broadcast != 0 {
                 return Err(CompileError::UnimplementedVariant {
@@ -567,6 +567,7 @@ pub fn compile(
                     "Or" => "|",
                     "Sub" => "-",
                     "Pow" => "Pow",
+                    "PRelu" => "PRelu",
                     _ => {
                         return Err(CompileError::UnimplementedOp(
                             node.get_op_type().to_string(),
