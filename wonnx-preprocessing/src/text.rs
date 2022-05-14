@@ -165,11 +165,10 @@ impl BertEncodedText {
     }
 
     pub fn get_segments(&self) -> Vec<i64> {
-        log::debug!("segment_ids={:?}", self.encoding.get_sequence_ids());
         self.encoding
-            .get_sequence_ids()
+            .get_type_ids()
             .iter()
-            .map(|x| x.unwrap_or(0) as i64)
+            .map(|x| *x as i64)
             .collect()
     }
 }
