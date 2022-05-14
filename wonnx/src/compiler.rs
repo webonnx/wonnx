@@ -1285,7 +1285,8 @@ pub fn compile(
             }
         }
         "Transpose" => {
-            let default = ((input_lengths[0] as i64)..0).collect::<Vec<_>>();
+            let n_dims: i64 = input_shapes[0].rank() as i64;
+            let default = (0..n_dims).rev().collect::<Vec<i64>>();
             let perms: Vec<i64> = get_attribute("perm", Some(default), node)?;
             let permuted_shapes = perms
                 .iter()
