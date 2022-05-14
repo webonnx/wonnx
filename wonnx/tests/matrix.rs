@@ -4,6 +4,7 @@ mod common;
 
 #[test]
 fn test_matmul_square_matrix() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let n = 16;
     let mut input_data = HashMap::new();
 
@@ -79,6 +80,7 @@ fn test_two_transposes() {
 
 #[test]
 fn test_split() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let mut input_data = HashMap::new();
     let data = (1..=2 * 6).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
@@ -144,7 +146,7 @@ fn test_pad_example() {
 #[test]
 fn test_pad_complex() {
     let mut input_data = HashMap::new();
-    let data = (1..=1 * 3 * 2).map(|x| x as f32).collect::<Vec<f32>>();
+    let data = (1..=3 * 2).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
 
     let kv = 0.5;
@@ -179,24 +181,16 @@ fn test_pad_complex() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    /*
+    /* [[[1,2], [3,4], [5,6]]] ->
     [
-    [[1,2],
-     [3,4],
-     [5,6]],
-    ]
-
-    ->
-
-    [
-    [[0,0,0,0,0],
-     [0,0,1,2,0],
-     [0,0,3,4,0],
-     [0,0,5,6,0]],
-    [[0,0,0,0,0],
-     [0,0,0,0,0],
-     [0,0,0,0,0],
-     [0,0,0,0,0]]
+        [[0,0,0,0,0],
+        [0,0,1,2,0],
+        [0,0,3,4,0],
+        [0,0,5,6,0]],
+        [[0,0,0,0,0],
+        [0,0,0,0,0],
+        [0,0,0,0,0],
+        [0,0,0,0,0]]
     ]
     */
 
@@ -213,6 +207,7 @@ fn test_pad_complex() {
         kv, kv, kv, kv, kv,
     ];
     let actual: &[_] = (&result["Y"]).try_into().unwrap();
+
     // No arithmetic is done, so `assert_eq!` can be used.
     assert_eq!(actual, &test_y);
 }
@@ -272,4 +267,297 @@ fn test_resize() {
     //    4.,
     //];
     //assert_eq!(result["Y"], test_y);
+}
+
+// Multiply a 2x2 matrix with an identity matrix of size 2x2.
+#[test]
+fn test_matmul_square_matrix_small() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let n = 2;
+    let mut input_data = HashMap::new();
+
+    let data_a = ndarray::Array2::eye(n);
+    let mut data_b = ndarray::Array2::<f32>::zeros((n, n));
+    data_b[[0, 0]] = 0.0;
+    data_b[[0, 1]] = 0.5;
+    data_b[[1, 0]] = 1.0;
+    data_b[[1, 1]] = 1.5;
+
+    let sum = data_a.dot(&data_b);
+
+    input_data.insert("A".to_string(), data_a.as_slice().unwrap().into());
+    input_data.insert("B".to_string(), data_b.as_slice().unwrap().into());
+
+    let n = n as i64;
+    let model = model(graph(
+        vec![tensor("A", &[n, n]), tensor("B", &[n, n])],
+        vec![tensor("C", &[n, n])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    common::assert_eq_vector((&result["C"]).try_into().unwrap(), sum.as_slice().unwrap());
+}
+
+// Multiply a 4x4 matrix with a ones matrix of size 4x2.
+// a = np.arange(0,16).reshape((4,4))
+// b = np.arange(-8,0).reshape((4,2))
+// c = np.matmul(a, b)
+//array([[ -20,  -14], [-100,  -78], [-180, -142], [-260, -206]])
+#[test]
+fn test_matmul_nonsquare_matrix_small() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..16).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..8).map(|x| -8.0 + (x as f32)).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+
+    let model = model(graph(
+        vec![tensor("A", &[4, 4]), tensor("B", &[4, 2])],
+        vec![tensor("C", &[4, 2])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    let out = &[-20., -14., -100., -78., -180., -142., -260., -206.];
+    common::assert_eq_vector((&result["C"]).try_into().unwrap(), out);
+}
+
+// Multiply two stacks of 2x2 matrixes
+// a = np.arange(0,16).reshape((4,2,2))
+// b = np.arange(16,32).reshape((4,2,2))
+// c = np.matmul(a, b)
+#[test]
+fn test_matmul_stacks() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..16).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (16..32).map(|x| x as f32).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+
+    let model = model(graph(
+        vec![tensor("A", &[4, 2, 2]), tensor("B", &[4, 2, 2])],
+        vec![tensor("C", &[4, 2, 2])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    let out: Vec<f32> = vec![
+        18, 19, 86, 91, 190, 199, 274, 287, 426, 443, 526, 547, 726, 751, 842, 871,
+    ]
+    .iter()
+    .map(|x| *x as f32)
+    .collect();
+    common::assert_eq_vector((&result["C"]).try_into().unwrap(), &out);
+}
+
+// Multiply a 1x4 matrix with a ones matrix of size 4x2.
+// a = np.arange(0,4).reshape((1,4))
+// b = np.arange(-8,0).reshape((4,2))
+// c = np.matmul(a, b)
+//array([[ -20,  -14]])
+#[test]
+fn test_matmul_1d() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..4).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..8).map(|x| -8.0 + (x as f32)).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+
+    let model = model(graph(
+        vec![tensor("A", &[1, 4]), tensor("B", &[4, 2])],
+        vec![tensor("C", &[1, 2])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    let out = &[-20., -14.];
+    common::assert_eq_vector((&result["C"]).try_into().unwrap(), out);
+}
+
+// Test Gemm with matrix bias
+// a = np.arange(24).reshape((4,6))
+// b = np.arange(24).reshape((6,4))
+// c = np.arange(16).reshape((4,4))
+// d = np.dot(a,b) + c
+// d = array([[ 220,  236,  252,  268], [ 584,  636,  688,  740], [ 948, 1036, 1124, 1212], [1312, 1436, 1560, 1684]])
+#[test]
+fn test_gemm_matrix_bias() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let c_data: Vec<f32> = (0..16).map(|x| x as f32).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+    input_data.insert("C".to_string(), c_data.as_slice().into());
+
+    let model = model(graph(
+        vec![
+            tensor("A", &[4, 6]),
+            tensor("B", &[6, 4]),
+            tensor("C", &[4, 4]),
+        ],
+        vec![tensor("D", &[4, 4])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    let out = &[
+        220., 236., 252., 268., 584., 636., 688., 740., 948., 1036., 1124., 1212., 1312., 1436.,
+        1560., 1684.,
+    ];
+    common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
+}
+
+// Test Gemm with broadcasting bias
+// a = np.arange(24).reshape((4,6))
+// b = np.arange(24).reshape((6,4))
+// c = np.arange(4).reshape((1,4))
+// d = np.dot(a,b) + c
+// d = array([[ 220,  236,  252,  268], [ 580,  632,  684,  736], [ 940, 1028, 1116, 1204], [1300, 1424, 1548, 1672]])
+#[test]
+fn test_gemm_broadcasting_bias() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let c_data: Vec<f32> = (0..4).map(|x| x as f32).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+    input_data.insert("C".to_string(), c_data.as_slice().into());
+
+    let model = model(graph(
+        vec![
+            tensor("A", &[4, 6]),
+            tensor("B", &[6, 4]),
+            tensor("C", &[1, 4]),
+        ],
+        vec![tensor("D", &[4, 4])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    let out = &[
+        220., 236., 252., 268., 580., 632., 684., 736., 940., 1028., 1116., 1204., 1300., 1424.,
+        1548., 1672.,
+    ];
+    common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
+}
+
+// Test Gemm with broadcasting bias (same as above but bias is shaped (4,1) instead of (1,4))
+// a = np.arange(24).reshape((4,6))
+// b = np.arange(24).reshape((6,4))
+// c = np.arange(4).reshape((1,4))
+// d = np.dot(a,b) + c
+// d = array([[ 220,  235,  250,  265], [ 581,  632,  683,  734], [ 942, 1029, 1116, 1203], [1303, 1426, 1549, 1672]])
+#[test]
+fn test_gemm_broadcasting_second_bias() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let c_data: Vec<f32> = (0..4).map(|x| x as f32).collect();
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+    input_data.insert("C".to_string(), c_data.as_slice().into());
+
+    let model = model(graph(
+        vec![
+            tensor("A", &[4, 6]),
+            tensor("B", &[6, 4]),
+            tensor("C", &[4, 1]),
+        ],
+        vec![tensor("D", &[4, 4])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    let out = &[
+        220., 235., 250., 265., 581., 632., 683., 734., 942., 1029., 1116., 1203., 1303., 1426.,
+        1549., 1672.,
+    ];
+    common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
+}
+
+// Test Gemm with broadcasting bias
+// a = np.arange(24).reshape((4,6))
+// b = np.arange(24).reshape((6,4))
+// c = np.array(-1000)
+// d = np.dot(a,b) + c
+// d = array([[-780, -765, -750, -735], [-420, -369, -318, -267], [ -60,   27,  114,  201], [ 300,  423,  546,  669]])
+#[test]
+fn test_gemm_scalar_bias() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let a_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let b_data: Vec<f32> = (0..24).map(|x| x as f32).collect();
+    let c_data: Vec<f32> = vec![-1000.0];
+
+    let mut input_data = HashMap::new();
+    input_data.insert("A".to_string(), a_data.as_slice().into());
+    input_data.insert("B".to_string(), b_data.as_slice().into());
+    input_data.insert("C".to_string(), c_data.as_slice().into());
+
+    let model = model(graph(
+        vec![
+            tensor("A", &[4, 6]),
+            tensor("B", &[6, 4]),
+            tensor("C", &[1]),
+        ],
+        vec![tensor("D", &[4, 4])],
+        vec![],
+        vec![],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    let out = &[
+        -780., -765., -750., -735., -420., -369., -318., -267., -60., 27., 114., 201., 300., 423.,
+        546., 669.,
+    ];
+    common::assert_eq_vector((&result["D"]).try_into().unwrap(), out);
 }

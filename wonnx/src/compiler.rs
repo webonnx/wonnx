@@ -1,6 +1,7 @@
 use crate::utils::{
     ceil, get_attribute, AttributeNotFoundError, DataTypeError, MultiType, ScalarType, Shape,
 };
+use num::integer::gcd;
 use tera::{Context, Tera};
 use thiserror::Error;
 
@@ -903,55 +904,219 @@ pub fn compile(
             }
         }
         op @ ("Gemm" | "MatMul") => {
-            let alpha = get_attribute("alpha", Some(1.0), node)?;
-            let beta = get_attribute("beta", Some(1.0), node)?;
+            // Generic matrix multiplication; outputs an M*N matrix from inputs A (size M*K) and B (size K*N)
 
-            // Whether A resp. B should be transposed, or C should be broadcast (default: 0 = false)
+            // MatMul behaves "like numpy.matmul" (https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.matmul.html)
+            // If both arguments are 2-D they are multiplied like conventional matrices. If they are not, special rules are
+            // applied, that may (among others) lead to 'stacking' (basically multiple matrix multiplications are performed
+            // in parallel). Below, these rules are applied. These rewrite the shapes for input and output and in some cases
+            // set a 'stack count' and 'stack stride'.
+            let mut stack_count = 1;
+            let mut input_left_shape = input_shapes[0].clone();
+            let mut input_right_shape = input_shapes[1].clone();
+            let mut output_shape = output_shapes[0].clone();
+            let mut stack_left_stride: u64 = 0;
+            let mut stack_right_stride: u64 = 0;
+            let mut stack_output_stride: u64 = 0;
+
+            if op == "MatMul" {
+                // - If either argument is N-D, N > 2, it is treated as a stack of matrices residing in the last two indexes
+                //   and broadcast accordingly.
+                if input_left_shape.rank() > 2 || input_right_shape.rank() > 2 {
+                    if input_left_shape.rank() != input_right_shape.rank()
+                        || output_shape.rank() != input_left_shape.rank()
+                        || input_left_shape.dims[0..(input_left_shape.dims.len() - 2)]
+                            != input_right_shape.dims[0..(input_right_shape.dims.len() - 2)]
+                        || input_left_shape.dims[0..(input_left_shape.dims.len() - 2)]
+                            != output_shape.dims[0..(output_shape.dims.len() - 2)]
+                    {
+                        return Err(CompileError::UnimplementedVariant {
+                            variant: format!("broadcasting for two stacks of matrixes (left side has shape {}, right side has shape {})", input_left_shape, input_right_shape),
+                            op: op.to_string(),
+                        });
+                    }
+
+                    let stack_dims = input_left_shape.dims.len() - 2;
+                    stack_count = input_left_shape.dims[0..stack_dims].iter().product();
+                    input_left_shape.dims.drain(0..stack_dims);
+                    input_right_shape.dims.drain(0..stack_dims);
+                    output_shape.dims.drain(0..stack_dims);
+                    stack_left_stride = input_left_shape.dims.iter().product();
+                    stack_right_stride = input_right_shape.dims.iter().product();
+                    stack_output_stride = output_shape.dims.iter().product();
+
+                    log::debug!(
+                        "MatMul stacking: left {} right {} stack_dims={} stack_count={} stack_left_stride={} stack_right_stride={} stack_output_stride={}",
+                        input_left_shape,
+                        input_right_shape,
+                        stack_dims,
+                        stack_count,
+                        stack_left_stride,
+                        stack_right_stride,
+                        stack_output_stride
+                    );
+                }
+
+                // If the first argument is 1-D, it is promoted to a matrix by prepending a 1 to its dimensions. After
+                // matrix multiplication the prepended 1 is removed.
+                if input_left_shape.rank() == 1 {
+                    input_left_shape.dims.insert(0, 1);
+                }
+
+                // If the second argument is 1-D, it is promoted to a matrix by appending a 1 to its dimensions. After
+                // matrix multiplication the appended 1 is removed.
+                if input_right_shape.rank() == 1 {
+                    input_left_shape.dims.push(1);
+                }
+            }
+
+            context.insert("stack_left_stride", &stack_left_stride);
+            context.insert("stack_right_stride", &stack_right_stride);
+            context.insert("stack_output_stride", &stack_output_stride);
+            context.insert("left_shape", &input_left_shape.dims);
+            context.insert("right_shape", &input_right_shape.dims);
+            context.insert("output_shape", &output_shape.dims);
+
+            // Check dimensions
+            let dim_m = output_shape.dim(0);
+            let dim_n = output_shape.dim(1);
+            let dim_k = input_left_shape.dim(1);
+            if dim_m != input_left_shape.dim(0) {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 0,
+                    input_shape: input_left_shape.clone(),
+                });
+            }
+
+            if dim_n != input_right_shape.dim(1) || dim_k != input_right_shape.dim(0) {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 1,
+                    input_shape: input_right_shape.clone(),
+                });
+            }
+
             if op == "Gemm" {
+                // Check if A resp. B should be transposed, or C should be broadcast (default: 0 = false)
                 let transpose_a = get_attribute("transA", Some(0), node)?;
                 let transpose_b = get_attribute("transB", Some(0), node)?;
                 let broadcast = get_attribute("broadcast", Some(0), node)?;
 
                 if transpose_a != 0 || transpose_b != 0 || broadcast != 0 {
                     return Err(CompileError::UnimplementedVariant {
-                        variant: "Gemm with transA/transB/broadcast not equal to zero".to_string(),
+                        variant: "with transA/transB/broadcast not equal to zero".to_string(),
                         op: op.to_string(),
                     });
                 }
+
+                // If there is a bias input, it should be "unidirectionally broadcastable to M*N". Currently we only support a bias ofM*N though
+                if input_shapes.len() > 2 {
+                    let mut bias_shape = input_shapes[2].clone();
+
+                    // A shape of higher rank than 2 can never be broadcasted
+                    if bias_shape.rank() > 2 || bias_shape.rank() == 0 {
+                        return Err(CompileError::InvalidInputShape {
+                            input_index: 2,
+                            input_shape: bias_shape.clone(),
+                        });
+                    }
+
+                    // For bias shape of rank 1, prepend a 1
+                    if bias_shape.rank() == 1 {
+                        bias_shape.dims.insert(0, 1);
+                    }
+
+                    // First dimension of bias must be either 1 or M
+                    if bias_shape.dim(0) != dim_m && bias_shape.dim(0) != 1 {
+                        return Err(CompileError::InvalidInputShape {
+                            input_index: 2,
+                            input_shape: bias_shape.clone(),
+                        });
+                    }
+
+                    // Second dimension of bias must be either 1 or N
+                    if bias_shape.dim(1) != dim_n && bias_shape.dim(1) != 1 {
+                        return Err(CompileError::InvalidInputShape {
+                            input_index: 2,
+                            input_shape: bias_shape.clone(),
+                        });
+                    }
+
+                    context.insert("bias_shape", &bias_shape.dims);
+                    context.insert("bias_broadcast_rows", &(bias_shape.dim(0) == 1));
+                    context.insert("bias_broadcast_columns", &(bias_shape.dim(1) == 1));
+                }
             }
 
+            // Due to a limitation in WGSL, we currently only support floating-point matrix multiplication
+            // See https://github.com/gfx-rs/naga/issues/1896
+            let scalar_type = agreed_type(input_shapes, output_shapes)?;
+            match scalar_type {
+                ScalarType::I32 | ScalarType::I64 => {
+                    return Err(CompileError::UnimplementedVariant {
+                        variant: "with integers".to_string(),
+                        op: op.to_string(),
+                    })
+                }
+                ScalarType::F32 => (),
+            }
+
+            // Obtain alpha and beta coefficients
+            let alpha = get_attribute("alpha", Some(1.0), node)?;
+            let beta = get_attribute("beta", Some(1.0), node)?;
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
-            // Whether A resp. B should be transposed, or C should be broadcast (default: 0 = false)
-            if op == "Gemm" {
-                let transpose_a = get_attribute("transA", Some(0), node)?;
-                let transpose_b = get_attribute("transB", Some(0), node)?;
-                let broadcast = get_attribute("broadcast", Some(0), node)?;
+            // Determine and set thread count/workgroup size when stacking (shader y dimension)
+            let (y_threads, workgroup_size_y) = workgroup_size(
+                stack_count,
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_Y,
+            )?;
+            context.insert("workgroup_size_y", &workgroup_size_y);
 
-                if transpose_a != 0 || transpose_b != 0 || broadcast != 0 {
-                    return Err(CompileError::UnimplementedVariant {
-                        variant: "Gemm with transA/transB/broadcast not equal to zero".to_string(),
-                        op: op.to_string(),
-                    });
-                }
-            }
+            if dim_m == 1 {
+                let n_elements = output_shapes[0].dim(1);
+                let (x_threads, workgroup_size_x) = workgroup_size(
+                    n_elements,
+                    MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                    MAX_WORKGROUP_SIZE_X,
+                )?;
 
-            if input_shapes[0].dim(0) == 1 {
+                context.insert("workgroup_size_x", &workgroup_size_x);
                 NodeTemplate {
                     scalar_type: agreed_type(input_shapes, output_shapes)?,
                     template: "matrix/gemm_1.wgsl",
-                    threads: (output_shapes[0].dim(1) as _, 1, 1),
+                    threads: (x_threads as _, y_threads, 1),
                 }
             } else {
+                // Matrix multiplication is performed (by the gemm.wgsl shader) in blocks of 4x4, except when the output matrix
+                // or any of the inputs has a dimension smaller than 4, in which case we can do 3x3 or 2x2
+                let kernel_size = gcd(dim_m, gcd(dim_k, dim_n)).min(4).max(1);
+                if kernel_size == 1 {
+                    return Err(CompileError::UnimplementedVariant {
+                        variant: String::from(
+                            "usage with input matrixes whose dimensions are not divisible by 2",
+                        ),
+                        op: op.to_string(),
+                    });
+                }
+
+                let n_blocks = ceil(dim_m * dim_n, kernel_size * kernel_size);
+                let (x_threads, workgroup_size_x) = workgroup_size(
+                    n_blocks,
+                    MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                    MAX_WORKGROUP_SIZE_X,
+                )?;
+
+                context.insert("m_chunks", &(dim_m / kernel_size).max(1));
+                context.insert("n_chunks", &(dim_n / kernel_size).max(1));
+                context.insert("k_chunks", &(dim_k / kernel_size).max(1));
+                context.insert("kernel_size", &kernel_size);
+                context.insert("workgroup_size_x", &workgroup_size_x);
                 NodeTemplate {
-                    scalar_type: agreed_type(input_shapes, output_shapes)?,
+                    scalar_type,
                     template: "matrix/gemm.wgsl",
-                    threads: (
-                        (input_shapes[0].dim(0) * input_shapes[1].dim(1) / 16) as _,
-                        1,
-                        1,
-                    ),
+                    threads: (x_threads as _, y_threads, 1),
                 }
             }
         }
