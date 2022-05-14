@@ -88,15 +88,57 @@ a = np.arange(0,24).reshape((1,2,3,4));
 a == a.transpose(a).transpose(inverse of a)
 */
 #[test]
-fn test_two_transposes_4d() {
+fn test_two_transposes_4d_0213() {
     // a == a.transpose([0,2,1,3]).transpose([0,2,1,3])
     test_transpose_4d_perm(&[0, 2, 1, 3], &[0, 2, 1, 3]);
+}
 
+#[test]
+fn test_two_transposes_4d_0312() {
     // a == a.transpose([0,2,3,1]).transpose([0,3,1,2])
     test_transpose_4d_perm(&[0, 2, 3, 1], &[0, 3, 1, 2]);
+}
 
+#[test]
+fn test_two_transposes_4d_0321() {
     // a == a.transpose([0,3,2,1]).transpose([0,3,2,1])
     test_transpose_4d_perm(&[0, 3, 2, 1], &[0, 3, 2, 1]);
+}
+
+//  a = np.arange(2*3*4).reshape((1,2,3,4))
+// a.transpose((0,3,1,2)).reshape((24,))
+#[test]
+fn test_transposes_4d_0312() {
+    let mut input_data = HashMap::new();
+    let data = (0..2 * 3 * 4).map(|x| x as f32).collect::<Vec<f32>>();
+    input_data.insert("X".to_string(), data.as_slice().into());
+
+    // Model: X -> Transpose -> Y
+    let model = model(graph(
+        vec![tensor("X", &[1, 2, 3, 4])],
+        vec![tensor("Y", &[1, 4, 2, 3])],
+        vec![],
+        vec![],
+        vec![node(
+            vec!["X"],
+            vec!["Y"],
+            "Transpose",
+            "Transpose",
+            vec![attribute("perm", vec![0, 3, 1, 2])],
+        )],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+
+    common::assert_eq_vector(
+        (&result["Y"]).try_into().unwrap(),
+        &[
+            0., 4., 8., 12., 16., 20., 1., 5., 9., 13., 17., 21., 2., 6., 10., 14., 18., 22., 3.,
+            7., 11., 15., 19., 23.,
+        ],
+    );
 }
 
 // When no 'perm' attribute is specified, Transpose should reverse axes (e.g. for 4D input, assume perm is [3,2,1,0])

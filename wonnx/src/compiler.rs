@@ -1298,16 +1298,14 @@ pub fn compile(
                 });
             }
 
-            let permuted_shapes = perms
+            let chunks = perms
                 .iter()
-                .map(|p| output_shapes[0].dim(*p as usize))
+                .map(|p| {
+                    input_shapes[0].dims[((*p as usize) + 1)..]
+                        .iter()
+                        .product::<u64>()
+                })
                 .collect::<Vec<_>>();
-
-            let mut chunks = vec![];
-            for i in 1..permuted_shapes.len() {
-                chunks.push(permuted_shapes[i..].iter().product::<u64>());
-            }
-            chunks.push(1);
 
             context.insert("permuted_chunks", &chunks);
 

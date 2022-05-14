@@ -10,10 +10,10 @@ var<storage, write> output_0: Array;
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
-	if (gidx < {{ i_lens[0] }}u) {
+	if (gidx < {{ o_lens[0] }}u) {
 		var rest = gidx;
 
-		{%- for chunks in i_chunks[0] -%}
+		{%- for chunks in o_chunks[0] -%}
 			{% if loop.last %}
 				let d_{{ loop.index0 }} = rest; 
 			{% else %}
@@ -32,6 +32,6 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 			{%- endfor %}
 		;
 
-		output_0.data[index] = input_0.data[gidx];
+		output_0.data[gidx] = input_0.data[index];
 	}
 }
