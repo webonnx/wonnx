@@ -1288,6 +1288,16 @@ pub fn compile(
             let n_dims: i64 = input_shapes[0].rank() as i64;
             let default = (0..n_dims).rev().collect::<Vec<i64>>();
             let perms: Vec<i64> = get_attribute("perm", Some(default), node)?;
+
+            // The number of elements in the permutations list must be equal to the output shape rank
+            if perms.len() != output_shapes[0].rank() {
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "perm".to_string(),
+                    value: format!("{:?}", perms),
+                    opset_version,
+                });
+            }
+
             let permuted_shapes = perms
                 .iter()
                 .map(|p| output_shapes[0].dim(*p as usize))
