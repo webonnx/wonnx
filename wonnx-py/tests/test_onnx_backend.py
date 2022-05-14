@@ -154,6 +154,7 @@ backend_test.include(f"test_div_bcast_[a-z,_]*")
 backend_test.include(f"test_add_bcast_[a-z,_]*")
 backend_test.include(f"test_sub_bcast_[a-z,_]*")
 backend_test.include(f"test_pow_bcast_[a-z,_]*")
+backend_test.include(f"test_transpose[a-z,_]*")
 
 # Don't support 'bool' type
 # backend_test.include(f"test_and_bcast[a-z0-9,_]*")
