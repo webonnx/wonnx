@@ -113,11 +113,7 @@ pub struct InferOptions {
 
     /// Node to take output from (defaults to the first output when not specified)
     #[structopt(long)]
-    pub output_name: Option<String>,
-
-    /// Whether to attempt to only partially execute the model for the specified output
-    #[structopt(long)]
-    pub partial: bool,
+    pub output_name: Vec<String>,
 
     /// Vocab file for text encoding
     #[structopt(
@@ -210,8 +206,8 @@ use async_trait::async_trait;
 pub trait Inferer {
     async fn infer(
         &self,
-        infer_opt: &InferOptions,
+        outputs: &[String],
         inputs: &HashMap<String, Tensor>,
         model: &ModelProto,
-    ) -> Result<OutputTensor, NNXError>;
+    ) -> Result<HashMap<String, OutputTensor>, NNXError>;
 }

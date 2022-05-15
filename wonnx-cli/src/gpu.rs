@@ -6,7 +6,6 @@ use wonnx::SessionConfig;
 use async_trait::async_trait;
 use wonnx::utils::OutputTensor;
 
-use crate::types::InferOptions;
 use crate::types::Inferer;
 use crate::types::NNXError;
 
@@ -31,24 +30,25 @@ impl GPUInferer {
 impl Inferer for GPUInferer {
     async fn infer(
         &self,
-        infer_opt: &InferOptions,
+        outputs: &[String],
         inputs: &HashMap<String, crate::Tensor>,
         _model: &ModelProto,
-    ) -> Result<OutputTensor, NNXError> {
+    ) -> Result<HashMap<String, OutputTensor>, NNXError> {
         let input_refs = inputs
             .iter()
             .map(|(k, v)| (k.clone(), v.input_tensor()))
             .collect();
         let mut result = self.session.run(&input_refs).await.expect("run failed");
 
-        let result = match &infer_opt.output_name {
-            Some(output_name) => match result.remove(output_name) {
+        let mut output_tensors = HashMap::<String, OutputTensor>::new();
+
+        for output_name in outputs {
+            let result = match result.remove(output_name) {
                 Some(out) => out,
                 None => return Err(NNXError::OutputNotFound(output_name.to_string())),
-            },
-            None => result.values().next().unwrap().clone(),
-        };
-
-        Ok(result)
+            };
+            output_tensors.insert(output_name.clone(), result);
+        }
+        Ok(output_tensors)
     }
 }

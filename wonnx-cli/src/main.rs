@@ -121,7 +121,7 @@ async fn run() -> Result<(), NNXError> {
                 let mut tokens_input = encoding.get_tokens();
                 let mut mask_input = encoding.get_mask();
                 let mut segment_input = encoding.get_segments();
-                log::info!(
+                log::debug!(
                     "tokens={:?} mask={:?} segments={:?}",
                     tokens_input,
                     mask_input,
@@ -215,10 +215,16 @@ async fn run() -> Result<(), NNXError> {
                 input_shapes.insert(input_name.clone(), input_shape.clone());
             }
 
-            let partial_outputs: Option<Vec<String>> = match infer_opt.partial {
-                true => Some(vec![infer_opt.output_name.clone().unwrap()]),
-                false => None,
-            };
+            // Determine which outputs we will be reading
+            let mut output_names = infer_opt.output_name;
+            if output_names.is_empty() {
+                for output in model.get_graph().get_output() {
+                    output_names.push(output.get_name().to_string());
+                }
+                log::info!("no outputs given; using {:?}", output_names);
+            }
+
+            let partial_outputs = Some(output_names.clone());
 
             #[cfg(feature = "cpu")]
             if infer_opt.compare {
@@ -228,13 +234,10 @@ async fn run() -> Result<(), NNXError> {
                 let gpu_start = std::time::Instant::now();
                 if infer_opt.benchmark {
                     for _ in 0..100 {
-                        let _ = gpu_backend.infer(&infer_opt, &inputs, &model).await?;
+                        let _ = gpu_backend.infer(&output_names, &inputs, &model).await?;
                     }
                 }
-                let gpu_output: Vec<f32> = gpu_backend
-                    .infer(&infer_opt, &inputs, &model)
-                    .await?
-                    .try_into()?;
+                let gpu_output_tensors = gpu_backend.infer(&output_names, &inputs, &model).await?;
                 let gpu_time = gpu_start.elapsed();
                 log::info!("gpu time: {}ms", gpu_time.as_millis());
                 drop(gpu_backend);
@@ -245,36 +248,41 @@ async fn run() -> Result<(), NNXError> {
                 let cpu_start = std::time::Instant::now();
                 if infer_opt.benchmark {
                     for _ in 0..100 {
-                        let _ = cpu_backend.infer(&infer_opt, &inputs, &model).await?;
+                        let _ = cpu_backend.infer(&output_names, &inputs, &model).await?;
                     }
                 }
-                let cpu_output: Vec<f32> = cpu_backend
-                    .infer(&infer_opt, &inputs, &model)
-                    .await?
-                    .try_into()?;
+                let cpu_output_tensors = cpu_backend.infer(&output_names, &inputs, &model).await?;
                 let cpu_time = cpu_start.elapsed();
                 log::info!(
                     "cpu time: {}ms ({:.2}x gpu time)",
                     cpu_time.as_millis(),
                     cpu_time.as_secs_f64() / gpu_time.as_secs_f64()
                 );
-                if gpu_output.len() != cpu_output.len() {
+                if gpu_output_tensors.len() != cpu_output_tensors.len() {
                     return Err(NNXError::Comparison(format!(
-                        "length of GPU result ({}) mismatches CPU result ({})",
-                        gpu_output.len(),
-                        cpu_output.len()
+                        "number of outputs in GPU result ({}) mismatches CPU result ({})",
+                        gpu_output_tensors.len(),
+                        cpu_output_tensors.len()
                     )));
                 }
 
-                for i in 0..gpu_output.len() {
-                    let diff = (gpu_output[i] - cpu_output[i]).abs();
-                    if diff > 0.001 {
-                        return Err(NNXError::Comparison(format!(
-							"output element {} differs too much: GPU says {} vs CPU says {} (difference is {})",
-							i, gpu_output[i], cpu_output[i], diff
+                for output_name in &output_names {
+                    let cpu_output: Vec<f32> =
+                        cpu_output_tensors[output_name].clone().try_into()?;
+                    let gpu_output: Vec<f32> =
+                        gpu_output_tensors[output_name].clone().try_into()?;
+
+                    for i in 0..gpu_output.len() {
+                        let diff = (gpu_output[i] - cpu_output[i]).abs();
+                        if diff > 0.001 {
+                            return Err(NNXError::Comparison(format!(
+							"output {}: element {} differs too much: GPU says {} vs CPU says {} (difference is {})",
+							output_name, i, gpu_output[i], cpu_output[i], diff
 						)));
+                        }
                     }
                 }
+
                 if infer_opt.benchmark {
                     println!(
                         "OK (gpu={}ms, cpu={}ms, {:.2}x)",
@@ -297,7 +305,7 @@ async fn run() -> Result<(), NNXError> {
                 if infer_opt.benchmark {
                     let benchmark_start = std::time::Instant::now();
                     for _ in 0..100 {
-                        let _ = backend.infer(&infer_opt, &inputs, &model).await?;
+                        let _ = backend.infer(&output_names, &inputs, &model).await?;
                     }
                     let benchmark_time = benchmark_start.elapsed();
                     println!(
@@ -306,10 +314,10 @@ async fn run() -> Result<(), NNXError> {
                         1000 / (benchmark_time.as_millis() / 100)
                     );
                 }
-                backend.infer(&infer_opt, &inputs, &model).await
+                backend.infer(&output_names, &inputs, &model).await
             };
 
-            let output = match first_result.await {
+            let mut output_tensors = match first_result.await {
                 Ok(x) => x,
                 Err(e) => {
                     #[cfg(feature = "cpu")]
@@ -325,7 +333,9 @@ async fn run() -> Result<(), NNXError> {
                                 let fallback_inferer = fallback_backend
                                     .inferer_for_model(&model_path, &input_shapes, partial_outputs)
                                     .await?;
-                                fallback_inferer.infer(&infer_opt, &inputs, &model).await?
+                                fallback_inferer
+                                    .infer(&output_names, &inputs, &model)
+                                    .await?
                             }
                             None => return Err(e),
                         }
@@ -338,44 +348,69 @@ async fn run() -> Result<(), NNXError> {
                 }
             };
 
-            // Look up label
-            match infer_opt.labels {
-                Some(labels_path) => {
-                    let labels = get_lines(&labels_path);
+            // Print outputs
+            let print_output_names = output_names.len() > 1;
+            let print_newlines = !print_output_names;
 
-                    let output_slice: Vec<f32> = output.try_into().unwrap();
-                    let mut probabilities = output_slice.iter().enumerate().collect::<Vec<_>>();
-                    probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+            for output_name in &output_names {
+                let output = output_tensors.remove(output_name).unwrap();
 
-                    let top = infer_opt.top.unwrap_or(10);
-                    for i in 0..top.min(labels.len()) {
-                        if infer_opt.probabilities {
-                            println!("{}: {}", labels[probabilities[i].0], probabilities[i].1);
-                        } else {
-                            println!("{}", labels[probabilities[i].0]);
+                // Look up label
+                match &infer_opt.labels {
+                    Some(labels_path) => {
+                        if print_output_names {
+                            println!("{}: ", output_name);
                         }
-                    }
-                }
-                None => {
-                    // Just print the output tensor values, one a line
-                    match output {
-                        wonnx::utils::OutputTensor::F32(fs) => {
-                            for i in fs {
-                                println!("{}", i)
-                            }
-                        }
-                        wonnx::utils::OutputTensor::I32(ints) => {
-                            for i in ints {
-                                println!("{}", i)
-                            }
-                        }
-                        wonnx::utils::OutputTensor::I64(ints) => {
-                            for i in ints {
-                                println!("{}", i)
+                        let labels = get_lines(labels_path);
+
+                        let output_slice: Vec<f32> = output.try_into().unwrap();
+                        let mut probabilities = output_slice.iter().enumerate().collect::<Vec<_>>();
+                        probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+
+                        let top = infer_opt.top.unwrap_or(10);
+                        for i in 0..top.min(labels.len()) {
+                            if infer_opt.probabilities {
+                                println!("{}: {}", labels[probabilities[i].0], probabilities[i].1);
+                            } else {
+                                println!("{}", labels[probabilities[i].0]);
                             }
                         }
                     }
+                    None => {
+                        if print_output_names {
+                            print!("{}: ", output_name);
+                        }
+
+                        // Just print the output tensor values, one a line
+                        match output {
+                            wonnx::utils::OutputTensor::F32(fs) => {
+                                for i in fs {
+                                    print!("{:.3} ", i);
+                                    if print_newlines {
+                                        println!();
+                                    }
+                                }
+                            }
+                            wonnx::utils::OutputTensor::I32(ints) => {
+                                for i in ints {
+                                    print!("{} ", i);
+                                    if print_newlines {
+                                        println!();
+                                    }
+                                }
+                            }
+                            wonnx::utils::OutputTensor::I64(ints) => {
+                                for i in ints {
+                                    print!("{} ", i);
+                                    if print_newlines {
+                                        println!();
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+                println!();
             }
 
             Ok(())

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{InferOptions, Inferer, NNXError};
+use crate::{Inferer, NNXError};
 use async_trait::async_trait;
 use tract_onnx::prelude::*;
 use wonnx::{
@@ -70,10 +70,10 @@ impl ToTract for wonnx_preprocessing::Tensor {
 impl Inferer for CPUInferer {
     async fn infer(
         &self,
-        infer_opt: &InferOptions,
+        outputs: &[String],
         inputs: &HashMap<String, crate::Tensor>,
         model: &ModelProto,
-    ) -> Result<OutputTensor, NNXError> {
+    ) -> Result<HashMap<String, OutputTensor>, NNXError> {
         let mut cpu_inputs: HashMap<usize, tract_onnx::prelude::Tensor> = HashMap::new();
 
         for (input_name, input_tensor) in inputs {
@@ -103,8 +103,10 @@ impl Inferer for CPUInferer {
         let result = self.model.run(cpu_inputs_ordered)?;
         log::info!("cpu result: {:?}", result);
 
-        let result_vector = match &infer_opt.output_name {
-            Some(output_name) => {
+        let mut output_tensors = HashMap::<String, OutputTensor>::new();
+
+        for output_name in outputs {
+            let result_vector = {
                 /* Find position of the node with the specified name in the output set. Note that Tract will suffix the
                 names of the nodes in the ONNX graph with the name of the output, i.e. "Plus214_Output_0.ab.matmatmul"
                 where the original name is called "Plus214_Output_0.ab.", hence the 'starts_with' hack below. */
@@ -114,22 +116,25 @@ impl Inferer for CPUInferer {
                         .starts_with(&format!("{}.", output_name))
                 }) {
                     log::info!(
-						"output node with name '{}' has idx {:?} (and tract id {}, slot {}, name '{}')",
-						output_name,
-						idx.0,
-						idx.1.node,
-						idx.1.slot,
-						self.model.model.nodes[idx.1.node].name
-					);
+                        "output node with name '{}' has idx {:?} (and tract id {}, slot {}, name '{}')",
+                        output_name,
+                        idx.0,
+                        idx.1.node,
+                        idx.1.slot,
+                        self.model.model.nodes[idx.1.node].name
+                    );
                     result[idx.0].clone()
                 } else {
                     return Err(NNXError::OutputNotFound(output_name.to_string()));
                 }
-            }
-            None => result[0].clone(),
-        };
+            };
 
-        let av = result_vector.to_array_view()?;
-        Ok(OutputTensor::F32(av.as_slice().unwrap().to_vec()))
+            let av = result_vector.to_array_view()?;
+            output_tensors.insert(
+                output_name.clone(),
+                OutputTensor::F32(av.as_slice().unwrap().to_vec()),
+            );
+        }
+        Ok(output_tensors)
     }
 }

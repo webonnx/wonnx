@@ -128,6 +128,13 @@ impl BertTokenizer {
         Ok(BertEncodedText { encoding })
     }
 
+    pub fn decode(&self, encoding: &BertEncodedText) -> Result<String, PreprocessingError> {
+        let ids = encoding.get_tokens().iter().map(|x| *x as u32).collect();
+        self.tokenizer
+            .decode(ids, true)
+            .map_err(PreprocessingError::TextTokenizationError)
+    }
+
     pub fn get_mask_input_for(
         &self,
         text: &str,
