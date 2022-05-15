@@ -124,11 +124,11 @@ pub struct InferOptions {
     pub vocab: PathBuf,
 
     /// Sets question for question-answering
-    #[structopt(short = "q")]
+    #[structopt(short = "q", long = "question")]
     pub question: Option<String>,
 
     /// Sets context for question-answering
-    #[structopt(short = "c")]
+    #[structopt(short = "c", long = "context")]
     pub context: Option<String>,
 
     /// When question and context are set: model input to write tokens to
