@@ -1,13 +1,11 @@
 use crate::info::info_table;
 use info::print_graph;
-use ndarray::Array;
 use prettytable::{cell, row, Table};
 use protobuf::{self, Message};
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
-use wonnx::utils::Shape;
-use wonnx_preprocessing::text;
+use wonnx::utils::{OutputTensor, Shape};
 use wonnx_preprocessing::text::get_lines;
 use wonnx_preprocessing::Tensor;
 
@@ -17,7 +15,6 @@ mod types;
 mod utils;
 
 use crate::types::*;
-use crate::utils::*;
 
 async fn run() -> Result<(), NNXError> {
     env_logger::init();
@@ -68,354 +65,265 @@ async fn run() -> Result<(), NNXError> {
             Ok(())
         }
 
-        Command::Infer(infer_opt) => {
-            // Load the model
-            let model_path = infer_opt
-                .model
-                .clone()
-                .into_os_string()
-                .into_string()
-                .expect("invalid path");
-            let model = ModelProto::parse_from_bytes(
-                &std::fs::read(&model_path).expect("ONNX Model path not found."),
+        Command::Infer(infer_opt) => infer_command(infer_opt).await,
+    }
+}
+
+fn print_output(
+    infer_opt: &InferOptions,
+    output_name: &str,
+    output: OutputTensor,
+    print_output_names: bool,
+    print_newlines: bool,
+) {
+    // Look up label
+    match &infer_opt.labels {
+        Some(labels_path) => {
+            if print_output_names {
+                println!("{}: ", output_name);
+            }
+            let labels = get_lines(labels_path);
+
+            let output_slice: Vec<f32> = output.try_into().unwrap();
+            let mut probabilities = output_slice.iter().enumerate().collect::<Vec<_>>();
+            probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+
+            let top = infer_opt.top.unwrap_or(10);
+            for i in 0..top.min(labels.len()) {
+                if infer_opt.probabilities {
+                    println!("{}: {}", labels[probabilities[i].0], probabilities[i].1);
+                } else {
+                    println!("{}", labels[probabilities[i].0]);
+                }
+            }
+        }
+        None => {
+            if print_output_names {
+                print!("{}: ", output_name);
+            }
+
+            // Just print the output tensor values, one a line
+            match output {
+                wonnx::utils::OutputTensor::F32(fs) => {
+                    for i in fs {
+                        print!("{:.3} ", i);
+                        if print_newlines {
+                            println!();
+                        }
+                    }
+                }
+                wonnx::utils::OutputTensor::I32(ints) => {
+                    for i in ints {
+                        print!("{} ", i);
+                        if print_newlines {
+                            println!();
+                        }
+                    }
+                }
+                wonnx::utils::OutputTensor::I64(ints) => {
+                    for i in ints {
+                        print!("{} ", i);
+                        if print_newlines {
+                            println!();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    println!();
+}
+
+async fn infer_command(infer_opt: InferOptions) -> Result<(), NNXError> {
+    // Load the model
+    let model_path = infer_opt
+        .model
+        .clone()
+        .into_os_string()
+        .into_string()
+        .expect("invalid path");
+    let model = ModelProto::parse_from_bytes(
+        &std::fs::read(&model_path).expect("ONNX Model path not found."),
+    )
+    .expect("Could not deserialize the model");
+
+    let inference_input = InferenceInput::new(&infer_opt, &model)?;
+
+    // Determine which outputs we will be reading
+    let mut output_names = infer_opt.output_name.clone();
+    if output_names.is_empty() {
+        for output in model.get_graph().get_output() {
+            output_names.push(output.get_name().to_string());
+        }
+        log::info!("no outputs given; using {:?}", output_names);
+    }
+
+    let partial_outputs = Some(output_names.clone());
+
+    #[cfg(feature = "cpu")]
+    if infer_opt.compare {
+        let gpu_backend = Backend::Gpu
+            .inferer_for_model(
+                &model_path,
+                &inference_input.input_shapes,
+                partial_outputs.clone(),
             )
-            .expect("Could not deserialize the model");
-
-            let mut inputs: HashMap<String, Tensor> = HashMap::new();
-            let mut input_shapes = HashMap::with_capacity(inputs.len());
-
-            // Do we have question and context?
-            if let (Some(question), Some(context)) = (&infer_opt.question, &infer_opt.context) {
-                let tokens_input_shape = model
-                    .get_input_shape(&infer_opt.qa_tokens_input)?
-                    .ok_or_else(|| NNXError::InputNotFound(infer_opt.qa_tokens_input.clone()))?;
-                let mask_input_shape = model
-                    .get_input_shape(&infer_opt.qa_mask_input)?
-                    .ok_or_else(|| NNXError::InputNotFound(infer_opt.qa_mask_input.clone()))?;
-                let segment_input_shape = model
-                    .get_input_shape(&infer_opt.qa_segment_input)?
-                    .ok_or_else(|| NNXError::InputNotFound(infer_opt.qa_segment_input.clone()))?;
-
-                let segment_length = tokens_input_shape.element_count() as usize;
-
-                if segment_length != mask_input_shape.element_count() as usize {
-                    return Err(NNXError::InvalidInputShape);
-                }
-                if segment_length != segment_input_shape.element_count() as usize {
-                    return Err(NNXError::InvalidInputShape);
-                }
-
-                log::info!(
-                    "QA: writing question '{}', context '{}' to {}/{}/{} (segment length: {})",
-                    question,
-                    context,
-                    infer_opt.qa_tokens_input,
-                    infer_opt.qa_mask_input,
-                    infer_opt.qa_segment_input,
-                    segment_length
-                );
-
-                let tok = text::BertTokenizer::new(Path::new(&infer_opt.vocab));
-                let encoding = tok.tokenize_question_answer(question, context)?;
-
-                let mut tokens_input = encoding.get_tokens();
-                let mut mask_input = encoding.get_mask();
-                let mut segment_input = encoding.get_segments();
-                log::debug!(
-                    "tokens={:?} mask={:?} segments={:?}",
-                    tokens_input,
-                    mask_input,
-                    segment_input
-                );
-
-                tokens_input.resize(segment_length, 0);
-                mask_input.resize(segment_length, 0);
-                segment_input.resize(segment_length, 0);
-                let tokens_input_data =
-                    ndarray::Array::from_iter(tokens_input.iter().map(|x| (*x) as i64)).into_dyn();
-                let mask_input_data =
-                    ndarray::Array::from_iter(mask_input.iter().map(|x| (*x) as i64)).into_dyn();
-                let segment_input_data =
-                    ndarray::Array::from_iter(segment_input.iter().map(|x| (*x) as i64)).into_dyn();
-                inputs.insert(
-                    infer_opt.qa_tokens_input.clone(),
-                    Tensor::I64(tokens_input_data),
-                );
-                inputs.insert(
-                    infer_opt.qa_mask_input.clone(),
-                    Tensor::I64(mask_input_data),
-                );
-                inputs.insert(
-                    infer_opt.qa_segment_input.clone(),
-                    Tensor::I64(segment_input_data),
-                );
-            }
-
-            // Process text inputs
-            if !infer_opt.text.is_empty() || !infer_opt.text_mask.is_empty() {
-                let tok = text::BertTokenizer::new(Path::new(&infer_opt.vocab));
-
-                // Tokenized text input
-                for (text_input_name, text) in &infer_opt.text {
-                    let text_input_shape = model
-                        .get_input_shape(text_input_name)?
-                        .ok_or_else(|| NNXError::InputNotFound(text_input_name.clone()))?;
-                    let input = tok.get_input_for(text, &text_input_shape)?;
-                    inputs.insert(text_input_name.clone(), input);
-                    input_shapes.insert(text_input_name.clone(), text_input_shape);
-                }
-
-                // Tokenized text input: mask
-                for (text_input_name, text) in &infer_opt.text_mask {
-                    let text_input_shape = model
-                        .get_input_shape(text_input_name)?
-                        .ok_or_else(|| NNXError::InputNotFound(text_input_name.clone()))?;
-                    let input = tok.get_mask_input_for(text, &text_input_shape)?;
-                    inputs.insert(text_input_name.clone(), input);
-                    input_shapes.insert(text_input_name.clone(), text_input_shape);
-                }
-            }
-
-            // Process raw inputs
-            for (raw_input_name, text) in &infer_opt.raw {
-                let raw_input_shape = model
-                    .get_input_shape(raw_input_name)?
-                    .ok_or_else(|| NNXError::InputNotFound(raw_input_name.clone()))?;
-
-                let values: Result<Vec<f32>, _> =
-                    text.split(',').map(|v| v.parse::<f32>()).collect();
-                let mut values = values.map_err(NNXError::InvalidNumber)?;
-                values.resize(raw_input_shape.element_count() as usize, 0.0);
-                inputs.insert(
-                    raw_input_name.clone(),
-                    Tensor::F32(Array::from_vec(values).into_dyn()),
-                );
-                input_shapes.insert(raw_input_name.clone(), raw_input_shape);
-            }
-
-            // Load input image if it was supplied
-            for (input_name, image_path) in &infer_opt.input_images {
-                let mut input_shape = model
-                    .get_input_shape(input_name)?
-                    .ok_or_else(|| NNXError::InputNotFound(input_name.clone()))?;
-
-                let data = load_image_input(image_path, &input_shape)?;
-
-                // Some models allow us to set the number of items we are throwing at them.
-                if input_shape.dim(0) == 0 {
-                    input_shape.dims[0] = 1;
-                    log::info!(
-                        "changing first dimension for input {} to {:?}",
-                        input_name,
-                        input_shape
-                    );
-                }
-
-                inputs.insert(input_name.clone(), Tensor::F32(data));
-                input_shapes.insert(input_name.clone(), input_shape.clone());
-            }
-
-            // Determine which outputs we will be reading
-            let mut output_names = infer_opt.output_name;
-            if output_names.is_empty() {
-                for output in model.get_graph().get_output() {
-                    output_names.push(output.get_name().to_string());
-                }
-                log::info!("no outputs given; using {:?}", output_names);
-            }
-
-            let partial_outputs = Some(output_names.clone());
-
-            #[cfg(feature = "cpu")]
-            if infer_opt.compare {
-                let gpu_backend = Backend::Gpu
-                    .inferer_for_model(&model_path, &input_shapes, partial_outputs.clone())
+            .await?;
+        let gpu_start = std::time::Instant::now();
+        if infer_opt.benchmark {
+            for _ in 0..100 {
+                let _ = gpu_backend
+                    .infer(&output_names, &inference_input.inputs, &model)
                     .await?;
-                let gpu_start = std::time::Instant::now();
-                if infer_opt.benchmark {
-                    for _ in 0..100 {
-                        let _ = gpu_backend.infer(&output_names, &inputs, &model).await?;
-                    }
-                }
-                let gpu_output_tensors = gpu_backend.infer(&output_names, &inputs, &model).await?;
-                let gpu_time = gpu_start.elapsed();
-                log::info!("gpu time: {}ms", gpu_time.as_millis());
-                drop(gpu_backend);
+            }
+        }
+        let gpu_output_tensors = gpu_backend
+            .infer(&output_names, &inference_input.inputs, &model)
+            .await?;
+        let gpu_time = gpu_start.elapsed();
+        log::info!("gpu time: {}ms", gpu_time.as_millis());
+        drop(gpu_backend);
 
-                let cpu_backend = Backend::Cpu
-                    .inferer_for_model(&model_path, &input_shapes, partial_outputs.clone())
+        let cpu_backend = Backend::Cpu
+            .inferer_for_model(
+                &model_path,
+                &inference_input.input_shapes,
+                partial_outputs.clone(),
+            )
+            .await?;
+        let cpu_start = std::time::Instant::now();
+        if infer_opt.benchmark {
+            for _ in 0..100 {
+                let _ = cpu_backend
+                    .infer(&output_names, &inference_input.inputs, &model)
                     .await?;
-                let cpu_start = std::time::Instant::now();
-                if infer_opt.benchmark {
-                    for _ in 0..100 {
-                        let _ = cpu_backend.infer(&output_names, &inputs, &model).await?;
-                    }
-                }
-                let cpu_output_tensors = cpu_backend.infer(&output_names, &inputs, &model).await?;
-                let cpu_time = cpu_start.elapsed();
-                log::info!(
-                    "cpu time: {}ms ({:.2}x gpu time)",
-                    cpu_time.as_millis(),
-                    cpu_time.as_secs_f64() / gpu_time.as_secs_f64()
-                );
-                if gpu_output_tensors.len() != cpu_output_tensors.len() {
+            }
+        }
+        let cpu_output_tensors = cpu_backend
+            .infer(&output_names, &inference_input.inputs, &model)
+            .await?;
+        let cpu_time = cpu_start.elapsed();
+        log::info!(
+            "cpu time: {}ms ({:.2}x gpu time)",
+            cpu_time.as_millis(),
+            cpu_time.as_secs_f64() / gpu_time.as_secs_f64()
+        );
+        if gpu_output_tensors.len() != cpu_output_tensors.len() {
+            return Err(NNXError::Comparison(format!(
+                "number of outputs in GPU result ({}) mismatches CPU result ({})",
+                gpu_output_tensors.len(),
+                cpu_output_tensors.len()
+            )));
+        }
+
+        for output_name in &output_names {
+            let cpu_output: Vec<f32> = cpu_output_tensors[output_name].clone().try_into()?;
+            let gpu_output: Vec<f32> = gpu_output_tensors[output_name].clone().try_into()?;
+
+            for i in 0..gpu_output.len() {
+                let diff = (gpu_output[i] - cpu_output[i]).abs();
+                if diff > 0.001 {
                     return Err(NNXError::Comparison(format!(
-                        "number of outputs in GPU result ({}) mismatches CPU result ({})",
-                        gpu_output_tensors.len(),
-                        cpu_output_tensors.len()
-                    )));
-                }
-
-                for output_name in &output_names {
-                    let cpu_output: Vec<f32> =
-                        cpu_output_tensors[output_name].clone().try_into()?;
-                    let gpu_output: Vec<f32> =
-                        gpu_output_tensors[output_name].clone().try_into()?;
-
-                    for i in 0..gpu_output.len() {
-                        let diff = (gpu_output[i] - cpu_output[i]).abs();
-                        if diff > 0.001 {
-                            return Err(NNXError::Comparison(format!(
 							"output {}: element {} differs too much: GPU says {} vs CPU says {} (difference is {})",
 							output_name, i, gpu_output[i], cpu_output[i], diff
 						)));
-                        }
-                    }
                 }
-
-                if infer_opt.benchmark {
-                    println!(
-                        "OK (gpu={}ms, cpu={}ms, {:.2}x)",
-                        gpu_time.as_millis(),
-                        cpu_time.as_millis(),
-                        cpu_time.as_secs_f64() / gpu_time.as_secs_f64()
-                    );
-                } else {
-                    println!("OK")
-                }
-                return Ok(());
             }
-
-            let first_result = async {
-                let backend = infer_opt
-                    .backend
-                    .inferer_for_model(&model_path, &input_shapes, partial_outputs.clone())
-                    .await?;
-
-                if infer_opt.benchmark {
-                    let benchmark_start = std::time::Instant::now();
-                    for _ in 0..100 {
-                        let _ = backend.infer(&output_names, &inputs, &model).await?;
-                    }
-                    let benchmark_time = benchmark_start.elapsed();
-                    println!(
-                        "time for 100 inferences: {}ms ({}/s)",
-                        benchmark_time.as_millis(),
-                        1000 / (benchmark_time.as_millis() / 100)
-                    );
-                }
-                backend.infer(&output_names, &inputs, &model).await
-            };
-
-            let mut output_tensors = match first_result.await {
-                Ok(x) => x,
-                Err(e) => {
-                    #[cfg(feature = "cpu")]
-                    if infer_opt.fallback {
-                        match infer_opt.backend.fallback() {
-                            Some(fallback_backend) => {
-                                log::warn!(
-                                    "inference with {:?} backend failed: {}",
-                                    infer_opt.backend,
-                                    e,
-                                );
-                                log::warn!("trying {:?} backend instead", fallback_backend);
-                                let fallback_inferer = fallback_backend
-                                    .inferer_for_model(&model_path, &input_shapes, partial_outputs)
-                                    .await?;
-                                fallback_inferer
-                                    .infer(&output_names, &inputs, &model)
-                                    .await?
-                            }
-                            None => return Err(e),
-                        }
-                    } else {
-                        return Err(e);
-                    }
-
-                    #[cfg(not(feature = "cpu"))]
-                    return Err(e);
-                }
-            };
-
-            // Print outputs
-            let print_output_names = output_names.len() > 1;
-            let print_newlines = !print_output_names;
-
-            for output_name in &output_names {
-                let output = output_tensors.remove(output_name).unwrap();
-
-                // Look up label
-                match &infer_opt.labels {
-                    Some(labels_path) => {
-                        if print_output_names {
-                            println!("{}: ", output_name);
-                        }
-                        let labels = get_lines(labels_path);
-
-                        let output_slice: Vec<f32> = output.try_into().unwrap();
-                        let mut probabilities = output_slice.iter().enumerate().collect::<Vec<_>>();
-                        probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(a.1).unwrap());
-
-                        let top = infer_opt.top.unwrap_or(10);
-                        for i in 0..top.min(labels.len()) {
-                            if infer_opt.probabilities {
-                                println!("{}: {}", labels[probabilities[i].0], probabilities[i].1);
-                            } else {
-                                println!("{}", labels[probabilities[i].0]);
-                            }
-                        }
-                    }
-                    None => {
-                        if print_output_names {
-                            print!("{}: ", output_name);
-                        }
-
-                        // Just print the output tensor values, one a line
-                        match output {
-                            wonnx::utils::OutputTensor::F32(fs) => {
-                                for i in fs {
-                                    print!("{:.3} ", i);
-                                    if print_newlines {
-                                        println!();
-                                    }
-                                }
-                            }
-                            wonnx::utils::OutputTensor::I32(ints) => {
-                                for i in ints {
-                                    print!("{} ", i);
-                                    if print_newlines {
-                                        println!();
-                                    }
-                                }
-                            }
-                            wonnx::utils::OutputTensor::I64(ints) => {
-                                for i in ints {
-                                    print!("{} ", i);
-                                    if print_newlines {
-                                        println!();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                println!();
-            }
-
-            Ok(())
         }
+
+        if infer_opt.benchmark {
+            println!(
+                "OK (gpu={}ms, cpu={}ms, {:.2}x)",
+                gpu_time.as_millis(),
+                cpu_time.as_millis(),
+                cpu_time.as_secs_f64() / gpu_time.as_secs_f64()
+            );
+        } else {
+            println!("OK")
+        }
+        return Ok(());
     }
+
+    let first_result = async {
+        let backend = infer_opt
+            .backend
+            .inferer_for_model(
+                &model_path,
+                &inference_input.input_shapes,
+                partial_outputs.clone(),
+            )
+            .await?;
+
+        if infer_opt.benchmark {
+            let benchmark_start = std::time::Instant::now();
+            for _ in 0..100 {
+                let _ = backend
+                    .infer(&output_names, &inference_input.inputs, &model)
+                    .await?;
+            }
+            let benchmark_time = benchmark_start.elapsed();
+            println!(
+                "time for 100 inferences: {}ms ({}/s)",
+                benchmark_time.as_millis(),
+                1000 / (benchmark_time.as_millis() / 100)
+            );
+        }
+        backend
+            .infer(&output_names, &inference_input.inputs, &model)
+            .await
+    };
+
+    let mut output_tensors = match first_result.await {
+        Ok(x) => x,
+        Err(e) => {
+            #[cfg(feature = "cpu")]
+            if infer_opt.fallback {
+                match infer_opt.backend.fallback() {
+                    Some(fallback_backend) => {
+                        log::warn!(
+                            "inference with {:?} backend failed: {}",
+                            infer_opt.backend,
+                            e,
+                        );
+                        log::warn!("trying {:?} backend instead", fallback_backend);
+                        let fallback_inferer = fallback_backend
+                            .inferer_for_model(
+                                &model_path,
+                                &inference_input.input_shapes,
+                                partial_outputs,
+                            )
+                            .await?;
+                        fallback_inferer
+                            .infer(&output_names, &inference_input.inputs, &model)
+                            .await?
+                    }
+                    None => return Err(e),
+                }
+            } else {
+                return Err(e);
+            }
+
+            #[cfg(not(feature = "cpu"))]
+            return Err(e);
+        }
+    };
+
+    // Print outputs
+    let print_output_names = output_names.len() > 1;
+    let print_newlines = !print_output_names;
+
+    for output_name in &output_names {
+        let output = output_tensors.remove(output_name).unwrap();
+        print_output(
+            &infer_opt,
+            output_name,
+            output,
+            print_output_names,
+            print_newlines,
+        );
+    }
+
+    Ok(())
 }
 
 #[cfg(feature = "cpu")]

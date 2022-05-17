@@ -3,10 +3,13 @@ use structopt::StructOpt;
 use thiserror::Error;
 use wonnx::{
     onnx::ModelProto,
-    utils::{OutputTensor, TensorConversionError},
+    utils::{OutputTensor, Shape, TensorConversionError},
     SessionError, WonnxError,
 };
-use wonnx_preprocessing::{text::PreprocessingError, Tensor};
+use wonnx_preprocessing::{
+    text::{BertEncodedText, PreprocessingError},
+    Tensor,
+};
 
 #[cfg(feature = "cpu")]
 use tract_onnx::prelude::*;
@@ -210,4 +213,10 @@ pub trait Inferer {
         inputs: &HashMap<String, Tensor>,
         model: &ModelProto,
     ) -> Result<HashMap<String, OutputTensor>, NNXError>;
+}
+
+pub struct InferenceInput {
+    pub inputs: HashMap<String, Tensor>,
+    pub input_shapes: HashMap<String, Shape>,
+    pub qa_encoding: Option<BertEncodedText>,
 }
