@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::{OutputTensor, Shape};
-use wonnx_preprocessing::text::get_lines;
+use wonnx_preprocessing::text::{get_lines, BertEncodedText};
 use wonnx_preprocessing::Tensor;
 
 mod gpu;
@@ -67,6 +67,47 @@ async fn run() -> Result<(), NNXError> {
 
         Command::Infer(infer_opt) => infer_command(infer_opt).await,
     }
+}
+
+fn print_qa_output(
+    infer_opt: &InferOptions,
+    qa_encoding: &BertEncodedText,
+    mut outputs: HashMap<String, OutputTensor>,
+) -> Result<(), NNXError> {
+    let start_output: Vec<f32> = outputs
+        .remove(&infer_opt.qa_answer_start)
+        .ok_or_else(|| NNXError::OutputNotFound(infer_opt.qa_answer_start.to_string()))?
+        .try_into()?;
+
+    let end_output: Vec<f32> = outputs
+        .remove(&infer_opt.qa_answer_end)
+        .ok_or_else(|| NNXError::OutputNotFound(infer_opt.qa_answer_start.to_string()))?
+        .try_into()?;
+
+    let mut best_start_logit = f32::MIN;
+    let mut best_start_idx: usize = 0;
+
+    for (start_idx, start_logit) in start_output.iter().enumerate() {
+        if *start_logit > best_start_logit {
+            best_start_logit = *start_logit;
+            best_start_idx = start_idx;
+        }
+    }
+
+    // Find matching end
+    let mut best_end_logit = f32::MIN;
+    let mut best_end_idx = best_start_idx;
+    for (end_idx, end_logit) in end_output[best_start_idx..].iter().enumerate() {
+        if *end_logit > best_end_logit {
+            best_end_logit = *end_logit;
+            best_end_idx = end_idx + best_start_idx;
+        }
+    }
+
+    println!("Start index: {} ({})", best_start_idx, best_start_logit);
+    println!("End index: {} ({})", best_end_idx, best_end_logit);
+
+    Ok(())
 }
 
 fn print_output(
@@ -308,19 +349,28 @@ async fn infer_command(infer_opt: InferOptions) -> Result<(), NNXError> {
         }
     };
 
-    // Print outputs
-    let print_output_names = output_names.len() > 1;
-    let print_newlines = !print_output_names;
-
-    for output_name in &output_names {
-        let output = output_tensors.remove(output_name).unwrap();
-        print_output(
+    if infer_opt.qa_answer {
+        // Print outputs as QA answer
+        print_qa_output(
             &infer_opt,
-            output_name,
-            output,
-            print_output_names,
-            print_newlines,
-        );
+            &inference_input.qa_encoding.unwrap(),
+            output_tensors,
+        )?;
+    } else {
+        // Print outputs individually
+        let print_output_names = output_names.len() > 1;
+        let print_newlines = !print_output_names;
+
+        for output_name in &output_names {
+            let output = output_tensors.remove(output_name).unwrap();
+            print_output(
+                &infer_opt,
+                output_name,
+                output,
+                print_output_names,
+                print_newlines,
+            );
+        }
     }
 
     Ok(())

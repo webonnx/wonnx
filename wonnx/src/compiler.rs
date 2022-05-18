@@ -1232,6 +1232,7 @@ pub fn compile(
             let split = get_attribute::<Vec<i64>>("split", Some(default_split), node)?;
             context.insert("split", &split);
 
+
             NodeTemplate {
                 scalar_type: agreed_type(&input_shapes[0..1], output_shapes)?,
                 template: "matrix/split.wgsl",

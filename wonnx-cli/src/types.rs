@@ -135,16 +135,28 @@ pub struct InferOptions {
     pub context: Option<String>,
 
     /// When question and context are set: model input to write tokens to
-    #[structopt(default_value = "input_ids:0")]
+    #[structopt(long = "qa-tokens-input", default_value = "input_ids:0")]
     pub qa_tokens_input: String,
 
     /// When question and context are set: model input to write mask to
-    #[structopt(default_value = "input_mask:0")]
+    #[structopt(long = "qa-mask-input", default_value = "input_mask:0")]
     pub qa_mask_input: String,
 
     /// When question and context are set: model input to write segment IDs to
-    #[structopt(default_value = "segment_ids:0")]
+    #[structopt(long = "qa-segment-input", default_value = "segment_ids:0")]
     pub qa_segment_input: String,
+
+    /// The output that specifies the start of the segment containing a QA answer (token logits)
+    #[structopt(long = "qa-answer-start-output", default_value = "unstack:0")]
+    pub qa_answer_start: String,
+
+    /// The output that specifies the end of the segment containing a QA answer (token logits)
+    #[structopt(long = "qa-answer-end-output", default_value = "unstack:1")]
+    pub qa_answer_end: String,
+
+    /// Whether to output QA answers as text
+    #[structopt(long = "qa-answer")]
+    pub qa_answer: bool,
 
     /// Set an input to tokenized text (-t input_name="some text")
     #[structopt(short = "t", parse(try_from_str = parse_key_val), number_of_values = 1)]
