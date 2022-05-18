@@ -1233,7 +1233,7 @@ pub fn compile(
             context.insert("split", &split);
 
             NodeTemplate {
-                scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
+                scalar_type: agreed_type(&input_shapes[0..1], output_shapes)?,
                 template: "matrix/split.wgsl",
                 threads: (ceil(input_lengths[0], 256) as u32, 1, 1),
             }
