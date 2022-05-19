@@ -3527,6 +3527,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "tract-pulse"
+version = "0.16.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "111327b44f8f54612fdda06d8cc27b845593d022dbaffba97bbe3e143ef50e99"
+dependencies = [
+ "downcast-rs",
+ "lazy_static",
+ "tract-pulse-opl",
+]
+
+[[package]]
+name = "tract-pulse-opl"
+version = "0.16.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4ac9848dd6e8cc0597f9aceabbd21c310f8fa6acf09e814de34a926c091f83a"
+dependencies = [
+ "downcast-rs",
+ "lazy_static",
+ "tract-nnef",
+]
+
+[[package]]
+name = "tract-tensorflow"
+version = "0.16.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c34df1924abf6f8c87435cdff09f4a7ae330b8f7652c3cb1017fd0fd26782d10"
+dependencies = [
+ "bytes",
+ "derive-new",
+ "educe",
+ "log",
+ "mapr",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "tract-hir",
+ "tract-pulse",
+]
+
+[[package]]
 name = "try-lock"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4119,6 +4159,7 @@ dependencies = [
  "smallvec",
  "tract-core",
  "tract-data",
+ "tract-tensorflow",
  "unicode-normalization",
  "walkdir",
  "wgpu",
