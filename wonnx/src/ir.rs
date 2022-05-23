@@ -212,7 +212,7 @@ impl<'model> Node<'model> {
 
         // Collect intializer info
         for initializer in model.get_graph().get_initializer().iter() {
-            log::info!("Initializer {}", initializer.get_name());
+            log::debug!("Initializer {}", initializer.get_name());
             node_definitions_by_output.insert(
                 initializer.get_name().to_string(),
                 NodeDefinition::Tensor(Box::new(Cow::Borrowed(initializer))),
@@ -232,7 +232,7 @@ impl<'model> Node<'model> {
         // Collect input name
         for input in model.get_graph().get_input().iter() {
             if !node_definitions_by_output.contains_key(input.get_name()) {
-                log::info!("Input {}", input.get_name());
+                log::debug!("Input {}", input.get_name());
                 node_definitions_by_output
                     .insert(input.get_name().to_string(), NodeDefinition::Input(input));
             } else {

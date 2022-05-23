@@ -100,7 +100,7 @@ impl<'model> Optimizer<'model> {
         node: Arc<Node<'model>>,
         chain: &mut Vec<(String, Arc<Node<'model>>)>,
     ) -> Result<Sequence<'model>, OptimizerError> {
-        log::info!(
+        log::debug!(
             "Optimize {:?} chain length={:?}",
             node.definition,
             chain.len()
