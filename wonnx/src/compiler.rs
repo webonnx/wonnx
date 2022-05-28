@@ -1008,7 +1008,7 @@ pub fn compile(
                     });
                 }
 
-                // If there is a bias input, it should be "unidirectionally broadcastable to M*N". Currently we only support a bias ofM*N though
+                // If there is a bias input, it should be "unidirectionally broadcastable to M*N". Currently we only support a bias of M*N though
                 if input_shapes.len() > 2 {
                     let mut bias_shape = input_shapes[2].clone();
 
