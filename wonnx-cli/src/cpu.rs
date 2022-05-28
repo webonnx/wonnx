@@ -107,14 +107,14 @@ impl Inferer for CPUInferer {
 
         for output_name in outputs {
             let result_vector = {
-                /* Find position of the node with the specified name in the output set. Note that Tract will suffix the
-                names of the nodes in the ONNX graph with the name of the output, i.e. "Plus214_Output_0.ab.matmatmul"
-                where the original name is called "Plus214_Output_0.ab.", hence the 'starts_with' hack below. */
-                if let Some(idx) = self.model.outputs.iter().enumerate().find(|x| {
-                    self.model.model.nodes[x.1.node]
-                        .name
-                        .starts_with(&format!("{}.", output_name))
-                }) {
+                // Find position of the node with the specified name in the output set.
+                if let Some(idx) = self
+                    .model
+                    .outputs
+                    .iter()
+                    .enumerate()
+                    .find(|x| &self.model.model.outlet_labels[x.1] == output_name)
+                {
                     log::info!(
                         "output node with name '{}' has idx {:?} (and tract id {}, slot {}, name '{}')",
                         output_name,
