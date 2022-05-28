@@ -36,7 +36,7 @@ pub enum NNXError {
     #[error("input shape is invalid")]
     InvalidInputShape,
 
-    #[error("output not found")]
+    #[error("output not found: {0}")]
     OutputNotFound(String),
 
     #[error("input not found")]
