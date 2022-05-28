@@ -73,7 +73,9 @@ pub enum IrError {
 impl<'m> NodeDefinition<'m> {
     pub fn get_name(&self) -> Cow<'_, str> {
         match self {
-            NodeDefinition::Operator(op_def) => Cow::from(op_def.proto.get_name()),
+            // Nodes are identified by their first output's name, because node names are optional (and "only to be used
+            // for diagnostic purposes" according to the ONNX IR specification) whereas output names are required and should be unique.
+            NodeDefinition::Operator(op_def) => Cow::from(&op_def.proto.get_output()[0]),
             NodeDefinition::Tensor(t) => Cow::from(t.get_name()),
             NodeDefinition::Input(i) => Cow::from(i.get_name()),
             NodeDefinition::Outputs { .. } => Cow::from(" "),
@@ -91,6 +93,14 @@ impl<'m> NodeDefinition<'m> {
             NodeDefinition::Outputs { .. } => panic!("can't get output name for outputs node"),
             NodeDefinition::Missing => panic!("can't get output name for missing node"),
         }
+    }
+}
+
+impl NodeProto {
+    // Nodes are identified by their first output's name, because node names are optional (and "only to be used
+    // for diagnostic purposes" according to the ONNX IR specification) whereas output names are required and should be unique.
+    fn unique_name(&self) -> String {
+        self.get_output()[0].clone()
     }
 }
 
@@ -112,12 +122,12 @@ impl<'model> Node<'model> {
         node: Cow<'model, NodeProto>,
         value_shapes: &HashMap<&'model str, Shape>,
         node_definitions_by_output: &'a HashMap<String, NodeDefinition<'model>>,
-        nodes_by_name: &mut HashMap<String, Arc<Node<'model>>>,
+        nodes_by_unique_name: &mut HashMap<String, Arc<Node<'model>>>,
     ) -> Result<Arc<Node<'model>>, IrError> {
-        let node_name = node.get_name();
+        let node_name = node.unique_name();
         // Did we already translate this node before?
-        if nodes_by_name.contains_key(node_name) {
-            let n = nodes_by_name.get(node_name).unwrap();
+        if nodes_by_unique_name.contains_key(&node_name) {
+            let n = nodes_by_unique_name.get(&node_name).unwrap();
             return Ok(n.clone());
         }
 
@@ -125,8 +135,9 @@ impl<'model> Node<'model> {
             .get_input()
             .iter()
             .map(|input_name: &'model String| {
+                let my_input_name = input_name.clone();
                 let source_node_definition = node_definitions_by_output
-                    .get(input_name)
+                    .get(&my_input_name)
                     .unwrap_or(&MISSING_OPTIONAL_INPUT);
 
                 Ok(match source_node_definition {
@@ -137,7 +148,7 @@ impl<'model> Node<'model> {
                             source_node_proto.proto.clone(),
                             value_shapes,
                             node_definitions_by_output,
-                            nodes_by_name,
+                            nodes_by_unique_name,
                         )?,
                         output_index: source_node_proto
                             .proto
@@ -148,16 +159,16 @@ impl<'model> Node<'model> {
                     },
                     _ => {
                         // The source is an initializer or model onput
-                        let source_name = source_node_definition.get_name();
+                        let source_name = source_node_definition.get_name().to_string();
 
                         Input {
                             output_index: 0,
                             // Did we already translate this node?
-                            source_node: match nodes_by_name.get(&source_name.to_string()) {
+                            source_node: match nodes_by_unique_name.get(&source_name) {
                                 Some(node) => node.clone(),
                                 None => {
                                     let node = Arc::new(Node::new(source_node_definition.clone()));
-                                    nodes_by_name.insert(source_name.into(), node.clone());
+                                    nodes_by_unique_name.insert(source_name, node.clone());
                                     node
                                 }
                             },
@@ -174,7 +185,7 @@ impl<'model> Node<'model> {
             )?)),
             inputs: inputs?,
         });
-        nodes_by_name.insert(node_name.to_string(), translated.clone());
+        nodes_by_unique_name.insert(node.unique_name(), translated.clone());
         Ok(translated)
     }
 
