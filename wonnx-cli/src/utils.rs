@@ -192,14 +192,17 @@ impl InferenceInput {
                 infer_opt.qa_tokens_input.clone(),
                 Tensor::I64(tokens_input_data),
             );
+            input_shapes.insert(infer_opt.qa_tokens_input.clone(), tokens_input_shape);
             inputs.insert(
                 infer_opt.qa_mask_input.clone(),
                 Tensor::I64(mask_input_data),
             );
+            input_shapes.insert(infer_opt.qa_mask_input.clone(), mask_input_shape);
             inputs.insert(
                 infer_opt.qa_segment_input.clone(),
                 Tensor::I64(segment_input_data),
             );
+            input_shapes.insert(infer_opt.qa_segment_input.clone(), segment_input_shape);
             qa_encoding = Some(encoding);
         }
 
