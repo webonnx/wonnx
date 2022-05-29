@@ -17,14 +17,14 @@ path = "src/main.rs"
 async-trait = "0.1.53"
 env_logger = "0.9.0"
 
-log = "0.4.16"
+log = "0.4.17"
 ndarray = "0.15.4"
 pollster = "0.2.5"
 prettytable-rs = "0.8.0"
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
 structopt = { version = "0.3.26", features = [ "paw" ] }
-thiserror = "1.0.30"
-tract-onnx = { version = "0.16.4", optional = true }
+thiserror = "1.0.31"
+tract-onnx = { version = "0.16.7", optional = true }
 wgpu = "0.12.0"
 wonnx = { path = "../wonnx" }
 wonnx-preprocessing = { path = "../wonnx-preprocessing" }

@@ -26,7 +26,7 @@ lto = true
 
 [dependencies]
 wonnx = { path = "../wonnx" }
-log = "0.4.16"
+log = "0.4.17"
 #wgpu = { version = "0.12.0" }
 console_log = "0.2.0"
 console_error_panic_hook = "0.1.7"

@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-image = "0.24.1"
-log = "0.4.16"
+image = "0.24.2"
+log = "0.4.17"
 ndarray = "0.15.4"
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
-thiserror = "1.0.30"
+thiserror = "1.0.31"
 tokenizers = "0.11.3"
-tract-onnx = { version = "0.16.4", optional = true }
+tract-onnx = { version = "0.16.7", optional = true }
 wgpu = "0.12.0"
 wonnx = { path = "../wonnx" }

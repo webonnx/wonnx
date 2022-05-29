@@ -12,8 +12,8 @@ homepage = "https://github.com/webonnx/wonnx"
 
 [dependencies]
 wonnx = { path = "../wonnx" }
-pyo3 = "0.16.4"
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
+pyo3 = "0.16.5"
 pollster = "0.2.5"
 env_logger = "0.9.0"
 
