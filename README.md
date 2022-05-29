@@ -135,6 +135,7 @@ Examples are available in the [examples folder](./wonnx/examples/).
 
 - Squeezenet
 - MNIST
+- BERT
 
 ## GPU selection
 

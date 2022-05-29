@@ -98,6 +98,25 @@ impl BertTokenizer {
         BertTokenizer { tokenizer }
     }
 
+    pub fn tokenize_question_answer(
+        &self,
+        question: &str,
+        context: &str,
+    ) -> Result<BertEncodedText, PreprocessingError> {
+        Ok(BertEncodedText {
+            encoding: self
+                .tokenizer
+                .encode(
+                    EncodeInput::Dual(
+                        InputSequence::Raw(Cow::from(question)),
+                        InputSequence::Raw(Cow::from(context)),
+                    ),
+                    true,
+                )
+                .map_err(PreprocessingError::TextTokenizationError)?,
+        })
+    }
+
     fn tokenize(&self, text: &str) -> Result<BertEncodedText, PreprocessingError> {
         let encoding = self
             .tokenizer
@@ -107,6 +126,13 @@ impl BertTokenizer {
             )
             .map_err(PreprocessingError::TextTokenizationError)?;
         Ok(BertEncodedText { encoding })
+    }
+
+    pub fn decode(&self, encoding: &BertEncodedText) -> Result<String, PreprocessingError> {
+        let ids = encoding.get_tokens().iter().map(|x| *x as u32).collect();
+        self.tokenizer
+            .decode(ids, true)
+            .map_err(PreprocessingError::TextTokenizationError)
     }
 
     pub fn get_mask_input_for(
@@ -143,6 +169,14 @@ impl BertEncodedText {
 
     pub fn get_tokens(&self) -> Vec<i64> {
         self.encoding.get_ids().iter().map(|x| *x as i64).collect()
+    }
+
+    pub fn get_segments(&self) -> Vec<i64> {
+        self.encoding
+            .get_type_ids()
+            .iter()
+            .map(|x| *x as i64)
+            .collect()
     }
 }
 

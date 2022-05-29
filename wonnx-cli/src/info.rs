@@ -1,3 +1,4 @@
+use human_bytes::human_bytes;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use prettytable::{cell, row, table, Table};
@@ -80,6 +81,46 @@ pub fn print_graph(model: &ModelProto) {
         }
     }
     println!("}}");
+}
+
+pub fn sizes_table(model: &ModelProto) -> Result<Table, WonnxError> {
+    let mut input_size: usize = 0;
+    for input in model.get_graph().get_input() {
+        input_size += input
+            .get_shape()
+            .map_err(WonnxError::TypeError)?
+            .buffer_bytes();
+    }
+
+    let mut output_size: usize = 0;
+    for output in model.get_graph().get_output() {
+        output_size += output
+            .get_shape()
+            .map_err(WonnxError::TypeError)?
+            .buffer_bytes();
+    }
+
+    let mut intermediate_size: usize = 0;
+    for output in model.get_graph().get_value_info() {
+        intermediate_size += output
+            .get_shape()
+            .map_err(WonnxError::TypeError)?
+            .buffer_bytes();
+    }
+
+    let mut initializer_size: usize = 0;
+    for info in model.get_graph().get_initializer() {
+        let shape = Shape::from(ScalarType::from_i32(info.get_data_type())?, info.get_dims());
+        initializer_size += shape.buffer_bytes();
+    }
+
+    Ok(table![
+        [b->"Inputs",  r->human_bytes(input_size as f64)],
+        [b->"Outputs", r->human_bytes(output_size as f64)],
+        [b->"Intermediate", r->human_bytes(intermediate_size as f64)],
+        [b->"Weights", r->human_bytes(initializer_size as f64)],
+        [b->"Total", r->human_bytes((input_size + output_size + intermediate_size + initializer_size) as f64)]
+    ])
 }
 
 pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
@@ -196,6 +237,8 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
         }
     }
 
+    let size_table = sizes_table(model)?;
+
     Ok(table![
         [b->"Model version", model.get_model_version()],
         [b->"IR version", model.get_ir_version()],
@@ -204,6 +247,7 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
         [b->"Opsets", opset_string],
         [b->"Inputs", inputs_table],
         [b->"Outputs", outputs_table],
-        [b->"Ops used", usage_table]
+        [b->"Ops used", usage_table],
+        [b->"Memory usage", size_table]
     ])
 }

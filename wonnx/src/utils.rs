@@ -46,7 +46,6 @@ impl Shape {
     }
 
     pub fn buffer_bytes(&self) -> usize {
-        // Dividing by 4 since that is the size of an f32 in bytes
         (self.element_count() as usize) * self.data_type.stride()
     }
 

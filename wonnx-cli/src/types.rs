@@ -3,10 +3,13 @@ use structopt::StructOpt;
 use thiserror::Error;
 use wonnx::{
     onnx::ModelProto,
-    utils::{OutputTensor, TensorConversionError},
+    utils::{OutputTensor, Shape, TensorConversionError},
     SessionError, WonnxError,
 };
-use wonnx_preprocessing::{text::PreprocessingError, Tensor};
+use wonnx_preprocessing::{
+    text::{BertEncodedText, PreprocessingError},
+    Tensor,
+};
 
 #[cfg(feature = "cpu")]
 use tract_onnx::prelude::*;
@@ -33,7 +36,7 @@ pub enum NNXError {
     #[error("input shape is invalid")]
     InvalidInputShape,
 
-    #[error("output not found")]
+    #[error("output not found: {0}")]
     OutputNotFound(String),
 
     #[error("input not found")]
@@ -113,11 +116,7 @@ pub struct InferOptions {
 
     /// Node to take output from (defaults to the first output when not specified)
     #[structopt(long)]
-    pub output_name: Option<String>,
-
-    /// Whether to attempt to only partially execute the model for the specified output
-    #[structopt(long)]
-    pub partial: bool,
+    pub output_name: Vec<String>,
 
     /// Vocab file for text encoding
     #[structopt(
@@ -126,6 +125,38 @@ pub struct InferOptions {
         default_value = "./data/models/bertsquad-vocab.txt"
     )]
     pub vocab: PathBuf,
+
+    /// Sets question for question-answering
+    #[structopt(short = "q", long = "question")]
+    pub question: Option<String>,
+
+    /// Sets context for question-answering
+    #[structopt(short = "c", long = "context")]
+    pub context: Option<String>,
+
+    /// When question and context are set: model input to write tokens to
+    #[structopt(long = "qa-tokens-input", default_value = "input_ids:0")]
+    pub qa_tokens_input: String,
+
+    /// When question and context are set: model input to write mask to
+    #[structopt(long = "qa-mask-input", default_value = "input_mask:0")]
+    pub qa_mask_input: String,
+
+    /// When question and context are set: model input to write segment IDs to
+    #[structopt(long = "qa-segment-input", default_value = "segment_ids:0")]
+    pub qa_segment_input: String,
+
+    /// The output that specifies the start of the segment containing a QA answer (token logits)
+    #[structopt(long = "qa-answer-start-output", default_value = "unstack:0")]
+    pub qa_answer_start: String,
+
+    /// The output that specifies the end of the segment containing a QA answer (token logits)
+    #[structopt(long = "qa-answer-end-output", default_value = "unstack:1")]
+    pub qa_answer_end: String,
+
+    /// Whether to output QA answers as text
+    #[structopt(long = "qa-answer")]
+    pub qa_answer: bool,
 
     /// Set an input to tokenized text (-t input_name="some text")
     #[structopt(short = "t", parse(try_from_str = parse_key_val), number_of_values = 1)]
@@ -159,6 +190,7 @@ pub struct InferOptions {
 }
 
 #[derive(Debug, StructOpt)]
+#[allow(clippy::large_enum_variant)]
 pub enum Command {
     /// List available GPU devices
     Devices,
@@ -189,8 +221,14 @@ use async_trait::async_trait;
 pub trait Inferer {
     async fn infer(
         &self,
-        infer_opt: &InferOptions,
+        outputs: &[String],
         inputs: &HashMap<String, Tensor>,
         model: &ModelProto,
-    ) -> Result<OutputTensor, NNXError>;
+    ) -> Result<HashMap<String, OutputTensor>, NNXError>;
+}
+
+pub struct InferenceInput {
+    pub inputs: HashMap<String, Tensor>,
+    pub input_shapes: HashMap<String, Shape>,
+    pub qa_encoding: Option<BertEncodedText>,
 }
