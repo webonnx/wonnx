@@ -84,49 +84,7 @@ fn print_qa_output(
         .ok_or_else(|| NNXError::OutputNotFound(infer_opt.qa_answer_start.to_string()))?
         .try_into()?;
 
-    let mut best_start_logit = f32::MIN;
-    let mut best_start_idx: usize = 0;
-
-    let input_tokens = qa_encoding.encoding.get_tokens();
-
-    for (start_idx, start_logit) in start_output.iter().enumerate() {
-        if start_idx > input_tokens.len() - 1 {
-            break;
-        }
-        match input_tokens[start_idx].as_str() {
-            "[CLS]" | "[SEP]" | "[PAD]" => continue,
-            _ => {}
-        }
-
-        if *start_logit > best_start_logit {
-            best_start_logit = *start_logit;
-            best_start_idx = start_idx;
-        }
-    }
-
-    // Find matching end
-    let mut best_end_logit = f32::MIN;
-    let mut best_end_idx = best_start_idx;
-    for (end_idx, end_logit) in end_output[best_start_idx..].iter().enumerate() {
-        if (end_idx + best_start_idx) > input_tokens.len() - 1 {
-            break;
-        }
-
-        match input_tokens[end_idx + best_start_idx].as_str() {
-            "[CLS]" | "[SEP]" | "[PAD]" => continue,
-            _ => {}
-        }
-
-        if *end_logit > best_end_logit {
-            best_end_logit = *end_logit;
-            best_end_idx = end_idx + best_start_idx;
-        }
-    }
-
-    log::debug!("Start index: {} ({})", best_start_idx, best_start_logit);
-    log::debug!("End index: {} ({})", best_end_idx, best_end_logit);
-    let tokens = &qa_encoding.encoding.get_tokens()[best_start_idx..=best_end_idx];
-    println!("{}", tokens.join(" "));
+    println!("{}", qa_encoding.get_answer(&start_output, &end_output));
     Ok(())
 }
 
