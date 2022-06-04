@@ -179,7 +179,7 @@ impl BertEncodedText {
             .collect()
     }
 
-    pub fn get_answer(&self, start_output: &[f32], end_output: &[f32]) -> String {
+    pub fn get_answer(&self, start_output: &[f32], end_output: &[f32], context: &str) -> String {
         let mut best_start_logit = f32::MIN;
         let mut best_start_idx: usize = 0;
 
@@ -219,10 +219,20 @@ impl BertEncodedText {
             }
         }
 
-        log::debug!("Start index: {} ({})", best_start_idx, best_start_logit);
-        log::debug!("End index: {} ({})", best_end_idx, best_end_logit);
-        let tokens = &self.encoding.get_tokens()[best_start_idx..=best_end_idx];
-        tokens.join(" ")
+        log::debug!("start index: {} ({})", best_start_idx, best_start_logit);
+        log::debug!("end index: {} ({})", best_end_idx, best_end_logit);
+
+        let chars: Vec<char> = context.chars().collect();
+        let offsets = self.encoding.get_offsets();
+        log::debug!("offsets: {:?}", &offsets[best_start_idx..=best_end_idx]);
+
+        let answer = offsets[best_start_idx..=best_end_idx]
+            .iter()
+            .map(|offset| chars[offset.0..offset.1].iter().collect::<String>())
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        answer
     }
 }
 

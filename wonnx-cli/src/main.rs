@@ -84,7 +84,14 @@ fn print_qa_output(
         .ok_or_else(|| NNXError::OutputNotFound(infer_opt.qa_answer_start.to_string()))?
         .try_into()?;
 
-    println!("{}", qa_encoding.get_answer(&start_output, &end_output));
+    println!(
+        "{}",
+        qa_encoding.get_answer(
+            &start_output,
+            &end_output,
+            infer_opt.context.as_ref().unwrap()
+        )
+    );
     Ok(())
 }
 
