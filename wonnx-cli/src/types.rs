@@ -7,7 +7,7 @@ use wonnx::{
     SessionError, WonnxError,
 };
 use wonnx_preprocessing::{
-    text::{BertEncodedText, PreprocessingError},
+    text::{EncodedText, PreprocessingError},
     Tensor,
 };
 
@@ -64,6 +64,9 @@ pub enum NNXError {
 
     #[error("tensor error: {0}")]
     TensorConversionError(#[from] TensorConversionError),
+
+    #[error("I/O error: {0}")]
+    IOError(#[from] std::io::Error),
 }
 
 impl FromStr for Backend {
@@ -118,13 +121,13 @@ pub struct InferOptions {
     #[structopt(long)]
     pub output_name: Vec<String>,
 
-    /// Vocab file for text encoding
+    /// Tokenizer config file (JSON) for text encoding
     #[structopt(
-        long = "vocab",
+        long = "tokenizer",
         parse(from_os_str),
-        default_value = "./data/models/bertsquad-vocab.txt"
+        default_value = "./data/models/bertsquad-tokenizer.json"
     )]
-    pub vocab: PathBuf,
+    pub tokenizer: PathBuf,
 
     /// Sets question for question-answering
     #[structopt(short = "q", long = "question")]
@@ -230,5 +233,5 @@ pub trait Inferer {
 pub struct InferenceInput {
     pub inputs: HashMap<String, Tensor>,
     pub input_shapes: HashMap<String, Shape>,
-    pub qa_encoding: Option<BertEncodedText>,
+    pub qa_encoding: Option<EncodedText>,
 }

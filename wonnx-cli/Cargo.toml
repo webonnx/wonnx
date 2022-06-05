@@ -16,7 +16,6 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 env_logger = "0.9.0"
-
 log = "0.4.17"
 ndarray = "0.15.4"
 pollster = "0.2.5"

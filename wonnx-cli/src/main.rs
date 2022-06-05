@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::{OutputTensor, Shape};
-use wonnx_preprocessing::text::{get_lines, BertEncodedText};
+use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
 
 mod gpu;
@@ -71,7 +71,7 @@ async fn run() -> Result<(), NNXError> {
 
 fn print_qa_output(
     infer_opt: &InferOptions,
-    qa_encoding: &BertEncodedText,
+    qa_encoding: &EncodedText,
     mut outputs: HashMap<String, OutputTensor>,
 ) -> Result<(), NNXError> {
     let start_output: Vec<f32> = outputs
@@ -86,11 +86,13 @@ fn print_qa_output(
 
     println!(
         "{}",
-        qa_encoding.get_answer(
-            &start_output,
-            &end_output,
-            infer_opt.context.as_ref().unwrap()
-        )
+        qa_encoding
+            .get_answer(
+                &start_output,
+                &end_output,
+                infer_opt.context.as_ref().unwrap()
+            )
+            .text
     );
     Ok(())
 }
