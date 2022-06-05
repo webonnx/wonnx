@@ -159,6 +159,10 @@ impl GpuModel {
         Ok(gpu_model)
     }
 
+    /// Run a first pass over the IR graph to determine the outputs of which nodes are supposed to be readable as outputs
+    /// of the graph after inference. This needs to be done in a separate pass because otherwise we may run into an issue
+    /// where nodes are not marked as 'outputs readable' when their outputs are used by some node while also being used as
+    /// output (and the sequenceer migth simply follow one 'path' before the other).
     fn pre_sequence<'model>(
         &mut self,
         node: Arc<Node<'model>>,
@@ -194,7 +198,7 @@ impl GpuModel {
         Ok(())
     }
 
-    /// Write commands to the GPU to create the necessary resources to be able to perform inference (e.g. allocates buffers
+    /// Write out the GPU commands and create the necessary resources to be able to perform inference (e.g. allocates buffers
     /// for intermediate results, compiles shader code, determines which outputs to return, etc.).
     fn sequence<'model>(
         &mut self,
@@ -204,17 +208,14 @@ impl GpuModel {
         nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
     ) -> Result<(), GpuError> {
         let node_identifier = node.identifier();
-        let mut outputs_readable = nodes_readable.contains(&node_identifier);
+        let outputs_readable = nodes_readable.contains(&node_identifier);
 
-        // Sequence inputs
+        // Sequence inputs of this node first (recursively)
         let mut input_tensors: Vec<GpuTensor> = vec![];
         for node_input in &node.inputs {
             let identifier = node_input.source_node.identifier();
-            // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
-            if let NodeDefinition::Outputs { .. } = &node.definition {
-                outputs_readable = true;
-            }
 
+            // If we haven't seen this input node yet, sequence it now
             if !nodes_seen.contains(&identifier) {
                 nodes_seen.insert(identifier.clone());
                 // Sequence the source node
@@ -226,7 +227,7 @@ impl GpuModel {
                 )?;
             }
 
-            // Select the tensor we want for our input
+            // Select the tensor we want for our input from the outputs created during sequencing
             let source_identifier = node_input.source_node.identifier();
             let input_tensor = {
                 let source_outputs = &node_outputs[&source_identifier];
@@ -238,7 +239,7 @@ impl GpuModel {
             input_tensors.push(input_tensor);
         }
 
-        // Sequence self
+        // Sequence self (if by now we haven't yet)
         if let std::collections::hash_map::Entry::Vacant(e) = node_outputs.entry(node_identifier) {
             log::info!(
                 "sequence {:?} (outputs readable={:?})",
@@ -246,8 +247,12 @@ impl GpuModel {
                 outputs_readable
             );
 
+            // Create output tensors for all outputs of this node
             let mut output_tensors = vec![];
             let gpu_op: GpuStep = match &node.definition {
+                // If this node is an operator, the outputs can either be the output of the operation itself, or it can be
+                // outputs forwarded from the (only) input node of this operation (if the operation itself only modifies
+                // metadata, e.g. shapes, or is a no-op).
                 NodeDefinition::Operator(op_def) => {
                     let gpu_op = op_def.gpu_op(
                         &self.device,
@@ -271,6 +276,7 @@ impl GpuModel {
 
                     gpu_op
                 }
+                // For tensor (initializer) nodes, we just create a buffer and fill it with the initializer data
                 NodeDefinition::Tensor(tensor_def) => {
                     let tensor_buffer =
                         Arc::new(tensor_def.buffer(&self.device, outputs_readable)?);
@@ -283,6 +289,7 @@ impl GpuModel {
                     });
                     GpuStep::Initializer(tensor_buffer)
                 }
+                // For inputs we create an empty buffer that can be used at inference time to supply input data
                 NodeDefinition::Input(input_def) => {
                     if outputs_readable {
                         log::warn!(
@@ -302,6 +309,8 @@ impl GpuModel {
                         &self.device,
                         input_shape.buffer_bytes(),
                         input_def.get_name(),
+                        // Usage is not COPY_SRC/MAP_READ even when outputs_readable is true; we'll deal with the special
+                        // case of reading back inputs as outputs separately.
                         BufferUsages::STORAGE | BufferUsages::COPY_DST,
                     ));
 
