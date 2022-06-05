@@ -109,9 +109,13 @@ impl GpuModel {
         let mut readable_nodes: HashSet<NodeIdentifier> = HashSet::new();
         let mut node_outputs = HashMap::<NodeIdentifier, Vec<GpuTensor>>::new();
         let mut nodes_seen = HashSet::new();
+
+        gpu_model.pre_sequence(root.clone(), &mut readable_nodes, &mut nodes_seen)?;
+        nodes_seen.clear();
+
         gpu_model.sequence(
             root.clone(),
-            &mut readable_nodes,
+            &readable_nodes,
             &mut node_outputs,
             &mut nodes_seen,
         )?;
@@ -155,20 +159,15 @@ impl GpuModel {
         Ok(gpu_model)
     }
 
-    /// Write commands to the GPU to create the necessary resources to be able to perform inference (e.g. allocates buffers
-    /// for intermediate results, compiles shader code, determines which outputs to return, etc.).
-    fn sequence<'model>(
+    fn pre_sequence<'model>(
         &mut self,
         node: Arc<Node<'model>>,
         nodes_readable: &mut HashSet<NodeIdentifier<'model>>,
-        node_outputs: &mut HashMap<NodeIdentifier<'model>, Vec<GpuTensor>>,
         nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
     ) -> Result<(), GpuError> {
         let node_identifier = node.identifier();
         let mut outputs_readable = nodes_readable.contains(&node_identifier);
 
-        // Sequence inputs
-        let mut input_tensors: Vec<GpuTensor> = vec![];
         for node_input in &node.inputs {
             let identifier = node_input.source_node.identifier();
             // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
@@ -184,6 +183,36 @@ impl GpuModel {
                         nodes_readable.insert(identifier.clone());
                     }
                 }
+            }
+
+            if !nodes_seen.contains(&identifier) {
+                nodes_seen.insert(identifier.clone());
+                // Sequence the source node
+                self.pre_sequence(node_input.source_node.clone(), nodes_readable, nodes_seen)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Write commands to the GPU to create the necessary resources to be able to perform inference (e.g. allocates buffers
+    /// for intermediate results, compiles shader code, determines which outputs to return, etc.).
+    fn sequence<'model>(
+        &mut self,
+        node: Arc<Node<'model>>,
+        nodes_readable: &HashSet<NodeIdentifier<'model>>,
+        node_outputs: &mut HashMap<NodeIdentifier<'model>, Vec<GpuTensor>>,
+        nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
+    ) -> Result<(), GpuError> {
+        let node_identifier = node.identifier();
+        let mut outputs_readable = nodes_readable.contains(&node_identifier);
+
+        // Sequence inputs
+        let mut input_tensors: Vec<GpuTensor> = vec![];
+        for node_input in &node.inputs {
+            let identifier = node_input.source_node.identifier();
+            // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
+            if let NodeDefinition::Outputs { .. } = &node.definition {
+                outputs_readable = true;
             }
 
             if !nodes_seen.contains(&identifier) {
