@@ -125,7 +125,7 @@ pub struct InferOptions {
     #[structopt(
         long = "tokenizer",
         parse(from_os_str),
-        default_value = "./data/models/bertsquad-tokenizer.json"
+        default_value = "./tokenizer.json"
     )]
     pub tokenizer: PathBuf,
 
