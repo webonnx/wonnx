@@ -166,8 +166,8 @@ impl InferenceInput {
                 segment_length
             );
 
-            let bert_tokenizer = TextTokenizer::from_config(&infer_opt.tokenizer)?;
-            let mut encoding = bert_tokenizer.tokenize_question_answer(question, context)?;
+            let tokenizer = TextTokenizer::from_config(&infer_opt.tokenizer)?;
+            let mut encoding = tokenizer.tokenize_question_answer(question, context)?;
 
             let first_encoding = encoding.remove(0);
 
@@ -210,14 +210,14 @@ impl InferenceInput {
 
         // Process text inputs
         if !infer_opt.text.is_empty() || !infer_opt.text_mask.is_empty() {
-            let bert_tokenizer = TextTokenizer::from_config(&infer_opt.tokenizer)?;
+            let tokenizer = TextTokenizer::from_config(&infer_opt.tokenizer)?;
 
             // Tokenized text input
             for (text_input_name, text) in &infer_opt.text {
                 let text_input_shape = model
                     .get_input_shape(text_input_name)?
                     .ok_or_else(|| NNXError::InputNotFound(text_input_name.clone()))?;
-                let input = bert_tokenizer.get_input_for(text, &text_input_shape)?;
+                let input = tokenizer.get_input_for(text, &text_input_shape)?;
                 inputs.insert(text_input_name.clone(), input);
                 input_shapes.insert(text_input_name.clone(), text_input_shape);
             }
@@ -227,7 +227,7 @@ impl InferenceInput {
                 let text_input_shape = model
                     .get_input_shape(text_input_name)?
                     .ok_or_else(|| NNXError::InputNotFound(text_input_name.clone()))?;
-                let input = bert_tokenizer.get_mask_input_for(text, &text_input_shape)?;
+                let input = tokenizer.get_mask_input_for(text, &text_input_shape)?;
                 inputs.insert(text_input_name.clone(), input);
                 input_shapes.insert(text_input_name.clone(), text_input_shape);
             }
