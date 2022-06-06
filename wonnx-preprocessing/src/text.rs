@@ -3,14 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use thiserror::Error;
-use tokenizers::models::wordpiece::WordPieceBuilder;
-use tokenizers::normalizers::BertNormalizer;
-use tokenizers::pre_tokenizers::bert::BertPreTokenizer;
-use tokenizers::processors::bert::BertProcessing;
-use tokenizers::utils::padding::{PaddingDirection::Right, PaddingParams, PaddingStrategy::Fixed};
-use tokenizers::utils::truncation::TruncationParams;
-use tokenizers::utils::truncation::TruncationStrategy::LongestFirst;
-use tokenizers::{AddedToken, EncodeInput, Encoding, InputSequence, Tokenizer};
+use tokenizers::{EncodeInput, Encoding, InputSequence, Tokenizer};
 use wonnx::utils::Shape;
 
 use crate::Tensor;
@@ -21,103 +14,53 @@ pub enum PreprocessingError {
     TextTokenizationError(#[from] Box<dyn std::error::Error + Sync + Send>),
 }
 
-pub struct BertTokenizer {
+pub struct TextTokenizer {
     pub tokenizer: Tokenizer,
 }
 
-pub struct BertEncodedText {
+#[derive(Debug)]
+pub struct EncodedText {
     pub encoding: Encoding,
 }
 
-impl BertTokenizer {
-    pub fn new(vocab_path: &Path) -> BertTokenizer {
-        let wp_builder = WordPieceBuilder::new()
-            .files(vocab_path.as_os_str().to_string_lossy().to_string())
-            .continuing_subword_prefix("##".into())
-            .max_input_chars_per_word(100)
-            .unk_token("[UNK]".into())
-            .build()
-            .unwrap();
+impl TextTokenizer {
+    pub fn new(tokenizer: Tokenizer) -> TextTokenizer {
+        TextTokenizer { tokenizer }
+    }
 
-        let mut tokenizer = Tokenizer::new(wp_builder);
-        tokenizer.with_padding(Some(PaddingParams {
-            strategy: Fixed(60),
-            direction: Right,
-            pad_id: 0,
-            pad_type_id: 0,
-            pad_token: "[PAD]".into(),
-            pad_to_multiple_of: None,
-        }));
-        tokenizer.with_truncation(Some(TruncationParams {
-            max_length: 60,
-            strategy: LongestFirst,
-            stride: 0,
-            ..Default::default()
-        }));
-        tokenizer.with_pre_tokenizer(BertPreTokenizer);
-        tokenizer.with_post_processor(BertProcessing::new(
-            ("[SEP]".into(), 102),
-            ("[CLS]".into(), 101),
-        ));
-        tokenizer.with_normalizer(BertNormalizer::new(true, true, Some(false), false));
-        tokenizer.add_special_tokens(&[
-            AddedToken {
-                content: "[PAD]".into(),
-                single_word: false,
-                lstrip: false,
-                rstrip: false,
-                normalized: false, //?
-                ..Default::default()
-            },
-            AddedToken {
-                content: "[CLS]".into(),
-                single_word: false,
-                lstrip: false,
-                rstrip: false,
-                normalized: false, //?
-                ..Default::default()
-            },
-            AddedToken {
-                content: "[SEP]".into(),
-                single_word: false,
-                lstrip: false,
-                rstrip: false,
-                normalized: false, //?
-                ..Default::default()
-            },
-            AddedToken {
-                content: "[MASK]".into(),
-                single_word: false,
-                lstrip: false,
-                rstrip: false,
-                normalized: false, //?
-                ..Default::default()
-            },
-        ]);
-
-        BertTokenizer { tokenizer }
+    pub fn from_config<P: AsRef<Path>>(path: P) -> Result<TextTokenizer, std::io::Error> {
+        let tokenizer_config_file = File::open(path)?;
+        let tokenizer_config_reader = BufReader::new(tokenizer_config_file);
+        let tokenizer = serde_json::from_reader(tokenizer_config_reader)?;
+        Ok(TextTokenizer::new(tokenizer))
     }
 
     pub fn tokenize_question_answer(
         &self,
         question: &str,
         context: &str,
-    ) -> Result<BertEncodedText, PreprocessingError> {
-        Ok(BertEncodedText {
-            encoding: self
-                .tokenizer
-                .encode(
-                    EncodeInput::Dual(
-                        InputSequence::Raw(Cow::from(question)),
-                        InputSequence::Raw(Cow::from(context)),
-                    ),
-                    true,
-                )
-                .map_err(PreprocessingError::TextTokenizationError)?,
-        })
+    ) -> Result<Vec<EncodedText>, PreprocessingError> {
+        let mut encoding = self
+            .tokenizer
+            .encode(
+                EncodeInput::Dual(
+                    InputSequence::Raw(Cow::from(question)),
+                    InputSequence::Raw(Cow::from(context)),
+                ),
+                true,
+            )
+            .map_err(PreprocessingError::TextTokenizationError)?;
+
+        let mut overflowing = encoding.take_overflowing();
+        overflowing.insert(0, encoding);
+
+        Ok(overflowing
+            .into_iter()
+            .map(|x| EncodedText { encoding: x })
+            .collect())
     }
 
-    fn tokenize(&self, text: &str) -> Result<BertEncodedText, PreprocessingError> {
+    fn tokenize(&self, text: &str) -> Result<EncodedText, PreprocessingError> {
         let encoding = self
             .tokenizer
             .encode(
@@ -125,10 +68,10 @@ impl BertTokenizer {
                 true,
             )
             .map_err(PreprocessingError::TextTokenizationError)?;
-        Ok(BertEncodedText { encoding })
+        Ok(EncodedText { encoding })
     }
 
-    pub fn decode(&self, encoding: &BertEncodedText) -> Result<String, PreprocessingError> {
+    pub fn decode(&self, encoding: &EncodedText) -> Result<String, PreprocessingError> {
         let ids = encoding.get_tokens().iter().map(|x| *x as u32).collect();
         self.tokenizer
             .decode(ids, true)
@@ -158,7 +101,14 @@ impl BertTokenizer {
     }
 }
 
-impl BertEncodedText {
+#[derive(Debug)]
+pub struct Answer {
+    pub text: String,
+    pub tokens: Vec<String>,
+    pub score: f32,
+}
+
+impl EncodedText {
     pub fn get_mask(&self) -> Vec<i64> {
         self.encoding
             .get_attention_mask()
@@ -177,6 +127,77 @@ impl BertEncodedText {
             .iter()
             .map(|x| *x as i64)
             .collect()
+    }
+
+    pub fn get_answer(&self, start_output: &[f32], end_output: &[f32], context: &str) -> Answer {
+        let mut best_start_logit = f32::MIN;
+        let mut best_start_idx: usize = 0;
+
+        let input_tokens = self.encoding.get_tokens();
+        let special_tokens_mask = self.encoding.get_special_tokens_mask();
+
+        for (start_idx, start_logit) in start_output.iter().enumerate() {
+            if start_idx > input_tokens.len() - 1 {
+                break;
+            }
+
+            // Skip special tokens such as [CLS], [SEP], [PAD]
+            if special_tokens_mask[start_idx] == 1 {
+                continue;
+            }
+
+            if *start_logit > best_start_logit {
+                best_start_logit = *start_logit;
+                best_start_idx = start_idx;
+            }
+        }
+
+        // Find matching end
+        let mut best_end_logit = f32::MIN;
+        let mut best_end_idx = best_start_idx;
+        for (end_idx, end_logit) in end_output[best_start_idx..].iter().enumerate() {
+            if (end_idx + best_start_idx) > input_tokens.len() - 1 {
+                break;
+            }
+
+            // Skip special tokens such as [CLS], [SEP], [PAD]
+            if special_tokens_mask[end_idx + best_start_idx] == 1 {
+                continue;
+            }
+
+            if *end_logit > best_end_logit {
+                best_end_logit = *end_logit;
+                best_end_idx = end_idx + best_start_idx;
+            }
+        }
+
+        log::debug!("start index: {} ({})", best_start_idx, best_start_logit);
+        log::debug!("end index: {} ({})", best_end_idx, best_end_logit);
+
+        let chars: Vec<char> = context.chars().collect();
+        let offsets = self.encoding.get_offsets();
+        log::debug!("offsets: {:?}", &offsets[best_start_idx..=best_end_idx]);
+
+        let answer_tokens: Vec<String> =
+            self.encoding.get_tokens()[best_start_idx..best_end_idx].to_vec();
+
+        let min_offset = offsets[best_start_idx..=best_end_idx]
+            .iter()
+            .map(|o| o.0)
+            .min()
+            .unwrap();
+        let max_offset = offsets[best_start_idx..=best_end_idx]
+            .iter()
+            .map(|o| o.1)
+            .max()
+            .unwrap();
+        let answer = chars[min_offset..max_offset].iter().collect::<String>();
+
+        Answer {
+            text: answer,
+            tokens: answer_tokens,
+            score: best_start_logit * best_end_logit,
+        }
     }
 }
 

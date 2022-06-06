@@ -3876,10 +3876,12 @@ dependencies = [
 name = "wonnx-preprocessing"
 version = "0.1.0"
 dependencies = [
+ "env_logger",
  "image",
  "log",
  "ndarray",
  "protobuf",
+ "serde_json",
  "thiserror",
  "tokenizers",
  "tract-onnx",
