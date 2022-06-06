@@ -134,14 +134,16 @@ impl EncodedText {
         let mut best_start_idx: usize = 0;
 
         let input_tokens = self.encoding.get_tokens();
+        let special_tokens_mask = self.encoding.get_special_tokens_mask();
 
         for (start_idx, start_logit) in start_output.iter().enumerate() {
             if start_idx > input_tokens.len() - 1 {
                 break;
             }
-            match input_tokens[start_idx].as_str() {
-                "[CLS]" | "[SEP]" | "[PAD]" => continue,
-                _ => {}
+
+            // Skip special tokens such as [CLS], [SEP], [PAD]
+            if special_tokens_mask[start_idx] == 1 {
+                continue;
             }
 
             if *start_logit > best_start_logit {
@@ -158,9 +160,9 @@ impl EncodedText {
                 break;
             }
 
-            match input_tokens[end_idx + best_start_idx].as_str() {
-                "[CLS]" | "[SEP]" | "[PAD]" => continue,
-                _ => {}
+            // Skip special tokens such as [CLS], [SEP], [PAD]
+            if special_tokens_mask[end_idx + best_start_idx] == 1 {
+                continue;
             }
 
             if *end_logit > best_end_logit {
