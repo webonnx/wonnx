@@ -30,6 +30,12 @@ serde_derive = "1.0.137"
 serde = { version = "1.0.137", features = ["derive"] }
 num = "0.4.0"
 
+# We need these on WASM because the way we are reading buffers there is slightly more involved
+# See GpuTensor::read_to_vec
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+futures-intrusive = "0.4.0"
+parking_lot = { version = "0.11.1", features = ["wasm-bindgen"]}
+
 [dev-dependencies]
 image = "0.24.2"
 ndarray = "0.15.4"
