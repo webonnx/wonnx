@@ -1,15 +1,15 @@
 {%- if activation_type == "Relu"-%}
-	{{ activation_output }} = max({{ activation_input }}, Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)));
+	{{ activation_output }} = max({{ activation_input }}, Vec4(Scalar(), Scalar(), Scalar(), Scalar()));
 
 {%- elif activation_type == "Sigmoid" -%}
-	{{ activation_output }} = Vec4(Scalar(1), Scalar(1), Scalar(1), Scalar(1)) / (Vec4(Scalar(1), Scalar(1), Scalar(1), Scalar(1)) + exp(-{{ activation_input }}));
+	{{ activation_output }} = Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)) / (Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)) + exp(-{{ activation_input }}));
 
 {%- elif activation_type == "Softsign" -%}
 	let input = {{ activation_input }}; 
-	{{ activation_output }} = input / (Vec4(Scalar(1), Scalar(1), Scalar(1), Scalar(1)) + abs(input));
+	{{ activation_output }} = input / (Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)) + abs(input));
 
 {%- elif activation_type == "Softplus" -%}
-	{{ activation_output }} = log(Vec4(Scalar(1), Scalar(1), Scalar(1), Scalar(1)) + exp({{ activation_input }}));
+	{{ activation_output }} = log(Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)) + exp({{ activation_input }}));
 
 {%- elif activation_type == "Clip" -%}
 	let min_clip = input_1.data[0u];
@@ -23,30 +23,30 @@
 {%- elif activation_type == "Celu" -%}
 	let input_vec = {{ activation_input }}; 
 	{{ activation_output }} = max(
-			Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)), 
+			Vec4(Scalar(), Scalar(), Scalar(), Scalar()), 
 			input_vec
 		) + min(
-			Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)), 
-			{{ alpha }} * (exp(input_vec / {{ alpha }}) - Vec4(Scalar(1), Scalar(1), Scalar(1), Scalar(1)))
+			Vec4(Scalar(), Scalar(), Scalar(), Scalar()), 
+			{{ alpha }} * (exp(input_vec / {{ alpha }}) - Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)))
 		);
 
 {%- elif activation_type == "Elu" -%}
 		let input_vec = {{ activation_input }}; 
 		{{ activation_output }} = max(
-			Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)), 
+			Vec4(Scalar(), Scalar(), Scalar(), Scalar()), 
 			input_vec
 		) + min(
-			Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)), 
-			{{ alpha }} * (exp(input_vec) - Vec4(Scalar(1), Scalar(1), Scalar(1), Scalar(1)))
+			Vec4(Scalar(), Scalar(), Scalar(), Scalar()), 
+			{{ alpha }} * (exp(input_vec) - Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)))
 		);
 
 {%- elif activation_type == "Mish" -%}
 	let input_vec = {{ activation_input }}; 
-	{{ activation_output }} = input_vec * tanh(log(Vec4(Scalar(1), Scalar(1), Scalar(1), Scalar(1)) + exp(input_vec)));
+	{{ activation_output }} = input_vec * tanh(log(Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)) + exp(input_vec)));
 
 {%- elif activation_type == "LeakyRelu" -%}
-	{{ activation_output }} = max({{ activation_input }}, Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)))
-	                         + min(Scalar({{ alpha }}) * {{ activation_input }}, Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0)));
+	{{ activation_output }} = max({{ activation_input }}, Vec4(Scalar(), Scalar(), Scalar(), Scalar()))
+	                         + min({{ scalar_type }}({{ alpha }}) * {{ activation_input }}, Vec4(Scalar(), Scalar(), Scalar(), Scalar()));
 
 {%- elif activation_output != activation_input -%}
 	{{ activation_output }} = {{ activation_input }};

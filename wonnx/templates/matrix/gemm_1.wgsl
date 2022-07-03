@@ -1,28 +1,28 @@
 {%- include "structs.wgsl" -%}
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: ArrayVector;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, read> input_1: Array;
 
 {%- if i_lens | length == 3 -%} // Bias
 
-	[[group(0), binding(2)]]
+	@group(0) @binding(2)
 	var<storage, read> input_2: Array;
 
-	[[group(0), binding(3)]]
+	@group(0) @binding(3)
 	var<storage, write> output_0: Array;
 
 {%- else -%}
 
-	[[group(0), binding(2)]]
+	@group(0) @binding(2)
 	var<storage, write> output_0: Array;
 
 {%- endif -%}  
 
-[[stage(compute), workgroup_size(1, {{ workgroup_size_y }})]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size(1, {{ workgroup_size_y }})
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
 	{# Calculate stacking offsets #}
@@ -30,8 +30,8 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	let right_offset = global_id.y * {{ stack_right_stride }}u;
 	let output_offset = global_id.y * {{ stack_output_stride }}u;
 
-	var tmpsum = Scalar(0);
-	var product = Scalar(0);
+	var tmpsum = Scalar();
+	var product = Scalar();
 
 	for(var k: u32 = 0u; k < {{ left_shape[1] / 4 | int }}u; k = k + 1u) {
 		let index_left = left_offset + k; 

@@ -1,13 +1,13 @@
 {%- include "structs.wgsl" -%}
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: Array;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, write> output_0: Array;
 
-[[stage(compute), workgroup_size(256, 1, 1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size(256, 1, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
 	if (gidx < {{ o_lens[0] }}u) {

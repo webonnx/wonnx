@@ -1,27 +1,27 @@
 {%- include "structs.wgsl" -%}
 
 struct Indices {
-	data: [[stride(4)]] array<i32>;
+	data: array<i32>
 };
 
 struct Depth {
-	data: i32;
+	data: i32
 };
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_indexes: Indices;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, read> input_depth: Depth;
 
-[[group(0), binding(2)]]
+@group(0) @binding(2)
 var<storage, read> input_values: Array;
 
-[[group(0), binding(3)]]
+@group(0) @binding(3)
 var<storage, write> output_0: Array;
 
-[[stage(compute), workgroup_size(1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size(1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let index_of_index = global_id.x;
 	let depth = u32(input_depth.data);
 	var index = input_indexes.data[index_of_index];

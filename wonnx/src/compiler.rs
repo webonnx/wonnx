@@ -870,12 +870,17 @@ pub fn compile(
                     let alpha = get_attribute("alpha", Some(0.01), node)?;
                     context.insert("alpha", &alpha);
 
+                    let scalar_type = agreed_type(input_shapes, output_shapes)?;
+
                     // WGSL shader for convolution computation
+                    // Matrixes in WGSL are only supported for floating point types, so we can only use these (faster) shader
+                    // implementations when scalar_type is float
                     if (strides == [1, 1])
                         && (kernel_shape == [1, 1])
                         && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
                         && (input_shape.dim(1) % 16 == 0)
                         && (output_shape.dim(1) % 4 == 0)
+                        && scalar_type.is_float()
                     {
                         NodeTemplate {
                             scalar_type: agreed_type(input_shapes, output_shapes)?,
@@ -886,9 +891,10 @@ pub fn compile(
                         && (kernel_shape == [3, 3])
                         && (dilations == [1, 1])
                         && (output_shape.dim(1) % 4 == 0)
+                        && scalar_type.is_float()
                     {
                         NodeTemplate {
-                            scalar_type: agreed_type(input_shapes, output_shapes)?,
+                            scalar_type,
                             template: "pool/conv_kernel_3.wgsl",
                             threads: (ceil(output_lengths[0], 1024) as _, 1, 1),
                         }
@@ -1343,6 +1349,10 @@ pub fn compile(
 
     // Determine (default) scalar data type to use
     context.insert("scalar_type", node_template.scalar_type.wgsl_type_name());
+    context.insert(
+        "scalar_type_is_float",
+        &node_template.scalar_type.is_float(),
+    );
     context.insert("scalar_stride", &node_template.scalar_type.stride());
     context.insert(
         "vec4_stride",

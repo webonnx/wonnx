@@ -1,14 +1,14 @@
 
 {%- include "structs.wgsl" -%}
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: Array;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, write> output_0: Array;
 
-[[stage(compute), workgroup_size(256, 1, 1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size(256, 1, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
 	if (gidx < {{ o_lens[0] }}u) {
@@ -29,7 +29,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 					+ 
 				{%- endif -%}
 				u32(floor(
-					(Scalar(d_{{ loop.index0 }}) + Scalar(0.5)) / {{ scale }} - Scalar(0.5) 
+					({{ scalar_type }}(d_{{ loop.index0 }}) + {{ scalar_type }}(0.5)) / {{ scale }} - {{ scalar_type }}(0.5) 
 				)) * {{ chunks  }}u 
 			{%- endfor -%}
 		;

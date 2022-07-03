@@ -1,13 +1,13 @@
 {% include "structs.wgsl" %}
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: Array;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, write> output_0: Array;
 
-[[stage(compute), workgroup_size({{ workgroup_size_x }}, 1, 1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size({{ workgroup_size_x }}, 1, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
 	{# We will be invoked once for each scalar in the output (output_0.data[gidx]) which represents one reduce operation.
@@ -40,7 +40,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		Now for each reduced axis, iterate all values and reduce. Note, starting value may not always be zero. For 
 		ReduceMin/Max we should initialize as NaN and keep a flag to check if we have seen at least one element -#}
 
-		var accumulator = {% if op_type == "ReduceProd" %} Scalar(1) {% else %} Scalar(0) {% endif %}; 
+		var accumulator = {% if op_type == "ReduceProd" %} {{ scalar_type }}(1) {% else %} Scalar() {% endif %}; 
 		var count = 0u;
 
 		{% for reducing_axis in axes %}
@@ -89,7 +89,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 
 		{#- Post-processing -#}
 		{% if op_type == "ReduceMean" %}
-			accumulator = accumulator / Scalar(count);
+			accumulator = accumulator / {{ scalar_type }}(count);
 		{% elif op_type == "ReduceL2" %}
 			accumulator = sqrt(accumulator);
 		{% elif op_type == "ReduceLogSum" or op_type == "ReduceLogSumExp" %}

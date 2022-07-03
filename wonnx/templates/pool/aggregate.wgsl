@@ -1,13 +1,13 @@
 {%- include "structs.wgsl" -%}
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: Array;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, write> output_0: Array;
 
-[[stage(compute), workgroup_size(256, 1, 1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size(256, 1, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
 	{% if (i_shape[0][1] % 4) == 0 %}
@@ -22,9 +22,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		let x = rest % {{ o_chunks[0][2] }}u;
 		
 		{% if op_type == "AveragePool" -%}
-		var result = Vec4(Scalar(0), Scalar(0), Scalar(0), Scalar(0));
+		var result = Vec4(Scalar(), Scalar(), Scalar(), Scalar());
 		{% else %}
-		var result = Vec4(Scalar(-3.40282347E+38), Scalar(-3.40282347E+38), Scalar(-3.40282347E+38), Scalar(-3.40282347E+38));
+		var result = Vec4({{ scalar_type }}(-3.40282347E+38), {{ scalar_type }}(-3.40282347E+38), {{ scalar_type }}(-3.40282347E+38), {{ scalar_type }}(-3.40282347E+38));
 		{% endif %}
 		var value = result;
 
@@ -32,7 +32,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		var tmp_y = 0u;
 		var tmp_x = 0u;
 		var tmp_index = 0u;
-		var counter = Scalar(0);
+		var counter = Scalar();
 
 		for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
 			tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
@@ -54,7 +54,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 								result = max(result, value);
 							{%- elif op_type == "AveragePool" -%}
 								result = result + value;
-								counter = counter + Scalar(1);
+								counter = counter + {{ scalar_type }}(1);
 							{%- endif -%}
 						}
 				}
@@ -90,9 +90,9 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		let x = rest % {{ o_chunks[0][2] }}u;
 		
 		{% if op_type == "AveragePool" -%}
-		var result = Scalar(0);
+		var result = Scalar();
 		{% else %}
-		var result = Scalar(-3.40282347E+38);
+		var result = {{ scalar_type }}(-3.40282347E+38);
 		{% endif %}
 		var value = result;
 		
@@ -100,7 +100,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		var tmp_y = 0u;
 		var tmp_x = 0u;
 		var tmp_index = 0u;
-		var counter = Scalar(0);
+		var counter = Scalar();
 
 		for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
 			tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
@@ -117,7 +117,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 								result = max(result, value);
 							{%- elif op_type == "AveragePool" -%}
 								result = result + value;
-								counter = counter + Scalar(1);
+								counter = counter + {{ scalar_type }}(1);
 							{%- endif -%}
 						}
 				}

@@ -1,16 +1,16 @@
 {%- include "structs.wgsl" -%}
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: Array;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, read> input_1: Array;
 
-[[group(0), binding(2)]]
+@group(0) @binding(2)
 var<storage, write> output_0: Array;
 
-[[stage(compute), workgroup_size({{ workgroup_size_x }}, 1, 1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size({{ workgroup_size_x }}, 1, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
 	{# We will be called for each element in the output tensor. Determine the corresponding indices in the source tensors #}
@@ -38,8 +38,8 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	{% if op_type == "Pow" %}
 		output_0.data[gidx] = pow(lhs, rhs);
 	{% elif op_type == "PRelu" %}
-		output_0.data[gidx] = max(lhs, Scalar(0))
-							+ min(lhs, Scalar(0)) * rhs;
+		output_0.data[gidx] = max(lhs, Scalar())
+							+ min(lhs, Scalar()) * rhs;
 	{% else %}
 		output_0.data[gidx] = (lhs {{ op_type }} rhs);
 	{% endif %}
