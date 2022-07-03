@@ -2,7 +2,6 @@
 // Operations usually work with a single scalar data type (typically f32). This data type is set by the compiler as the
 // 'scalar_type' variable. Here we define several other useful data types that shader code can use to make it more portable.
 #}
-
 type Scalar = {{ scalar_type }};
 type Vec3 = vec3<{{ scalar_type }}>;
 type Vec4 = vec4<{{ scalar_type }}>;

@@ -1,5 +1,12 @@
 {%- include "structs.wgsl" -%}
 
+{# 
+// The smallest floating point number that can be represented in IEEE-754. This should be -3.40282347E+38. However, Google 
+// Chrome's WGSL compiler (as of July 2022) complains that number cannot be represented in f32. Hence we are using +37f,
+// which should be sufficiently low.
+#}
+{% set_global min_float = scalar_type ~ "(-3.40282347E+37f)" %}
+
 @group(0) @binding(0)
 var<storage, read> input_0: Array;
 
@@ -24,7 +31,12 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		{% if op_type == "AveragePool" -%}
 		var result = Vec4(Scalar(), Scalar(), Scalar(), Scalar());
 		{% else %}
-		var result = Vec4({{ scalar_type }}(-3.40282347E+38), {{ scalar_type }}(-3.40282347E+38), {{ scalar_type }}(-3.40282347E+38), {{ scalar_type }}(-3.40282347E+38));
+		var result = Vec4(
+			{{ min_float }},
+			{{ min_float }},
+			{{ min_float }},
+			{{ min_float }}
+		);
 		{% endif %}
 		var value = result;
 
@@ -92,7 +104,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		{% if op_type == "AveragePool" -%}
 		var result = Scalar();
 		{% else %}
-		var result = {{ scalar_type }}(-3.40282347E+38);
+		
+		var result = {{ scalar_type }}({{ min_float }});
 		{% endif %}
 		var value = result;
 		
