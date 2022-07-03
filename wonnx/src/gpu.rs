@@ -544,7 +544,7 @@ impl<'model> OperatorDefinition<'model> {
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label,
             layout: None,
-            module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            module: &device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
             }),
@@ -642,7 +642,7 @@ impl GpuStep {
                     compute_pass.set_bind_group(index as u32, bind_group, &[]);
                 }
                 let (x, y, z) = *threads;
-                compute_pass.dispatch(x, y, z);
+                compute_pass.dispatch_workgroups(x, y, z);
                 Ok(())
             }
         }
@@ -669,9 +669,8 @@ impl GpuTensor {
         #[cfg(not(target_arch = "wasm32"))]
         let output_data = {
             let _ = queue; // Need this because otherwise compiler complains we are not using the queue parameter
-            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+            buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
             device.poll(wgpu::Maintain::Wait);
-            buffer_future.await.expect("failed to run compute on gpu!");
             buffer_slice.get_mapped_range()
         };
 

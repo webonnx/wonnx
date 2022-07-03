@@ -24,7 +24,7 @@ protobuf = { version = "2.27.1", features = ["with-bytes"] }
 structopt = { version = "0.3.26", features = [ "paw" ] }
 thiserror = "1.0.31"
 tract-onnx = { version = "0.16.7", optional = true }
-wgpu = "0.12.0"
+wgpu = "0.13.1"
 wonnx = { path = "../wonnx" }
 wonnx-preprocessing = { path = "../wonnx-preprocessing" }
 human_bytes = "0.3.1"
