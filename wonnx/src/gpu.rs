@@ -672,9 +672,9 @@ impl GpuTensor {
 
             wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |b| {
                 // Called on download completed
-                tx.send(match b {
-                    Ok(b) => Ok(Self::read_bytes_to_vec(&b, shape)),
-                    Err(abe) => Err(GpuError::BufferAsyncError(abe)),
+                tx.send(match buffer {
+                    Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
+                    Err(error) => Err(GpuError::BufferAsyncError(error)),
                 })
                 .unwrap();
             });
