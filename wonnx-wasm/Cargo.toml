@@ -27,7 +27,6 @@ lto = true
 [dependencies]
 wonnx = { path = "../wonnx" }
 log = "0.4.17"
-#wgpu = { version = "0.12.0" }
 console_log = "0.2.0"
 console_error_panic_hook = "0.1.7"
 wasm-bindgen-console-logger = "0.1.1"
@@ -36,7 +35,7 @@ wasm-bindgen = { version = "0.2.80", features = ["serde-serialize"] } # remember
 wasm-bindgen-futures = "0.4.30"
 wasm-bindgen-test = "0.3.30"
 js-sys = "0.3.57"
-web-sys = { version = "0.3.57", features = [
+web-sys = { version = "0.3.58", features = [
     "Document",
     "Navigator",
     "Node",
@@ -59,12 +58,10 @@ web-sys = { version = "0.3.57", features = [
     "GpuBufferBindingLayout",
     "GpuBufferBindingType",
     "GpuBufferDescriptor",
-    "GpuBufferUsage",
     "GpuCanvasContext",
     "GpuCanvasConfiguration",
     "GpuColorDict",
     "GpuColorTargetState",
-    "GpuColorWrite",
     "GpuCommandBuffer",
     "GpuCommandBufferDescriptor",
     "GpuCommandEncoder",
@@ -94,7 +91,6 @@ web-sys = { version = "0.3.57", features = [
     "GpuImageDataLayout",
     "GpuIndexFormat",
     "GpuLoadOp",
-    "GpuMapMode",
     "GpuMultisampleState",
     "GpuObjectDescriptorBase",
     "GpuOrigin2dDict",
@@ -103,7 +99,6 @@ web-sys = { version = "0.3.57", features = [
     "GpuPipelineDescriptorBase",
     "GpuPipelineLayout",
     "GpuPipelineLayoutDescriptor",
-    "GpuPipelineStatisticName",
     "GpuPowerPreference",
     "GpuPrimitiveState",
     "GpuPrimitiveTopology",
@@ -129,7 +124,6 @@ web-sys = { version = "0.3.57", features = [
     "GpuSamplerDescriptor",
     "GpuShaderModule",
     "GpuShaderModuleDescriptor",
-    "GpuShaderStage",
     "GpuStencilFaceState",
     "GpuStencilOperation",
     "GpuStorageTextureAccess",
@@ -144,7 +138,6 @@ web-sys = { version = "0.3.57", features = [
     "GpuTextureDimension",
     "GpuTextureFormat",
     "GpuTextureSampleType",
-    "GpuTextureUsage",
     "GpuTextureView",
     "GpuTextureViewDescriptor",
     "GpuTextureViewDimension",

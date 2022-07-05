@@ -5,9 +5,10 @@ use std::{
     sync::Arc,
 };
 
+use bytemuck::NoUninit;
 use num::FromPrimitive;
 use thiserror::Error;
-use wgpu::{Buffer, BufferUsages, CommandEncoder};
+use wgpu::{Buffer, BufferAsyncError, BufferUsages, CommandEncoder};
 
 use crate::{
     compiler::{compile, CompileError, CompiledNode},
@@ -77,6 +78,9 @@ pub enum GpuError {
 
     #[error("value out of bounds")]
     OutOfBoundsError,
+
+    #[error("async buffer error: {0}")]
+    BufferAsyncError(#[from] BufferAsyncError),
 }
 
 enum InferenceOutput {
@@ -544,7 +548,7 @@ impl<'model> OperatorDefinition<'model> {
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label,
             layout: None,
-            module: &device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            module: &device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&shader)),
             }),
@@ -642,7 +646,7 @@ impl GpuStep {
                     compute_pass.set_bind_group(index as u32, bind_group, &[]);
                 }
                 let (x, y, z) = *threads;
-                compute_pass.dispatch(x, y, z);
+                compute_pass.dispatch_workgroups(x, y, z);
                 Ok(())
             }
         }
@@ -657,46 +661,64 @@ impl GpuTensor {
         queue: &wgpu::Queue,
     ) -> Result<OutputTensor, GpuError> {
         let buffer_slice = self.buffer.slice(..);
+        let shape = self.shape.clone();
 
         // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
         // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
         // STORAGE buffer when on WebGPU.
         #[cfg(target_arch = "wasm32")]
-        let output_data = wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice)
-            .await
-            .unwrap();
+        {
+            let (tx, rx) = futures_intrusive::channel::shared::oneshot_channel();
+
+            wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |b| {
+                // Called on download completed
+                tx.send(match buffer {
+                    Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
+                    Err(error) => Err(GpuError::BufferAsyncError(error)),
+                })
+                .unwrap();
+            });
+            device.poll(wgpu::Maintain::Wait);
+            // The callback will have been called by now due to poll(Wait)
+            rx.receive().await.unwrap()
+        }
 
         #[cfg(not(target_arch = "wasm32"))]
-        let output_data = {
-            let _ = queue; // Need this because otherwise compiler complains we are not using the queue parameter
-            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-            device.poll(wgpu::Maintain::Wait);
-            buffer_future.await.expect("failed to run compute on gpu!");
-            buffer_slice.get_mapped_range()
-        };
+        {
+            let output_data = {
+                let _ = queue; // Need this because otherwise compiler complains we are not using the queue parameter
+                buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
+                device.poll(wgpu::Maintain::Wait);
+                buffer_slice.get_mapped_range()
+            };
 
+            let result = Self::read_bytes_to_vec(&output_data[..], shape);
+            drop(output_data);
+            self.buffer.unmap();
+            Ok(result)
+        }
+    }
+
+    fn read_bytes_to_vec<A>(output_data: &[A], shape: Shape) -> OutputTensor
+    where
+        A: NoUninit,
+    {
         // The actual buffer may be bigger than what we should return, because buffers have a minimum size in wgpu
         // Fetch the size we should expect so we can chop the buffer to the correct size
-        let output_buffer_size = self.shape.element_count() as usize;
-        let result = match self.shape.data_type {
+        let output_buffer_size = shape.element_count() as usize;
+        match shape.data_type {
             ScalarType::F32 => {
-                OutputTensor::F32(bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec())
+                OutputTensor::F32(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
             }
             ScalarType::I32 => {
-                OutputTensor::I32(bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec())
+                OutputTensor::I32(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
             }
             ScalarType::I64 => {
                 log::warn!("reading int64 output as int32 because internally int64 scalars are not supported");
                 let result_ints: Vec<i32> =
-                    bytemuck::cast_slice(&output_data)[..output_buffer_size].to_vec();
+                    bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec();
                 OutputTensor::I64(result_ints.iter().map(|i| *i as i64).collect())
             }
-        };
-        drop(output_data);
-
-        // On WASM we are not mapping the buffer, so we don't need to unmap
-        #[cfg(not(target_arch = "wasm32"))]
-        self.buffer.unmap();
-        Ok(result)
+        }
     }
 }

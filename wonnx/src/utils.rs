@@ -254,6 +254,13 @@ impl ScalarType {
             ScalarType::I64 => "i64",
         }
     }
+
+    pub fn is_float(&self) -> bool {
+        match self {
+            ScalarType::F32 => true,
+            ScalarType::I32 | ScalarType::I64 => false,
+        }
+    }
 }
 
 impl Display for ScalarType {

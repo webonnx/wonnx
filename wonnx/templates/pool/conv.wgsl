@@ -1,26 +1,26 @@
 {%- include "structs.wgsl" -%}
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: Array;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, read> input_1: Array;
 
 {%- if i_lens | length == 3 -%} // Bias
-	[[group(0), binding(2)]]
+	@group(0) @binding(2)
 	var<storage, read> input_2: Array;
 
-	[[group(0), binding(3)]]
+	@group(0) @binding(3)
 	var<storage, write> output_0: Array;
 
 {%- else -%}
-	[[group(0), binding(2)]]
+	@group(0) @binding(2)
 	var<storage, write> output_0: Array;
 
 {%- endif %}
 
-[[stage(compute), workgroup_size(256, 1, 1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size(256, 1, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 	if (gidx < {{ o_lens[0] }}u) {
 		let batch = gidx / {{ o_chunks[0][0] }}u; 
@@ -32,7 +32,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 		let y = rest / {{ o_chunks[0][2] }}u;
 		let x = rest % {{ o_chunks[0][2] }}u;
 		
-		var result: Scalar = Scalar(0);
+		var result: Scalar = Scalar();
 
 		let root_index = batch * {{ i_chunks[0][0] }}u;
 		let root_kernel_index = m * {{ kernel_channel_len }}u;

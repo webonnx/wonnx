@@ -1,16 +1,16 @@
 
 {%- include "structs.wgsl" -%}
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_0: Array;
 
 {% for output in o_lens %}
-	[[group({{ loop.index / 4 | int }}), binding({{ loop.index % 4}})]]
+	@group({{ loop.index / 4 | int }}) @binding({{ loop.index % 4}})
 	var<storage, write> output_{{ loop.index0 }}: Array;
 {% endfor %}
 
-[[stage(compute), workgroup_size(256, 1, 1)]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size(256, 1, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
 	if (gidx < {{ i_lens[0] }}u) {

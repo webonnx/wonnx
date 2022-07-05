@@ -3,28 +3,28 @@ type GemmVec = vec{{ kernel_size }}<{{ scalar_type }}>;
 type GemmMat = mat{{ kernel_size }}x{{ kernel_size }}<{{ scalar_type }}>;
 
 struct GemmArrayVector {
-	data: array<GemmVec>;
+	data: array<GemmVec>
 };
 
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var<storage, read> input_left: GemmArrayVector;
 
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var<storage, read> input_right: GemmArrayVector;
 
 {% if i_lens | length == 3 %} // Bias
-	[[group(0), binding(2)]]
+	@group(0) @binding(2)
 	var<storage, read> input_bias: GemmArrayVector;
 
-	[[group(0), binding(3)]]
+	@group(0) @binding(3)
 	var<storage, write> output_0: GemmArrayVector;
 {% else %}
-	[[group(0), binding(2)]]
+	@group(0) @binding(2)
 	var<storage, write> output_0: GemmArrayVector;
 {% endif %}
 
-[[stage(compute), workgroup_size({{ workgroup_size_x }}, {{ workgroup_size_y }})]]
-fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
+@compute @workgroup_size({{ workgroup_size_x }}, {{ workgroup_size_y }})
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let y = global_id.x % {{ n_chunks }}u;
 	let x = global_id.x / {{ n_chunks }}u;
 
@@ -39,7 +39,7 @@ fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
 	{# Create zero vector and matrix of the correct size for later use #}
 	let zero_vec = GemmVec(
 		{% for i in range(end = kernel_size) %}
-			Scalar(0) {%-if not loop.last -%},{%- endif -%}
+			Scalar() {%-if not loop.last -%},{%- endif -%}
 		{% endfor %}
 	);
 
