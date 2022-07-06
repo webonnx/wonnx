@@ -18,7 +18,7 @@ var<storage, read> input_depth: Depth;
 var<storage, read> input_values: Array;
 
 @group(0) @binding(3)
-var<storage, write> output_0: Array;
+var<storage, read_write> output_0: Array;
 
 @compute @workgroup_size(1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {

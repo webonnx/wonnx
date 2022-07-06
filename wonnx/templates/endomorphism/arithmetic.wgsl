@@ -9,12 +9,12 @@ var<storage, read> input_0: ArrayVector;
 var<storage, read> input_1: ArrayVector;
 
 @group(0) @binding(2)
-var<storage, write> output_0: ArrayVector;
+var<storage, read_write> output_0: ArrayVector;
 
 {% else %}
 
 @group(0) @binding(1)
-var<storage, write> output_0: ArrayVector;
+var<storage, read_write> output_0: ArrayVector;
 
 {% endif %}
 
