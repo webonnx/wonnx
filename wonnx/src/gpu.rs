@@ -670,7 +670,7 @@ impl GpuTensor {
         {
             let (tx, rx) = futures_intrusive::channel::shared::oneshot_channel();
 
-            wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |b| {
+            wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
                 // Called on download completed
                 tx.send(match buffer {
                     Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
