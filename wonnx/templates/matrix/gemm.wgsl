@@ -17,10 +17,10 @@ var<storage, read> input_right: GemmArrayVector;
 	var<storage, read> input_bias: GemmArrayVector;
 
 	@group(0) @binding(3)
-	var<storage, write> output_0: GemmArrayVector;
+	var<storage, read_write> output_0: GemmArrayVector;
 {% else %}
 	@group(0) @binding(2)
-	var<storage, write> output_0: GemmArrayVector;
+	var<storage, read_write> output_0: GemmArrayVector;
 {% endif %}
 
 @compute @workgroup_size({{ workgroup_size_x }}, {{ workgroup_size_y }})

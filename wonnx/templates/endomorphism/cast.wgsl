@@ -7,7 +7,7 @@ struct OutputArrayVector {
 }; 
 
 @group(0) @binding(1)
-var<storage, write> output_0: OutputArrayVector;
+var<storage, read_write> output_0: OutputArrayVector;
 
 @compute @workgroup_size({{ workgroup_size_x }})
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {

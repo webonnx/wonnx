@@ -11,11 +11,11 @@ var<storage, read> input_1: ArrayMatrix;
 	var<storage, read> input_2: ArrayVector;
 
 	@group(0) @binding(3)
-	var<storage, write> output_0: Array;
+	var<storage, read_write> output_0: Array;
 
 {%- else -%}
 	@group(0) @binding(2)
-	var<storage, write> output_0: Array;
+	var<storage, read_write> output_0: Array;
 
 {%- endif %}
 

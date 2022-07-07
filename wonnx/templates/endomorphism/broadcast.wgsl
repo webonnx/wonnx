@@ -7,7 +7,7 @@ var<storage, read> input_0: Array;
 var<storage, read> input_1: Array;
 
 @group(0) @binding(2)
-var<storage, write> output_0: Array;
+var<storage, read_write> output_0: Array;
 
 @compute @workgroup_size({{ workgroup_size_x }}, 1, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {

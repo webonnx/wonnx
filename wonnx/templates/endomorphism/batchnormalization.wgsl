@@ -27,7 +27,7 @@ var<storage, read> input_4: Array;
 
 // Y (Output)
 @group(1) @binding(1)
-var<storage, write> output_0: Block;
+var<storage, read_write> output_0: Block;
 
 @compute @workgroup_size(1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {

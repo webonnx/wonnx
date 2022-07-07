@@ -6,7 +6,7 @@ var<storage, read> input_0: Array;
 
 {% for output in o_lens %}
 	@group({{ loop.index / 4 | int }}) @binding({{ loop.index % 4}})
-	var<storage, write> output_{{ loop.index0 }}: Array;
+	var<storage, read_write> output_{{ loop.index0 }}: Array;
 {% endfor %}
 
 @compute @workgroup_size(256, 1, 1)
