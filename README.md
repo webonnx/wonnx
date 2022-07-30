@@ -1,6 +1,7 @@
 <center><img src="logo.svg" alt="WONNX" width="700"/></center>
 
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/webonnx/wonnx/CI)
+[![docs.rs](https://img.shields.io/docsrs/wonnx)](https://docs.rs/wonnx)
 ![Crates.io (latest)](https://img.shields.io/crates/dv/wonnx)
 ![Crates.io](https://img.shields.io/crates/l/wonnx)
 
