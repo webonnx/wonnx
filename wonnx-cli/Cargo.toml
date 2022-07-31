@@ -4,6 +4,9 @@ version = "0.2.5"
 edition = "2021"
 repository = "https://github.com/webonnx/wonnx.git"
 homepage = "https://github.com/webonnx/wonnx"
+license = "MIT OR Apache-2.0"
+description = "CLI for WONNX. WONNX is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
+readme = "./README.md"
 
 [features]
 cpu = ["tract-onnx"]
@@ -25,8 +28,8 @@ structopt = { version = "0.3.26", features = [ "paw" ] }
 thiserror = "1.0.31"
 tract-onnx = { version = "0.16.7", optional = true }
 wgpu = "0.13.1"
-wonnx = { path = "../wonnx" }
-wonnx-preprocessing = { path = "../wonnx-preprocessing" }
+wonnx = { version = "0.2.5" }
+wonnx-preprocessing = { version = "0.2.5" }
 human_bytes = "0.3.1"
 
 [dev-dependencies]
