@@ -1,6 +1,6 @@
 [package]
 name = "wonnx"
-version = "0.2.6"
+version = "0.3.0"
 authors = ["haixuanTao <tao.xavier@outlook.com>", "Tommy van der Vorst <tommy@pixelspark.nl>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"

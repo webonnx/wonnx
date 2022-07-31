@@ -1,6 +1,6 @@
 [package]
 name = "wonnx-wasm"
-version = "0.2.6"
+version = "0.3.0"
 authors = ["haixuanTao <tao.xavier@outlook.com>", "Tommy van der Vorst <tommy@pixelspark.nl>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -25,7 +25,7 @@ crate-type = ["cdylib"]
 lto = true
 
 [dependencies]
-wonnx = { version = "0.2.5" }
+wonnx = { version = "0.3.0" }
 log = "0.4.17"
 console_log = "0.2.0"
 console_error_panic_hook = "0.1.7"
