@@ -1,3 +1,4 @@
+//! Various utilities to deal with the ONNX format structure
 use protobuf::ProtobufEnum;
 use protobuf::RepeatedField;
 use serde::Serialize;
@@ -17,7 +18,7 @@ use thiserror::Error;
 
 /* Minimum size of a buffer you can create with wgpu. Creating buffers smaller than this leads to panic "Validation
 * error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
-pub const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
+pub(crate) const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Shape {
@@ -278,7 +279,7 @@ impl Display for ScalarType {
 /// struct Block {
 ///     data: [[stride( dt.size_bytes() )]] dt.wgsl_type_name();
 /// };
-pub enum MultiType {
+pub(crate) enum MultiType {
     Scalar(ScalarType),
     Vec(ScalarType, usize),
     Mat(ScalarType, usize, usize),
@@ -350,7 +351,7 @@ pub struct AttributeNotFoundError {
     node_name: String,
 }
 
-pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
+pub(crate) fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
     attribute: &str,
     default: Option<T>,
     node: &onnx::NodeProto,
@@ -371,7 +372,7 @@ pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
 }
 
 /// Divide a number by the indicated dividend, then round up to the next multiple of the dividend if there is a rest.
-pub fn ceil(num: u64, div: u64) -> u64 {
+pub(crate) fn ceil(num: u64, div: u64) -> u64 {
     num / div + (num % div != 0) as u64
 }
 

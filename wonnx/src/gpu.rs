@@ -1,3 +1,4 @@
+//! Manages execution of shader code and buffer allocation on the GPU
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},

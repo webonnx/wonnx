@@ -1,3 +1,4 @@
+//! Optimizer that walks the DAG and transforms or coalesces ops for quicker execution
 use protobuf::RepeatedField;
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use thiserror::Error;

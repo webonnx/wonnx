@@ -1,5 +1,6 @@
+//! DAG representation of ONNX ops allowing for transformations and optimizations before compilation
 use crate::onnx::{ModelProto, NodeProto, TensorProto, ValueInfoProto};
-use crate::utils::{DataTypeError, ScalarType, Shape};
+use crate::utils::{DataTypeError, Shape};
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -80,18 +81,6 @@ impl<'m> NodeDefinition<'m> {
             NodeDefinition::Input(i) => Cow::from(i.get_name()),
             NodeDefinition::Outputs { .. } => Cow::from(" "),
             NodeDefinition::Missing => Cow::from(""),
-        }
-    }
-
-    pub fn output_name(&self, output_index: usize) -> Cow<'_, str> {
-        match self {
-            NodeDefinition::Operator(op_def) => {
-                Cow::Borrowed(&op_def.proto.get_output()[output_index])
-            }
-            NodeDefinition::Tensor(proto) => Cow::from(proto.get_name()),
-            NodeDefinition::Input(proto) => Cow::from(proto.get_name()),
-            NodeDefinition::Outputs { .. } => panic!("can't get output name for outputs node"),
-            NodeDefinition::Missing => panic!("can't get output name for missing node"),
         }
     }
 }
@@ -293,19 +282,6 @@ impl<'model> Node<'model> {
             },
             inputs: output_nodes?,
         }))
-    }
-
-    pub fn output_shape(&self, output_index: usize) -> Result<Shape, IrError> {
-        Ok(match (&self.definition, output_index) {
-            (NodeDefinition::Operator(op_def), index) => op_def.output_shapes[index].clone(),
-            (NodeDefinition::Tensor(tensor_proto), 0) => Shape::from(
-                ScalarType::from_i32(tensor_proto.get_data_type())?,
-                tensor_proto.get_dims(),
-            ),
-            (NodeDefinition::Input(input_proto), 0) => input_proto.get_shape()?,
-            (NodeDefinition::Outputs { .. }, _) => panic!("output node has no outputs!"),
-            (_, _) => panic!("node has no output at index {}", output_index),
-        })
     }
 }
 

@@ -1,3 +1,4 @@
+//! Compiles individual ONNX ops to a WebGPU shader using WGSL templates
 use crate::utils::{
     ceil, get_attribute, AttributeNotFoundError, DataTypeError, MultiType, ScalarType, Shape,
 };
@@ -12,7 +13,7 @@ pub const MAX_COMPUTE_WORKGROUPS_PER_DIMENSION: u32 = 65535;
 /// The maximum workgroup size per dimension (see <https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsizex>)
 pub const MAX_WORKGROUP_SIZE_X: u32 = 256;
 pub const MAX_WORKGROUP_SIZE_Y: u32 = 256;
-pub const MAX_WORKGROUP_SIZE_Z: u32 = 64;
+// pub const MAX_WORKGROUP_SIZE_Z: u32 = 64;
 
 lazy_static! {
     // Templates for shader source code that we generate for nodes

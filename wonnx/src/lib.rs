@@ -1,9 +1,9 @@
-pub mod compiler;
+mod compiler;
 mod gpu;
-pub mod ir;
+mod ir;
 pub mod onnx;
-pub mod optimizer;
-pub mod resource;
+mod optimizer;
+mod resource;
 pub mod utils;
 
 #[macro_use]
