@@ -3947,7 +3947,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "approx",
  "bytemuck",
@@ -3970,7 +3970,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx-cli"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -3991,7 +3991,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx-preprocessing"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "env_logger",
  "image",
@@ -4008,7 +4008,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx-py"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "env_logger",
  "pollster",
@@ -4019,7 +4019,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx-wasm"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "console_error_panic_hook",
  "console_log",
