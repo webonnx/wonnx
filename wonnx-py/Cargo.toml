@@ -11,7 +11,7 @@ homepage = "https://github.com/webonnx/wonnx"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wonnx = { path = "../wonnx" }
+wonnx = { version = "0.2.5" }
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
 pyo3 = "0.16.5"
 pollster = "0.2.5"
