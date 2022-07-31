@@ -1,6 +1,6 @@
 [package]
 name = "wonnx-py"
-version = "0.1.1"
+version = "0.2.5"
 edition = "2018"
 authors = ["haixuanTao <tao.xavier@outlook.com>", "Tommy van der Vorst <tommy@pixelspark.nl>"]
 license = "MIT OR Apache-2.0"

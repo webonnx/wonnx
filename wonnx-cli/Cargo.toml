@@ -1,6 +1,6 @@
 [package]
 name = "wonnx-cli"
-version = "0.1.0"
+version = "0.2.5"
 edition = "2021"
 repository = "https://github.com/webonnx/wonnx.git"
 homepage = "https://github.com/webonnx/wonnx"
