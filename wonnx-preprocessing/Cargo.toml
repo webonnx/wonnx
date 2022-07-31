@@ -1,7 +1,12 @@
 [package]
 name = "wonnx-preprocessing"
-version = "0.1.0"
+version = "0.2.5"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Preprocessing utility crate for WONNX. WONNX is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
+repository = "https://github.com/webonnx/wonnx.git"
+homepage = "https://github.com/webonnx/wonnx"
+readme = "../README.md"
 
 [dependencies]
 image = "0.24.2"
@@ -12,7 +17,7 @@ thiserror = "1.0.31"
 tokenizers = "0.11.3"
 tract-onnx = { version = "^0.17.0", optional = true }
 wgpu = "0.13.1"
-wonnx = { path = "../wonnx" }
+wonnx = { version = "0.2.5" }
 serde_json = "^1.0"
 
 [dev-dependencies]

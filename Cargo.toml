@@ -9,3 +9,7 @@ members = [
 
 default-members = ["wonnx", "wonnx-cli"]
 resolver = "2"
+
+[patch.crates-io]
+wonnx = { path = "./wonnx" }
+wonnx-preprocessing = { path = "./wonnx-preprocessing" }
