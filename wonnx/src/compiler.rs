@@ -874,10 +874,10 @@ pub fn compile(
             context.insert("original_height", &input_shape.dim(2));
             context.insert("channel", &input_shape.dim(1));
             context.insert("groups", &group);
-            context.insert("ch_per_group", &channels_per_group);
+            context.insert("channels_per_group", &channels_per_group);
             context.insert("stride", &strides);
             context.insert("kernel_shape", &kernel_shape);
-            context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
+            context.insert("kernel_length", &(kernel_shape[0] * kernel_shape[1]));
             context.insert(
                 "kernel_channel_len",
                 &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * channels_per_group),

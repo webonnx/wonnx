@@ -33,16 +33,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		let x = rest % {{ o_chunks[0][2] }}u;
 
 		let M = {{ o_shape[0][1] }}u;
-		let cur_group: u32 = m * {{ groups }}u / M;
+		let current_group: u32 = m * {{ groups }}u / M;
 
 		var result: Scalar = Scalar();
 
 		let root_index = batch * {{ i_chunks[0][0] }}u;
 		let root_kernel_index = m * {{ kernel_channel_len }}u;
 
-		for(var c: u32 = cur_group * {{ ch_per_group }}u; c < (cur_group + 1u) * {{ ch_per_group }}u; c = c + 1u) {
+		for(var c: u32 = current_group * {{ channels_per_group }}u; c < (current_group + 1u) * {{ channels_per_group }}u; c = c + 1u) {
 			let base_index = root_index + c * {{ i_chunks[0][1] }}u;
-			let base_kernel_index = root_kernel_index + c % {{ ch_per_group }}u * {{ kernel_len }}u;
+			let base_kernel_index = root_kernel_index + c % {{ channels_per_group }}u * {{ kernel_length }}u;
 
 			for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
 				let tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
