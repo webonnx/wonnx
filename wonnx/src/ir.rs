@@ -123,7 +123,7 @@ impl<'model> Node<'model> {
         let inputs: Result<Vec<Input<'model>>, IrError> = node
             .get_input()
             .iter()
-            .map(|input_name: &'model String| {
+            .map(|input_name: &String| {
                 let my_input_name = input_name.clone();
                 let source_node_definition = node_definitions_by_output
                     .get(&my_input_name)
