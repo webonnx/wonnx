@@ -20,7 +20,7 @@ use thiserror::Error;
 * error: buffer binding size X is less than minimum 64" in Device::create_bind_group */
 pub(crate) const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shape {
     pub dims: Vec<u64>,
     pub data_type: ScalarType,
