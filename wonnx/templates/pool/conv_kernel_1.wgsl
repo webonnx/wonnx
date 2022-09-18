@@ -23,9 +23,9 @@ var<storage, read> input_1: ArrayMatrix;
 @compute @workgroup_size(256, 1, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
-	if (gidx < {{ o_lens[0]/4 }}u) {
-		let batch = gidx / {{ o_chunks[0][0] / 4 }}u; 
-		let rest = gidx % {{ o_chunks[0][0] / 4 }}u; 
+	if (gidx < {{ o_lens[0]/4 | int }}u) {
+		let batch = gidx / {{ o_chunks[0][0] / 4 | int }}u; 
+		let rest = gidx % {{ o_chunks[0][0] / 4 | int }}u; 
 
 		let m = rest / {{ o_chunks[0][1] }}u;
 		let xy = rest % {{ o_chunks[0][1] }}u;
@@ -33,16 +33,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		var result = Vec4(Scalar(), Scalar(), Scalar(), Scalar());
 		
 		let root_index = batch * {{ i_chunks[0][0] }}u + xy;
-		let root_kernel_index = m * {{ channel / 16 * 4 }}u;
+		let root_kernel_index = m * {{ channel / 16 * 4 | int }}u;
 
-		for(var c: u32 = 0u; c < {{ channel / 16 }}u; c = c + 1u) {
+		for(var c: u32 = 0u; c < {{ channel / 16 | int }}u; c = c + 1u) {
 			let base_index = root_index + c * {{ 16 * i_chunks[0][1] }}u;
 			var base_kernel_index = root_kernel_index + c;
 			
 			var matrix_0 = input_1.data[base_kernel_index];
-			var matrix_1 = input_1.data[base_kernel_index + {{ channel / 16 }}u];
-			var matrix_2 = input_1.data[base_kernel_index + {{ 2 * channel / 16 }}u];
-			var matrix_3 = input_1.data[base_kernel_index + {{ 3 * channel / 16 }}u];
+			var matrix_1 = input_1.data[base_kernel_index + {{ channel / 16 | int }}u];
+			var matrix_2 = input_1.data[base_kernel_index + {{ 2 * channel / 16 | int }}u];
+			var matrix_3 = input_1.data[base_kernel_index + {{ 3 * channel / 16 | int }}u];
 
 			for(var index_c_vec: u32 = 0u; index_c_vec < 4u; index_c_vec = index_c_vec + 1u) {
 				let base_index_2 = base_index + index_c_vec * {{ 4 * i_chunks[0][1] }}u;

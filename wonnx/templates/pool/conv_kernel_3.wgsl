@@ -22,9 +22,9 @@ var<storage, read> input_1: ArrayMatrix3;
 @compute @workgroup_size(256, 1, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
-	if (gidx < {{ o_lens[0]/4 }}u) {
-		let batch = gidx / {{ o_chunks[0][0] / 4 }}u; 
-		var rest = gidx % {{ o_chunks[0][0] / 4 }}u; 
+	if (gidx < {{ o_lens[0]/4 | int }}u) {
+		let batch = gidx / {{ o_chunks[0][0] / 4 | int }}u; 
+		var rest = gidx % {{ o_chunks[0][0] / 4 | int }}u; 
 
 		let m = rest / {{ o_chunks[0][1] }}u;
 		rest = rest % {{ o_chunks[0][1] }}u;

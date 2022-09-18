@@ -30,9 +30,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
 	{# Calculate stacking offsets #}
 	let stack_index = global_id.y;
-	let left_offset = stack_index * {{ stack_left_stride / kernel_size }}u;
-	let right_offset = stack_index * {{ stack_right_stride / kernel_size }}u;
-	let output_offset = stack_index * {{ stack_output_stride / kernel_size }}u;
+	let left_offset = stack_index * {{ stack_left_stride / kernel_size | int }}u;
+	let right_offset = stack_index * {{ stack_right_stride / kernel_size | int }}u;
+	let output_offset = stack_index * {{ stack_output_stride / kernel_size | int }}u;
 
 	let index = output_offset + (x * {{ right_shape[1] }}u) + y;
 

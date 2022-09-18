@@ -26,7 +26,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let gidx = global_id.x;
 
 	{# Calculate stacking offsets #}
-	let left_offset = global_id.y * {{ stack_left_stride / 4 }}u;
+	let left_offset = global_id.y * {{ stack_left_stride / 4 | int }}u;
 	let right_offset = global_id.y * {{ stack_right_stride }}u;
 	let output_offset = global_id.y * {{ stack_output_stride }}u;
 
