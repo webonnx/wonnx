@@ -84,6 +84,11 @@ lazy_static! {
         )
         .unwrap();
         tera.add_raw_template(
+            "matrix/shape.wgsl",
+            include_str!("../templates/matrix/shape.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
             "pool/aggregate.wgsl",
             include_str!("../templates/pool/aggregate.wgsl"),
         )
@@ -538,6 +543,33 @@ pub fn compile(
                     template: "endomorphism/softmax.wgsl",
                     threads: (x_threads, y_threads, 1),
                 }
+            }
+        }
+
+        "Shape" => {
+            let rank = input_shapes[0].rank() as i64;
+            let mut start = get_attribute("start", Some(0), node)?;
+            let mut end = get_attribute("end", Some(rank), node)?;
+            println!("in: start={start} end={end}");
+
+            if start < 0 {
+                start += rank;
+            }
+            start = start.clamp(0, rank);
+
+            if end < 0 {
+                end += rank;
+            }
+            end = end.clamp(0, rank);
+
+            let len = (end - start).max(0);
+            println!("processed: start={start} end={end} len={len}");
+            let idxs: Vec<i64> = (start..end).collect();
+            context.insert("idxs", &idxs);
+            NodeTemplate {
+                scalar_type: agreed_type(input_shapes, &[])?,
+                template: "matrix/shape.wgsl",
+                threads: (1, 1, 1),
             }
         }
 
@@ -1369,6 +1401,8 @@ pub fn compile(
     let shader = TEMPLATES
         .render(node_template.template, &context)
         .expect("failed to render shader");
+
+    println!("{}", shader);
 
     Ok(CompiledNode {
         shader,
