@@ -21,9 +21,6 @@ exclude = [
 [lib]
 crate-type = ["cdylib"]
 
-[profile.release]
-lto = true
-
 [dependencies]
 wonnx = { version = "0.3.0" }
 log = "0.4.17"
