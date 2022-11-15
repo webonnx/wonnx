@@ -3,7 +3,7 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     convert::TryInto,
-    sync::Arc,
+    sync::{mpsc, Arc},
 };
 
 use bytemuck::NoUninit;
@@ -407,16 +407,7 @@ fn buffer_with_bytes(
     raw_data: &[u8],
 ) -> Result<Buffer, GpuError> {
     let buffer_usage = match readable {
-        true => {
-            // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
-            // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
-            // STORAGE buffer when on WebGPU.
-            if cfg!(target_arch = "wasm32") {
-                BufferUsages::STORAGE | BufferUsages::COPY_SRC
-            } else {
-                BufferUsages::STORAGE | BufferUsages::MAP_READ
-            }
-        }
+        true => BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         false => BufferUsages::STORAGE,
     };
 
@@ -478,14 +469,7 @@ impl<'model> OperatorDefinition<'model> {
                 );
 
                 let buffer_usage = if outputs_readable {
-                    // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
-                    // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
-                    // STORAGE buffer when on WebGPU.
-                    if cfg!(target_arch = "wasm32") {
-                        BufferUsages::STORAGE | BufferUsages::COPY_SRC
-                    } else {
-                        BufferUsages::STORAGE | BufferUsages::MAP_READ
-                    }
+                    BufferUsages::STORAGE | BufferUsages::COPY_SRC
                 } else {
                     BufferUsages::STORAGE
                 };
@@ -664,40 +648,19 @@ impl GpuTensor {
         let buffer_slice = self.buffer.slice(..);
         let shape = self.shape.clone();
 
-        // On wgpu we can MAP_READ a buffer that is also used as STORAGE, but WebGPU (on at least Chrome)
-        // disallows this. Therefore we need to do an additional copy into a MAP_READ buffer when reading back a
-        // STORAGE buffer when on WebGPU.
-        #[cfg(target_arch = "wasm32")]
-        {
-            let (tx, rx) = futures_intrusive::channel::shared::oneshot_channel();
+        let (tx, rx) = mpsc::sync_channel(1);
 
-            wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
-                // Called on download completed
-                tx.send(match buffer {
-                    Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
-                    Err(error) => Err(GpuError::BufferAsyncError(error)),
-                })
-                .unwrap();
-            });
-            device.poll(wgpu::Maintain::Wait);
-            // The callback will have been called by now due to poll(Wait)
-            rx.receive().await.unwrap()
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let output_data = {
-                let _ = queue; // Need this because otherwise compiler complains we are not using the queue parameter
-                buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
-                device.poll(wgpu::Maintain::Wait);
-                buffer_slice.get_mapped_range()
-            };
-
-            let result = Self::read_bytes_to_vec(&output_data[..], shape);
-            drop(output_data);
-            self.buffer.unmap();
-            Ok(result)
-        }
+        wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
+            // Called on download completed
+            tx.send(match buffer {
+                Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
+                Err(error) => Err(GpuError::BufferAsyncError(error)),
+            })
+            .unwrap();
+        });
+        device.poll(wgpu::Maintain::Wait);
+        // The callback will have been called by now due to poll(Wait)
+        rx.recv().unwrap()
     }
 
     fn read_bytes_to_vec<A>(output_data: &[A], shape: Shape) -> OutputTensor
