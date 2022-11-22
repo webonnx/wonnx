@@ -7,7 +7,7 @@ maturin==0.12.16
 numpy==1.22.3
 onnx==1.11.0
 packaging==21.3
-Pillow==9.1.1
+Pillow==9.3.0
 pluggy==1.0.0
 protobuf==3.20.1
 py==1.11.0
