@@ -4,7 +4,7 @@ on:
   push:
     # Sequence of patterns matched against refs/tags
     tags:
-      - "wonnx-py-v*" # Push events to matching wonnx-py-v*
+      - "v*" # Push events to matching wonnx-py-v*
 jobs:
   build:
     name: Create Release
