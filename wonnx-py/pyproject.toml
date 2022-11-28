@@ -5,9 +5,9 @@ build-backend = "maturin"
 [project]
 name = "wonnx"
 dependencies = [
-  # "typing_extensions >= 4.0.0; python_version < '3.10'",
+    # "typing_extensions >= 4.0.0; python_version < '3.10'",
 ]
-requires-python = ">=3.6"
+requires-python = ">=3.7"
 
 [tool.isort]
 profile = "black"
@@ -17,4 +17,3 @@ disallow_untyped_defs = true
 warn_unused_ignores = true
 show_error_codes = true
 files = ["tests"]
-

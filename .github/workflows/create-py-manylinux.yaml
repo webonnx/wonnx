@@ -4,13 +4,20 @@ on:
   push:
     # Sequence of patterns matched against refs/tags
     tags:
-      - "wonnx-py-v*" # Push events to matching wonnx-py-v*
+      - "v*" # Push events to matching wonnx-py-v*
 jobs:
   build_manylinux:
     name: Create Release manylinux
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     steps:
       - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Publish wheel
         uses: docker://konstin2/maturin:latest
         env:

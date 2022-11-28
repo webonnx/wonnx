@@ -4,7 +4,7 @@ on:
   push:
     # Sequence of patterns matched against refs/tags
     tags:
-      - "wonnx-py-v*" # Push events to matching wonnx-py-v*
+      - "v*" # Push events to matching wonnx-py-v*
 
 jobs:
   build:
@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: ["macos-latest"]
-        python-version: ["3.7"]
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     steps:
       - uses: actions/checkout@v2
       - name: Install latest Rust nightly

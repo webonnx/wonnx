@@ -2,7 +2,10 @@
 name = "wonnx-py"
 version = "0.3.0"
 edition = "2018"
-authors = ["haixuanTao <tao.xavier@outlook.com>", "Tommy van der Vorst <tommy@pixelspark.nl>"]
+authors = [
+    "haixuanTao <tao.xavier@outlook.com>",
+    "Tommy van der Vorst <tommy@pixelspark.nl>",
+]
 license = "MIT OR Apache-2.0"
 description = "Wonnx is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
 repository = "https://github.com/webonnx/wonnx.git"
@@ -13,7 +16,7 @@ homepage = "https://github.com/webonnx/wonnx"
 [dependencies]
 wonnx = { version = "0.3.0" }
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
-pyo3 = "0.16.5"
+pyo3 = { version = "0.16.5", features = ["abi3-py37"] }
 pollster = "0.2.5"
 env_logger = "0.9.0"
 
