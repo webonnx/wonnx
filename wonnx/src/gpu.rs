@@ -510,7 +510,11 @@ impl<'model> OperatorDefinition<'model> {
         let CompiledNode { shader, threads } =
             compile(proto, &input_shapes, &output_shapes, opset_version).map_err(|ce| {
                 GpuError::CompileError {
-                    node: proto.get_name().to_string(),
+                    node: if proto.has_name() {
+                        proto.get_name().to_string()
+                    } else {
+                        proto.get_op_type().to_string()
+                    },
                     error: ce,
                 }
             })?;
