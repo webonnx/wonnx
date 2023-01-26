@@ -30,7 +30,7 @@ fn local_response_normalization() {
             vec!["X"],
             vec!["Y"],
             "lrn",
-            "LocalResponseNormalization",
+            "LRN",
             vec![   attribute("alpha", 1.0),
                     attribute("beta",  1.0),
                     attribute("bias",  0.0),
