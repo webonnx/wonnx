@@ -42,7 +42,7 @@ async fn run() -> Result<(), NNXError> {
                 .into_string()
                 .expect("invalid path");
             let model = ModelProto::parse_from_bytes(
-                &std::fs::read(&model_path).expect("ONNX Model path not found."),
+                &std::fs::read(model_path).expect("ONNX Model path not found."),
             )
             .expect("Could not deserialize the model");
             let table = info_table(&model)?;
@@ -58,7 +58,7 @@ async fn run() -> Result<(), NNXError> {
                 .into_string()
                 .expect("invalid path");
             let model = ModelProto::parse_from_bytes(
-                &std::fs::read(&model_path).expect("ONNX Model path not found."),
+                &std::fs::read(model_path).expect("ONNX Model path not found."),
             )
             .expect("Could not deserialize the model");
             print_graph(&model);

@@ -11,7 +11,7 @@ fn conv_pad() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..50).map(|x| x as f32).collect();
-    let shape = vec![2, c as i64, n as i64, n as i64];
+    let shape = vec![2, c, n, n];
     input_data.insert("X".to_string(), data.as_slice().into());
 
     let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1.0f32).collect();
@@ -58,7 +58,7 @@ fn conv_without_pad() {
     let mut input_data = HashMap::new();
 
     let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
-    let shape = vec![1, c as i64, n as i64, n as i64];
+    let shape = vec![1, c, n as i64, n as i64];
     input_data.insert("X".to_string(), data.as_slice().into());
 
     let kernel_n = 3;
@@ -112,7 +112,7 @@ fn conv_stride() {
         vec![initializer(
             "W",
             data_w,
-            vec![m as i64, c as i64, kernel_n as i64, kernel_n as i64],
+            vec![m, c, kernel_n, kernel_n],
         )],
         vec![node(
             vec!["X", "W"],
@@ -161,7 +161,7 @@ fn conv_asymetric_stride() {
         vec![initializer(
             "W",
             data_w,
-            vec![m as i64, c as i64, kernel_n as i64, kernel_n as i64],
+            vec![m, c, kernel_n, kernel_n],
         )],
         vec![node(
             vec!["X", "W"],

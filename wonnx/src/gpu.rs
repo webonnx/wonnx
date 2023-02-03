@@ -110,7 +110,7 @@ impl GpuModel {
         let mut node_outputs = HashMap::<NodeIdentifier, Vec<GpuTensor>>::new();
         let mut nodes_seen = HashSet::new();
 
-        gpu_model.pre_sequence(root.clone(), &mut readable_nodes, &mut nodes_seen)?;
+        GpuModel::pre_sequence(root.clone(), &mut readable_nodes, &mut nodes_seen)?;
         nodes_seen.clear();
 
         gpu_model.sequence(
@@ -164,7 +164,6 @@ impl GpuModel {
     /// where nodes are not marked as 'outputs readable' when their outputs are used by some node while also being used as
     /// output (and the sequenceer migth simply follow one 'path' before the other).
     fn pre_sequence<'model>(
-        &mut self,
         node: Arc<Node<'model>>,
         nodes_readable: &mut HashSet<NodeIdentifier<'model>>,
         nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
@@ -192,7 +191,7 @@ impl GpuModel {
             if !nodes_seen.contains(&identifier) {
                 nodes_seen.insert(identifier.clone());
                 // Sequence the source node
-                self.pre_sequence(node_input.source_node.clone(), nodes_readable, nodes_seen)?;
+                GpuModel::pre_sequence(node_input.source_node.clone(), nodes_readable, nodes_seen)?;
             }
         }
         Ok(())

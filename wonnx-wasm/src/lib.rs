@@ -86,7 +86,7 @@ impl Session {
                 .collect();
             let result = engine.run(&input_data).await.map_err(SessionError)?;
             drop(input_copy);
-            Ok(JsValue::from_serde(&result).unwrap())
+            Ok(serde_wasm_bindgen::to_value(&result).unwrap())
         })
     }
 }
@@ -94,8 +94,8 @@ impl Session {
 /// Convert an OutputTensor to a JsValue (we cannot implement Into<JsValue> for OutputTensor here)
 pub fn tensor_to_js_value(tensor: OutputTensor) -> JsValue {
     match tensor {
-        OutputTensor::F32(fs) => JsValue::from_serde(&fs).unwrap(),
-        OutputTensor::I32(ints) => JsValue::from_serde(&ints).unwrap(),
-        OutputTensor::I64(ints) => JsValue::from_serde(&ints).unwrap(),
+        OutputTensor::F32(fs) => serde_wasm_bindgen::to_value(&fs).unwrap(),
+        OutputTensor::I32(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
+        OutputTensor::I64(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
     }
 }

@@ -1098,7 +1098,7 @@ pub fn compile(
             } else {
                 // Matrix multiplication is performed (by the gemm.wgsl shader) in blocks of 4x4, except when the output matrix
                 // or any of the inputs has a dimension smaller than 4, in which case we can do 3x3 or 2x2
-                let kernel_size = gcd(dim_m, gcd(dim_k, dim_n)).min(4).max(1);
+                let kernel_size = gcd(dim_m, gcd(dim_k, dim_n)).clamp(1, 4);
                 if kernel_size == 1 {
                     return Err(CompileError::UnimplementedVariant {
                         variant: String::from(

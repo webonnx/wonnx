@@ -18,6 +18,7 @@ fn test_reduce(
 
     input_data.insert("X".to_string(), data.into());
 
+    #[allow(clippy::bool_to_int_with_if)]
     let mut attributes: Vec<AttributeProto> =
         vec![attribute("keepdims", if keep_dims { 1 } else { 0 })];
     if let Some(axes) = axes {

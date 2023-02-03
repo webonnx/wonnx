@@ -185,11 +185,10 @@ impl InferenceInput {
             mask_input.resize(segment_length, 0);
             segment_input.resize(segment_length, 0);
             let tokens_input_data =
-                ndarray::Array::from_iter(tokens_input.iter().map(|x| (*x) as i64)).into_dyn();
-            let mask_input_data =
-                ndarray::Array::from_iter(mask_input.iter().map(|x| (*x) as i64)).into_dyn();
+                ndarray::Array::from_iter(tokens_input.iter().copied()).into_dyn();
+            let mask_input_data = ndarray::Array::from_iter(mask_input.iter().copied()).into_dyn();
             let segment_input_data =
-                ndarray::Array::from_iter(segment_input.iter().map(|x| (*x) as i64)).into_dyn();
+                ndarray::Array::from_iter(segment_input.iter().copied()).into_dyn();
             inputs.insert(
                 infer_opt.qa_tokens_input.clone(),
                 Tensor::I64(tokens_input_data),

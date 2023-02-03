@@ -107,7 +107,6 @@ impl<'model> Node<'model> {
 
     /// Construct part of the intermediate representation tree for the indicated node.
     pub fn from_node<'a>(
-        model: &'model ModelProto,
         node: Cow<'model, NodeProto>,
         value_shapes: &HashMap<&'model str, Shape>,
         node_definitions_by_output: &'a HashMap<String, NodeDefinition<'model>>,
@@ -133,7 +132,6 @@ impl<'model> Node<'model> {
                     // The source is another op - continue translating that node
                     NodeDefinition::Operator(source_node_proto) => Input {
                         source_node: Node::from_node(
-                            model,
                             source_node_proto.proto.clone(),
                             value_shapes,
                             node_definitions_by_output,
@@ -256,7 +254,6 @@ impl<'model> Node<'model> {
                     .ok_or_else(|| IrError::OutputNodeNotFound(output_name.clone()))?;
 
                 let source_node = Node::<'model>::from_node(
-                    model,
                     Cow::Borrowed(output_node),
                     &value_shapes,
                     &node_definitions_by_output,

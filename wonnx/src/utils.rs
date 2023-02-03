@@ -393,7 +393,7 @@ impl ValueInfoProto {
                                     x.get_dim_param().to_string(),
                                 ));
                             }
-                            Ok(x.get_dim_value() as i64)
+                            Ok(x.get_dim_value())
                         })
                         .collect::<Result<Vec<i64>, DataTypeError>>()?
                         .as_slice(),

@@ -27,7 +27,7 @@ async fn execute_gpu() -> Result<HashMap<String, OutputTensor>, SessionError> {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // ONNX INPUTS
-    let shape = vec![1, c as i64, n as i64, n as i64];
+    let shape = vec![1, c, n as i64, n as i64];
     let kernel_n = 3;
     let m = 1;
     let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();

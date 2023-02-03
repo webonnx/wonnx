@@ -21,10 +21,10 @@ impl CPUInferer {
         model_path: &str,
         input_shapes: &HashMap<String, Shape>,
     ) -> Result<CPUInferer, NNXError> {
-        let mut cpu_model = tract_onnx::onnx().model_for_path(&model_path)?;
+        let mut cpu_model = tract_onnx::onnx().model_for_path(model_path)?;
 
         for (input_name, input_shape) in input_shapes {
-            let input_node = cpu_model.node_by_name(&input_name)?.id;
+            let input_node = cpu_model.node_by_name(input_name)?.id;
             let fact = InferenceFact::dt_shape(f32::datum_type(), &input_shape.dims);
             log::info!(
                 "set input '{}' (id {}) to shape {:?}",
