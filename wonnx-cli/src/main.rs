@@ -3,9 +3,11 @@ use info::print_graph;
 use prettytable::{cell, row, Table};
 use protobuf::{self, Message};
 use std::collections::HashMap;
+use std::fs::File;
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::{OutputTensor, Shape};
+use wonnx_preprocessing::preparation::apply_dynamic_dimensions;
 use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
 
@@ -64,6 +66,8 @@ async fn run() -> Result<(), NNXError> {
             print_graph(&model);
             Ok(())
         }
+
+        Command::Prepare(prepare_opt) => prepare_command(prepare_opt).await,
 
         Command::Infer(infer_opt) => infer_command(infer_opt).await,
     }
@@ -166,6 +170,37 @@ fn print_output(
     if !print_newlines {
         println!();
     }
+}
+
+async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
+    // Load the model
+    let model_path = prepare_opt
+        .model
+        .clone()
+        .into_os_string()
+        .into_string()
+        .expect("invalid path");
+    let mut model = ModelProto::parse_from_bytes(
+        &std::fs::read(model_path).expect("ONNX Model path not found."),
+    )
+    .expect("Could not deserialize the model");
+
+    let mut dynamic_dims = HashMap::<String, i64>::new();
+
+    for (dim_name, dim_dimstring) in prepare_opt.set_dimension {
+        let dim_value = dim_dimstring
+            .parse::<i64>()
+            .expect("invalid dimension value");
+        dynamic_dims.insert(dim_name, dim_value);
+    }
+
+    apply_dynamic_dimensions(model.mut_graph(), &dynamic_dims);
+
+    // Save the model
+    let mut out_file = File::create(prepare_opt.output)?;
+    model.write_to_writer(&mut out_file)?;
+
+    Ok(())
 }
 
 async fn infer_command(infer_opt: InferOptions) -> Result<(), NNXError> {

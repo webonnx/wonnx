@@ -2,6 +2,7 @@ use ndarray::ArrayBase;
 use wonnx::utils::InputTensor;
 
 pub mod image;
+pub mod preparation;
 pub mod text;
 
 pub enum Tensor {

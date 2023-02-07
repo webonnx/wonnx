@@ -1,3 +1,4 @@
+use protobuf::ProtobufError;
 use std::{collections::HashMap, num::ParseFloatError, path::PathBuf, str::FromStr};
 use structopt::StructOpt;
 use thiserror::Error;
@@ -67,6 +68,9 @@ pub enum NNXError {
 
     #[error("I/O error: {0}")]
     IOError(#[from] std::io::Error),
+
+    #[error("Protobuf error: {0}")]
+    ProtobufError(#[from] ProtobufError),
 }
 
 impl FromStr for Backend {
@@ -193,6 +197,21 @@ pub struct InferOptions {
 }
 
 #[derive(Debug, StructOpt)]
+pub struct PrepareOptions {
+    /// Model file (.onnx)
+    #[structopt(parse(from_os_str))]
+    pub model: PathBuf,
+
+    /// Output file (.onnx)
+    #[structopt(parse(from_os_str))]
+    pub output: PathBuf,
+
+    /// Set dimension parameter to a value (e.g. "--set batch_size=1"). This parameter can occur multiple times to set multiple different parameters
+    #[structopt(long = "set", parse(try_from_str = parse_key_val), number_of_values = 1, value_name = "parameter_name=value")]
+    pub set_dimension: Vec<(String, String)>,
+}
+
+#[derive(Debug, StructOpt)]
 #[allow(clippy::large_enum_variant)]
 pub enum Command {
     /// List available GPU devices
@@ -206,6 +225,9 @@ pub enum Command {
 
     /// Return a GraphViz direct graph of the nodes in the model
     Graph(InfoOptions),
+
+    /// Prepare a model by applying user-specified transformations. By default no transformations are applied and the input model is simply written to the output
+    Prepare(PrepareOptions),
 }
 
 #[derive(Debug, StructOpt)]
