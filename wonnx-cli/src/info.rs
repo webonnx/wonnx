@@ -3,34 +3,36 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use prettytable::{cell, row, table, Table};
 use wonnx::{
-    onnx::{GraphProto, ModelProto, NodeProto},
+    onnx::{GraphProto, ModelProto, NodeProto, ValueInfoProto},
     utils::{ScalarType, Shape},
     WonnxError,
 };
 
 use crate::utils::ValueInfoProtoUtil;
 
-fn dimensions_infos(graph_proto: &GraphProto) -> Result<HashMap<String, Shape>, wonnx::WonnxError> {
+fn dimensions_infos(
+    graph_proto: &GraphProto,
+) -> Result<HashMap<String, Option<Shape>>, wonnx::WonnxError> {
     let mut shapes_info = HashMap::new();
 
     for info in graph_proto.get_input() {
-        let shape = info.get_shape()?;
+        let shape = info.get_shape().ok();
         shapes_info.insert(info.get_name().to_string(), shape);
     }
 
     for info in graph_proto.get_output() {
-        let shape = info.get_shape()?;
+        let shape = info.get_shape().ok();
         shapes_info.insert(info.get_name().to_string(), shape);
     }
 
     for info in graph_proto.get_value_info() {
-        let shape = info.get_shape()?;
+        let shape = info.get_shape().ok();
         shapes_info.insert(info.get_name().to_string(), shape);
     }
 
     for info in graph_proto.get_initializer() {
         let shape = Shape::from(ScalarType::from_i32(info.get_data_type())?, info.get_dims());
-        shapes_info.insert(info.get_name().to_string(), shape);
+        shapes_info.insert(info.get_name().to_string(), Some(shape));
     }
 
     Ok(shapes_info)
@@ -86,26 +88,17 @@ pub fn print_graph(model: &ModelProto) {
 pub fn sizes_table(model: &ModelProto) -> Result<Table, WonnxError> {
     let mut input_size: usize = 0;
     for input in model.get_graph().get_input() {
-        input_size += input
-            .get_shape()
-            .map_err(WonnxError::TypeError)?
-            .buffer_bytes();
+        input_size += input.get_shape().map(|x| x.buffer_bytes()).unwrap_or(0);
     }
 
     let mut output_size: usize = 0;
     for output in model.get_graph().get_output() {
-        output_size += output
-            .get_shape()
-            .map_err(WonnxError::TypeError)?
-            .buffer_bytes();
+        output_size += output.get_shape().map(|x| x.buffer_bytes()).unwrap_or(0);
     }
 
     let mut intermediate_size: usize = 0;
     for output in model.get_graph().get_value_info() {
-        intermediate_size += output
-            .get_shape()
-            .map_err(WonnxError::TypeError)?
-            .buffer_bytes();
+        intermediate_size += output.get_shape().map(|x| x.buffer_bytes()).unwrap_or(0);
     }
 
     let mut initializer_size: usize = 0;
@@ -121,6 +114,12 @@ pub fn sizes_table(model: &ModelProto) -> Result<Table, WonnxError> {
         [b->"Weights", r->human_bytes(initializer_size as f64)],
         [b->"Total", r->human_bytes((input_size + output_size + intermediate_size + initializer_size) as f64)]
     ])
+}
+
+fn datatype_to_string(dt: &ValueInfoProto) -> String {
+    dt.data_type()
+        .map(|k| k.to_string())
+        .unwrap_or_else(|_| String::from("(unknown)"))
 }
 
 pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
@@ -140,12 +139,12 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
             inputs_table.add_row(row![
                 i.get_name(),
                 i.get_doc_string(),
-                i.dimensions()
+                i.dimensions_description()
                     .iter()
                     .map(|x| x.to_string())
                     .collect::<Vec<String>>()
-                    .join("x"),
-                i.data_type()?
+                    .join(" x "),
+                datatype_to_string(i)
             ]);
         }
     }
@@ -158,12 +157,12 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
         outputs_table.add_row(row![
             i.get_name(),
             i.get_doc_string(),
-            i.dimensions()
+            i.dimensions_description()
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>()
-                .join("x"),
-            i.data_type()?
+                .join(" x "),
+            datatype_to_string(i)
         ]);
     }
 
@@ -227,7 +226,7 @@ pub fn info_table(model: &ModelProto) -> Result<Table, WonnxError> {
     for node in graph.get_node() {
         for input in node.get_input() {
             match shapes.get(input) {
-                None => println!(
+                None => log::error!(
                     "Node '{}' input '{}' has unknown shape",
                     node.get_name(),
                     input

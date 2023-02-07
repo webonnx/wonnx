@@ -12,10 +12,12 @@ use crate::types::{InferOptions, InferenceInput, NNXError};
 pub trait ValueInfoProtoUtil {
     fn dimensions(&self) -> Vec<usize>;
     fn data_type(&self) -> Result<ScalarType, DataTypeError>;
+    fn dimensions_description(&self) -> Vec<String>;
 }
 
 pub trait TensorShapeProtoUtil {
     fn shape_dimensions(&self) -> Vec<usize>;
+    fn shape_dimensions_description(&self) -> Vec<String>;
 }
 
 impl ValueInfoProtoUtil for ValueInfoProto {
@@ -24,6 +26,21 @@ impl ValueInfoProtoUtil for ValueInfoProto {
             Some(x) => match x {
                 wonnx::onnx::TypeProto_oneof_value::tensor_type(t) => {
                     t.get_shape().shape_dimensions()
+                }
+                wonnx::onnx::TypeProto_oneof_value::sequence_type(_) => todo!(),
+                wonnx::onnx::TypeProto_oneof_value::map_type(_) => todo!(),
+                wonnx::onnx::TypeProto_oneof_value::optional_type(_) => todo!(),
+                wonnx::onnx::TypeProto_oneof_value::sparse_tensor_type(_) => todo!(),
+            },
+            None => vec![],
+        }
+    }
+
+    fn dimensions_description(&self) -> Vec<String> {
+        match &self.get_field_type().value {
+            Some(x) => match x {
+                wonnx::onnx::TypeProto_oneof_value::tensor_type(t) => {
+                    t.get_shape().shape_dimensions_description()
                 }
                 wonnx::onnx::TypeProto_oneof_value::sequence_type(_) => todo!(),
                 wonnx::onnx::TypeProto_oneof_value::map_type(_) => todo!(),
@@ -59,6 +76,21 @@ impl TensorShapeProtoUtil for TensorShapeProto {
                     i as usize
                 }
                 _ => 0,
+            })
+            .collect()
+    }
+
+    fn shape_dimensions_description(&self) -> Vec<String> {
+        self.get_dim()
+            .iter()
+            .map(|d| match d.value {
+                Some(wonnx::onnx::TensorShapeProto_Dimension_oneof_value::dim_value(i)) => {
+                    i.to_string()
+                }
+                Some(wonnx::onnx::TensorShapeProto_Dimension_oneof_value::dim_param(ref p)) => {
+                    p.clone()
+                }
+                _ => String::from("(unknown)"),
             })
             .collect()
     }
