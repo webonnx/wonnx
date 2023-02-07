@@ -109,11 +109,7 @@ fn conv_stride() {
         vec![tensor("X", &[1, c, 7, 5])],
         vec![tensor("Y", &[1, 1, 4, 3])],
         vec![],
-        vec![initializer(
-            "W",
-            data_w,
-            vec![m, c, kernel_n, kernel_n],
-        )],
+        vec![initializer("W", data_w, vec![m, c, kernel_n, kernel_n])],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
@@ -158,11 +154,7 @@ fn conv_asymetric_stride() {
         vec![tensor("X", &[1, c, 7, 5])],
         vec![tensor("Y", &[1, 1, 4, 2])],
         vec![],
-        vec![initializer(
-            "W",
-            data_w,
-            vec![m, c, kernel_n, kernel_n],
-        )],
+        vec![initializer("W", data_w, vec![m, c, kernel_n, kernel_n])],
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
