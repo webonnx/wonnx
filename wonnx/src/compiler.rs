@@ -1338,7 +1338,7 @@ pub fn compile(
             context.insert("beta", &beta);
             context.insert("bias", &bias);
             context.insert("size", &size);
-            
+
             let left_size = f64::floor((size - 1) as f64 / 2.0) as u32;
             let right_size = f64::ceil((size - 1) as f64 / 2.0) as u32;
 
@@ -1349,7 +1349,7 @@ pub fn compile(
                 output_lengths[0],
                 MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
                 MAX_WORKGROUP_SIZE_X,
-            )?;            
+            )?;
             context.insert("workgroup_size_x", &workgroup_size_x);
             context.insert("i_chunks", &input_chunks);
 
