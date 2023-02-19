@@ -3,7 +3,7 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     convert::TryInto,
-    sync::{mpsc, Arc},
+    sync::Arc,
 };
 
 use bytemuck::NoUninit;
@@ -686,22 +686,50 @@ impl GpuTensor {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<OutputTensor, GpuError> {
-        let buffer_slice = self.buffer.slice(..);
         let shape = self.shape.clone();
 
-        let (tx, rx) = mpsc::sync_channel(1);
+        #[cfg(target_arch = "wasm32")]
+        {
+            let buffer_slice = self.buffer.slice(..);
+            let (sender, receiver) =
+                futures::channel::oneshot::channel::<Result<OutputTensor, GpuError>>();
 
-        wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
-            // Called on download completed
-            tx.send(match buffer {
-                Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
-                Err(error) => Err(GpuError::BufferAsyncError(error)),
-            })
-            .unwrap();
-        });
-        device.poll(wgpu::Maintain::Wait);
-        // The callback will have been called by now due to poll(Wait)
-        rx.recv().unwrap()
+            log::info!("downloadbuffer read_buffer call");
+
+            wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
+                // Called on download completed
+                log::info!(
+                    "downloadbuffer read_buffer callback res={:?}",
+                    buffer.is_ok()
+                );
+                sender
+                    .send(match buffer {
+                        Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
+                        Err(error) => Err(GpuError::BufferAsyncError(error)),
+                    })
+                    .unwrap();
+            });
+
+            receiver.await.unwrap()
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let buffer_slice = self.buffer.slice(..);
+            let (tx, rx) = std::sync::mpsc::sync_channel(1);
+
+            wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
+                // Called on download completed
+                tx.send(match buffer {
+                    Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
+                    Err(error) => Err(GpuError::BufferAsyncError(error)),
+                })
+                .unwrap();
+            });
+            device.poll(wgpu::Maintain::Wait);
+            // The callback will have been called by now due to poll(Wait)
+            rx.recv().unwrap()
+        }
     }
 
     fn read_bytes_to_vec<A>(output_data: &[A], shape: Shape) -> OutputTensor

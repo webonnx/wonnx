@@ -26,7 +26,6 @@ wonnx = { version = "0.3.0" }
 log = "0.4.17"
 console_log = "0.2.0"
 console_error_panic_hook = "0.1.7"
-wasm-bindgen-console-logger = "0.1.1"
 getrandom = { version = "0.2.6", features = ["js"] }
 wasm-bindgen = { version = "0.2.80", features = ["serde-serialize"] } # remember to change version in wiki as well
 wasm-bindgen-futures = "0.4.30"

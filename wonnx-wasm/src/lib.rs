@@ -6,15 +6,14 @@ use js_sys::Promise;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 use wasm_bindgen_futures::future_to_promise;
 use wonnx::utils::{InputTensor, OutputTensor};
 
 #[wasm_bindgen(start)]
 pub fn main() {
     console_error_panic_hook::set_once();
-    log::set_logger(&DEFAULT_LOGGER).unwrap();
-    log::set_max_level(log::LevelFilter::Warn);
+    log::set_max_level(log::LevelFilter::Info);
+    console_log::init_with_level(log::Level::Info).unwrap();
 }
 
 #[wasm_bindgen]

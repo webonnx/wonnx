@@ -2,6 +2,14 @@
 <html>
 	<head>
 		<title>WONNX</title>
+		<style type="text/css">
+		html {
+			font-family: Verdana, Arial, Helvetica, sans-serif;
+			color: rgb(77, 77, 77);
+			font-size: 10pt;
+			line-height: 1.2em;
+		}
+		</style>
 	</head>
 
 	<body>
@@ -48,7 +56,7 @@
 					const canvas = document.createElement('canvas');
 					canvas.width = squeezeWidth;
 					canvas.height = squeezeHeight;
-					const context = canvas.getContext('2d');
+					const context = canvas.getContext('2d', {willReadFrequently: true});
 
 					let inferenceCount = 0;
 					let inferenceTime = 0;
@@ -88,7 +96,7 @@
 							input.free();
 
 							// Find the label with the highest probability
-							const probs = result.squeezenet0_flatten0_reshape0;
+							const probs = result.get("squeezenet0_flatten0_reshape0");
 							let maxProb = -1;
 							let maxIndex = -1;
 							for (let index = 0; index < probs.length; index++) {

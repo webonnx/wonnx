@@ -36,7 +36,7 @@
 					const result = await session.run(input);
 					console.timeEnd("inference");
 					console.log({result});
-					log(JSON.stringify(result, undefined, "\t"));
+					log(JSON.stringify(Object.fromEntries(result), undefined, "\t"));
 					session.free();
 					input.free();
 				}

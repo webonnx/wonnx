@@ -33,7 +33,7 @@ num = "0.4.0"
 # We need these on WASM because the way we are reading buffers there is slightly more involved
 # See GpuTensor::read_to_vec
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-futures-intrusive = "0.4.0"
+futures = "^0.3.26"
 parking_lot = { version = "0.11.1", features = ["wasm-bindgen"]}
 
 [dev-dependencies]
