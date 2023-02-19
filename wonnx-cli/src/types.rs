@@ -210,6 +210,10 @@ pub struct PrepareOptions {
     #[structopt(parse(from_os_str))]
     pub output: PathBuf,
 
+    /// Discard shapes in the model (if inference is also enabled, the shapes are stripped before inference)
+    #[structopt(long = "discard-shapes")]
+    pub discard_shapes: bool,
+
     /// Attempt to infer value types
     #[structopt(long = "infer-shapes", short = "i")]
     pub infer_shapes: bool,

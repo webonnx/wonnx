@@ -7,7 +7,7 @@ use std::fs::File;
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::{OutputTensor, Shape};
-use wonnx_preprocessing::preparation::{apply_dynamic_dimensions, infer_shapes};
+use wonnx_preprocessing::preparation::{apply_dynamic_dimensions, ShapeInference};
 use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
 
@@ -199,9 +199,14 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
         apply_dynamic_dimensions(model.mut_graph(), &dynamic_dims);
     }
 
-    // Type inference
+    // Discard shapes
+    if prepare_opt.discard_shapes {
+        model.mut_graph().mut_value_info().clear();
+    }
+
+    // Shape inference
     if prepare_opt.infer_shapes {
-        infer_shapes(model.mut_graph())?;
+        model.mut_graph().infer_shapes()?;
     }
 
     // Save the model
