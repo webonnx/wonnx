@@ -360,23 +360,40 @@ pub struct AttributeNotFoundError {
     node_name: String,
 }
 
-pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
-    attribute: &str,
-    default: Option<T>,
-    node: &onnx::NodeProto,
-) -> Result<T, AttributeNotFoundError> {
-    match (
-        node.get_attribute()
+pub trait NodeAttributes {
+    fn has_attribute(&self, attribute_name: &str) -> bool;
+    fn get_attribute_value<T: std::convert::From<onnx::AttributeProto>>(
+        &self,
+        attribute: &str,
+        default: Option<T>,
+    ) -> Result<T, AttributeNotFoundError>;
+}
+
+impl NodeAttributes for onnx::NodeProto {
+    fn has_attribute(&self, attribute_name: &str) -> bool {
+        self.get_attribute()
             .iter()
-            .find(|attr| attr.get_name() == attribute),
-        default,
-    ) {
-        (Some(attr), _) => Ok(attr.clone().into()),
-        (None, Some(default_attr)) => Ok(default_attr),
-        (None, None) => Err(AttributeNotFoundError {
-            attribute: attribute.to_string(),
-            node_name: node.get_name().to_string(),
-        }),
+            .any(|attr| attr.get_name() == attribute_name)
+    }
+
+    fn get_attribute_value<T: std::convert::From<onnx::AttributeProto>>(
+        &self,
+        attribute: &str,
+        default: Option<T>,
+    ) -> Result<T, AttributeNotFoundError> {
+        match (
+            self.get_attribute()
+                .iter()
+                .find(|attr| attr.get_name() == attribute),
+            default,
+        ) {
+            (Some(attr), _) => Ok(attr.clone().into()),
+            (None, Some(default_attr)) => Ok(default_attr),
+            (None, None) => Err(AttributeNotFoundError {
+                attribute: attribute.to_string(),
+                node_name: self.get_name().to_string(),
+            }),
+        }
     }
 }
 

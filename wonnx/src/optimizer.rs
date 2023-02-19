@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
     resource::padding,
-    utils::{attribute, get_attribute, AttributeNotFoundError, DataTypeError, ScalarType},
+    utils::{attribute, AttributeNotFoundError, DataTypeError, NodeAttributes, ScalarType},
 };
 
 #[derive(Debug, Error)]
@@ -124,7 +124,7 @@ impl<'model> Optimizer<'model> {
                         return Err(OptimizerError::NoInputs);
                     }
                     let training_mode =
-                        get_attribute("training_mode", Some(0), &op_def.proto)? == 1;
+                        op_def.proto.get_attribute_value("training_mode", Some(0))? == 1;
 
                     if training_mode {
                         return Err(OptimizerError::Unsupported(String::from(
@@ -230,16 +230,22 @@ impl<'model> Optimizer<'model> {
                         // This optimization inserts some padding to convolution between kernels with kernel 3x3, because of
                         // the stride of matrix3x3 is 16 in wgsl. It makes the computation matrixable and increases the performance.
                         if new_inputs.len() > 2
-                            && get_attribute::<Vec<i64>>("kernel_shape", None, &op_def.proto)?
+                            && op_def
+                                .proto
+                                .get_attribute_value::<Vec<i64>>("kernel_shape", None)?
                                 == [3, 3]
-                            && (get_attribute("pads", Some(vec![0, 0, 0, 0]), &op_def.proto)?
+                            && (op_def
+                                .proto
+                                .get_attribute_value("pads", Some(vec![0, 0, 0, 0]))?
                                 == [1, 1, 1, 1]
-                                || get_attribute(
+                                || op_def.proto.get_attribute_value(
                                     "auto_pad",
                                     Some("SAME_UPPER".to_string()),
-                                    &op_def.proto,
                                 )? == "SAME_UPPER")
-                            && get_attribute("strides", Some(vec![1, 1]), &op_def.proto)? == [1, 1]
+                            && op_def
+                                .proto
+                                .get_attribute_value("strides", Some(vec![1, 1]))?
+                                == [1, 1]
                             && op_def.output_shapes[0].dim(1) % 4 == 0
                         {
                             if let NodeDefinition::Tensor(tensor) =

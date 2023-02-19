@@ -7,7 +7,7 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, TypeProto_oneof_value, ValueInfoProto,
     },
-    utils::{get_attribute, AttributeNotFoundError, ScalarType, Shape},
+    utils::{AttributeNotFoundError, NodeAttributes, ScalarType, Shape},
 };
 
 pub fn apply_dynamic_dimensions(graph: &mut GraphProto, dynamic_dims: &HashMap<String, i64>) {
@@ -200,7 +200,8 @@ pub fn infer_forward(
                 ));
             }
             let q = input_shapes[1].rank() as i64;
-            let mut axis = get_attribute("axis", Some(0), node)
+            let mut axis = node
+                .get_attribute_value("axis", Some(0))
                 .map_err(ShapeInferenceError::MissingAttribute)?;
             if axis >= r || axis < -r {
                 return Err(ShapeInferenceError::InvalidNode(
@@ -232,7 +233,8 @@ pub fn infer_forward(
 
         ("ReduceMean", 1, 1) => {
             // https://github.com/onnx/onnx/blob/main/docs/Changelog.md#reducemean-18
-            let noop_with_empty_axes = get_attribute("noop_with_empty_axes", Some(0), node)
+            let noop_with_empty_axes = node
+                .get_attribute_value("noop_with_empty_axes", Some(0))
                 .map_err(ShapeInferenceError::MissingAttribute)?;
 
             let input_shape = input_shapes[0];
@@ -242,7 +244,8 @@ pub fn infer_forward(
             } else {
                 vec![]
             };
-            let axes: Vec<i64> = get_attribute("axes", Some(all_axes), node)
+            let axes: Vec<i64> = node
+                .get_attribute_value("axes", Some(all_axes))
                 .map_err(ShapeInferenceError::MissingAttribute)?
                 .into_iter()
                 .map(|idx| {
@@ -253,7 +256,8 @@ pub fn infer_forward(
                     }
                 })
                 .collect();
-            let keep_dims = get_attribute("keepdims", Some(1), node)
+            let keep_dims = node
+                .get_attribute_value("keepdims", Some(1))
                 .map_err(ShapeInferenceError::MissingAttribute)?;
 
             Ok(vec![Shape::from(
@@ -287,15 +291,15 @@ pub fn infer_forward(
         }
 
         ("Constant", 0, 1) => {
-            if let Ok(values) = get_attribute::<Vec<f32>>("value_floats", None, node) {
+            if let Ok(values) = node.get_attribute_value::<Vec<f32>>("value_floats", None) {
                 Ok(vec![Shape::from(ScalarType::F32, &[values.len() as i64])])
-            } else if let Ok(values) = get_attribute::<Vec<i64>>("value_ints", None, node) {
+            } else if let Ok(values) = node.get_attribute_value::<Vec<i64>>("value_ints", None) {
                 Ok(vec![Shape::from(ScalarType::I64, &[values.len() as i64])])
-            } else if get_attribute::<f32>("value_float", None, node).is_ok() {
+            } else if node.get_attribute_value::<f32>("value_float", None).is_ok() {
                 Ok(vec![Shape::from(ScalarType::F32, &[1])])
-            } else if get_attribute::<i64>("value_int", None, node).is_ok() {
+            } else if node.get_attribute_value::<i64>("value_int", None).is_ok() {
                 Ok(vec![Shape::from(ScalarType::I64, &[1])])
-            } else if let Ok(tp) = get_attribute::<TensorProto>("value", None, node) {
+            } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
                 Ok(vec![Shape::from(
                     ScalarType::from_i32(tp.get_data_type()).map_err(|_| {
                         ShapeInferenceError::InvalidNode(
