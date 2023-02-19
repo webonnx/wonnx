@@ -9,7 +9,7 @@ use wonnx::{
 };
 use wonnx_preprocessing::{
     constant_folding::ConstantFoldingError,
-    preparation::ShapeInferenceError,
+    shape_inference::ShapeInferenceError,
     text::{EncodedText, PreprocessingError},
     Tensor,
 };

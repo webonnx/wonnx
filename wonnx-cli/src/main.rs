@@ -8,7 +8,7 @@ use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::{get_opset_version, OutputTensor, Shape};
 use wonnx_preprocessing::constant_folding::fold_constants;
-use wonnx_preprocessing::preparation::{apply_dynamic_dimensions, ShapeInference};
+use wonnx_preprocessing::shape_inference::{apply_dynamic_dimensions, ShapeInference};
 use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
 

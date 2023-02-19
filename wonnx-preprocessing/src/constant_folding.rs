@@ -12,7 +12,7 @@ use wonnx::{
     CompileError, GpuError, Session, SessionError,
 };
 
-use crate::preparation::{dimensions_infos, infer_forward, ShapeInferenceError};
+use crate::shape_inference::{dimensions_infos, infer_forward, ShapeInferenceError};
 
 #[derive(Error, Debug)]
 pub enum ConstantFoldingError {
