@@ -48,6 +48,32 @@ fn static_initializer_value_i64<'a>(
                 shape_tensor.get_data_type()
             )));
         }
+
+        let expected_value_count: i64 = shape_tensor.get_dims().iter().product();
+
+        // Read data from the int64_data field, except when that field's contents don't match with what we expect; then try
+        // the raw_data field.
+        if shape_tensor.get_int64_data().len() != expected_value_count as usize {
+            let raw_data = shape_tensor.get_raw_data();
+            if raw_data.len() / 8 == expected_value_count as usize {
+                // Raw data has the required size, use that (raw data should be little-endian, see https://github.com/onnx/onnx/issues/2825)
+                log::warn!(
+                    "int64 data for initializer {name} contains {} values, expected {expected_value_count}. Raw data length ({}) matches however, using that. dims={:?}",
+                    shape_tensor.get_int64_data().len(),
+                    shape_tensor.get_raw_data().len(),
+                    shape_tensor.get_dims()
+                );
+                return Ok(bytemuck::cast_slice(raw_data));
+            } else {
+                log::warn!(
+                    "int64 data for initializer {name} contains {} values, expected {expected_value_count}. Raw data length ({}) doesn't match either! dims={:?}",
+                    shape_tensor.get_int64_data().len(),
+                    shape_tensor.get_raw_data().len(),
+                    shape_tensor.get_dims()
+                );
+            }
+        }
+
         // Get the tensor's contents
         Ok(shape_tensor.get_int64_data())
     } else {
