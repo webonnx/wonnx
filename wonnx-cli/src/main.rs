@@ -231,8 +231,13 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
     }
 
     // Save the model
+    log::info!(
+        "writing model to '{}'",
+        prepare_opt.output.to_string_lossy()
+    );
     let mut out_file = File::create(prepare_opt.output)?;
     model.write_to_writer(&mut out_file)?;
+    log::info!("model written to file");
 
     Ok(())
 }

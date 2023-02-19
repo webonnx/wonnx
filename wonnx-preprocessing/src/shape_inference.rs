@@ -251,7 +251,26 @@ impl ShapeInference for GraphProto {
                 .collect::<Result<_, ShapeInferenceError>>()?;
 
             let output_shapes = infer_forward(node, &input_shapes, &initializers)?;
-            println!("Node {} Inferred: {:?}", node.get_name(), output_shapes);
+
+            // Check inferred shapes
+            for (output_index, shape) in output_shapes.iter().enumerate() {
+                if shape.rank() == 0 {
+                    log::warn!(
+                        "inferred shape for output {output_index} of node '{}' is empty: {shape}",
+                        node.get_name()
+                    );
+                }
+            }
+
+            log::info!(
+                "node {} inferred shape: {}",
+                node.get_name(),
+                output_shapes
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            );
 
             if output_shapes.len() != node.get_output().len() {
                 panic!("number of outputs inferred does not match node output count");
