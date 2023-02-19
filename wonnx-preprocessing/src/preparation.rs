@@ -40,6 +40,13 @@ fn static_initializer_value_i64<'a>(
     name: &str,
 ) -> Result<&'a [i64], ShapeInferenceError> {
     if let Some(shape_tensor) = initializers.get(name) {
+        if shape_tensor.get_data_type() != ScalarType::I64.to_datatype().value() {
+            return Err(ShapeInferenceError::Unsupported(format!(
+                "initializer {} has data type {} and not int64, which is currently not supported",
+                name,
+                shape_tensor.get_data_type()
+            )));
+        }
         // Get the tensor's contents
         Ok(shape_tensor.get_int64_data())
     } else {
@@ -120,7 +127,7 @@ pub enum ShapeInferenceError {
     #[error("incomplete or missing shape for input {0} - be sure to specify all dynamic dimension parameters")]
     IncompleteInputShape(String),
 
-    #[error("inference for {0} operator is not (fully) implemented yet")]
+    #[error("unsupported: {0}")]
     Unsupported(String),
 
     #[error("node {0} is invalid: {1}")]
@@ -843,6 +850,46 @@ fn infer_forward(
             Ok(vec![Shape::from(input_shapes[0].data_type, &input_shape)])
         }
 
+        ("Range", 3, 1) => {
+            // Currently only int64 ranges are supported
+            let start = static_initializer_value_i64(initializers, &node.input[0])?;
+            let end = static_initializer_value_i64(initializers, &node.input[1])?;
+            let step = static_initializer_value_i64(initializers, &node.input[2])?;
+
+            if start.len() != 1 {
+                return Err(ShapeInferenceError::InvalidNode(
+                    node.get_name().to_string(),
+                    format!(
+                        "the start input needs to be a scalar, has {} elements",
+                        start.len()
+                    ),
+                ));
+            }
+
+            if end.len() != 1 {
+                return Err(ShapeInferenceError::InvalidNode(
+                    node.get_name().to_string(),
+                    format!(
+                        "the end input needs to be a scalar, has {} elements",
+                        end.len()
+                    ),
+                ));
+            }
+
+            if step.len() != 1 {
+                return Err(ShapeInferenceError::InvalidNode(
+                    node.get_name().to_string(),
+                    format!(
+                        "the step input needs to be a scalar, has {} elements",
+                        step.len()
+                    ),
+                ));
+            }
+
+            let element_count = (end[0] - start[0]) / step[0];
+            Ok(vec![Shape::from(ScalarType::I64, &[element_count])])
+        }
+
         ("Squeeze", num_inputs @ 1..=2, 1) => {
             let has_axes = num_inputs == 2;
             let axes: Vec<i64> = if has_axes {
@@ -878,7 +925,7 @@ fn infer_forward(
         (
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
             | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
-            | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice",
+            | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
