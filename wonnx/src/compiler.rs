@@ -447,6 +447,14 @@ pub fn compile(
         "Cast" => {
             let cast_to_type =
                 ScalarType::from_i32(node.get_attribute_value::<i64>("to", None)? as i32)?;
+
+            if !cast_to_type.wgsl_supported() {
+                return Err(CompileError::UnimplementedVariant {
+                    variant: format!("with data type {} (WGSL limitation)", cast_to_type),
+                    op: "Cast".to_string(),
+                });
+            }
+
             context.insert("cast_to_type", cast_to_type.wgsl_type_name());
 
             let (x_threads, workgroup_size_x) = workgroup_size(

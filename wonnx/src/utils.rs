@@ -308,6 +308,15 @@ impl ScalarType {
         }
     }
 
+    pub fn wgsl_supported(&self) -> bool {
+        match self {
+            ScalarType::F32 => true,
+            ScalarType::I32 => true,
+            ScalarType::I64 => false,
+            ScalarType::U8 => false, // ! TODO check this
+        }
+    }
+
     pub fn wgsl_type_name(&self) -> &'static str {
         match self {
             ScalarType::F32 => "f32",
