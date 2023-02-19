@@ -18,6 +18,7 @@ impl IntoPy<PyObject> for PyOutputTensor {
             OutputTensor::F32(fs) => fs.into_py(py),
             OutputTensor::I32(fs) => fs.into_py(py),
             OutputTensor::I64(fs) => fs.into_py(py),
+            OutputTensor::U8(fs) => fs.into_py(py),
         }
     }
 }

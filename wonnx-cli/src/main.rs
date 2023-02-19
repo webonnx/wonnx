@@ -163,6 +163,15 @@ fn print_output(
                         }
                     }
                 }
+                wonnx::utils::OutputTensor::U8(ints) => {
+                    for i in ints {
+                        if print_newlines {
+                            println!("{}", i);
+                        } else {
+                            print!("{}", i);
+                        }
+                    }
+                }
             }
         }
     }

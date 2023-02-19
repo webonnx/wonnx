@@ -156,6 +156,7 @@ pub enum OutputTensor {
     F32(Vec<f32>),
     I32(Vec<i32>),
     I64(Vec<i64>),
+    U8(Vec<u8>),
 }
 
 impl TryFrom<OutputTensor> for Vec<f32> {
@@ -173,6 +174,10 @@ impl TryFrom<OutputTensor> for Vec<f32> {
                 .into_iter()
                 .map(|i| f32::from_i64(i).ok_or(TensorConversionError::OutOfBoundsError))
                 .collect::<Result<_, _>>(),
+            OutputTensor::U8(ints) => ints
+                .into_iter()
+                .map(|i| f32::from_u8(i).ok_or(TensorConversionError::OutOfBoundsError))
+                .collect::<Result<_, _>>(),
         }
     }
 }
@@ -185,7 +190,7 @@ impl<'a> TryFrom<&'a OutputTensor> for &'a [f32] {
     fn try_from(value: &'a OutputTensor) -> Result<Self, Self::Error> {
         match value {
             OutputTensor::F32(floats) => Ok(floats.as_slice()),
-            OutputTensor::I32(_) | OutputTensor::I64(_) => {
+            OutputTensor::I32(_) | OutputTensor::I64(_) | OutputTensor::U8(_) => {
                 Err(TensorConversionError::DataTypeError)
             }
         }
@@ -223,6 +228,7 @@ pub enum ScalarType {
     F32,
     I64,
     I32,
+    U8,
 }
 
 impl ScalarType {
@@ -237,6 +243,7 @@ impl ScalarType {
             TensorProto_DataType::FLOAT => ScalarType::F32,
             TensorProto_DataType::INT64 => ScalarType::I64,
             TensorProto_DataType::INT32 => ScalarType::I32,
+            TensorProto_DataType::UINT8 => ScalarType::U8,
             _ => return Err(DataTypeError::NotSupported(onnx)),
         })
     }
@@ -246,6 +253,7 @@ impl ScalarType {
             ScalarType::F32 => TensorProto_DataType::FLOAT,
             ScalarType::I64 => TensorProto_DataType::INT64,
             ScalarType::I32 => TensorProto_DataType::INT32,
+            ScalarType::U8 => TensorProto_DataType::UINT8,
         }
     }
 
@@ -254,6 +262,7 @@ impl ScalarType {
             ScalarType::F32 => 4,
             ScalarType::I32 => 4,
             ScalarType::I64 => 8,
+            ScalarType::U8 => 1, // ! TODO check this
         }
     }
 
@@ -262,13 +271,14 @@ impl ScalarType {
             ScalarType::F32 => "f32",
             ScalarType::I32 => "i32",
             ScalarType::I64 => "i64",
+            ScalarType::U8 => "u8", // ! TODO check this
         }
     }
 
     pub fn is_float(&self) -> bool {
         match self {
             ScalarType::F32 => true,
-            ScalarType::I32 | ScalarType::I64 => false,
+            ScalarType::I32 | ScalarType::I64 | ScalarType::U8 => false,
         }
     }
 }
@@ -343,12 +353,13 @@ impl Display for Shape {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}",
+            "{}:{}",
             self.dims
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>()
-                .join("x")
+                .join("x"),
+            self.data_type
         )
     }
 }
@@ -749,6 +760,11 @@ mod tests {
         assert_eq!(
             Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 4, 1, 1])]),
             None
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[1, 255, 768]), shape(&[1, 255, 1])]),
+            Some(shape(&[1, 255, 768])),
         );
     }
 }

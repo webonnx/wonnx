@@ -1064,7 +1064,7 @@ pub fn compile(
             // See https://github.com/gfx-rs/naga/issues/1896
             let scalar_type = agreed_type(input_shapes, output_shapes)?;
             match scalar_type {
-                ScalarType::I32 | ScalarType::I64 => {
+                ScalarType::I32 | ScalarType::I64 | ScalarType::U8 => {
                     return Err(CompileError::UnimplementedVariant {
                         variant: "with integers".to_string(),
                         op: op.to_string(),
