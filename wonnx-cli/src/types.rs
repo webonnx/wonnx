@@ -8,6 +8,7 @@ use wonnx::{
     SessionError, WonnxError,
 };
 use wonnx_preprocessing::{
+    preparation::ShapeInferenceError,
     text::{EncodedText, PreprocessingError},
     Tensor,
 };
@@ -71,6 +72,9 @@ pub enum NNXError {
 
     #[error("Protobuf error: {0}")]
     ProtobufError(#[from] ProtobufError),
+
+    #[error("Could not infer shapes: {0}")]
+    ShapeInferenceError(#[from] ShapeInferenceError),
 }
 
 impl FromStr for Backend {
@@ -205,6 +209,10 @@ pub struct PrepareOptions {
     /// Output file (.onnx)
     #[structopt(parse(from_os_str))]
     pub output: PathBuf,
+
+    /// Attempt to infer value types
+    #[structopt(long = "infer-shapes", short = "i")]
+    pub infer_shapes: bool,
 
     /// Set dimension parameter to a value (e.g. "--set batch_size=1"). This parameter can occur multiple times to set multiple different parameters
     #[structopt(long = "set", parse(try_from_str = parse_key_val), number_of_values = 1, value_name = "parameter_name=value")]

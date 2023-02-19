@@ -7,7 +7,7 @@ use std::fs::File;
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::{OutputTensor, Shape};
-use wonnx_preprocessing::preparation::apply_dynamic_dimensions;
+use wonnx_preprocessing::preparation::{apply_dynamic_dimensions, infer_shapes};
 use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
 
@@ -185,16 +185,24 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
     )
     .expect("Could not deserialize the model");
 
-    let mut dynamic_dims = HashMap::<String, i64>::new();
+    // Set dynamic dimension parameters
+    if !prepare_opt.set_dimension.is_empty() {
+        let mut dynamic_dims = HashMap::<String, i64>::new();
 
-    for (dim_name, dim_dimstring) in prepare_opt.set_dimension {
-        let dim_value = dim_dimstring
-            .parse::<i64>()
-            .expect("invalid dimension value");
-        dynamic_dims.insert(dim_name, dim_value);
+        for (dim_name, dim_dimstring) in prepare_opt.set_dimension {
+            let dim_value = dim_dimstring
+                .parse::<i64>()
+                .expect("invalid dimension value");
+            dynamic_dims.insert(dim_name, dim_value);
+        }
+
+        apply_dynamic_dimensions(model.mut_graph(), &dynamic_dims);
     }
 
-    apply_dynamic_dimensions(model.mut_graph(), &dynamic_dims);
+    // Type inference
+    if prepare_opt.infer_shapes {
+        infer_shapes(model.mut_graph())?;
+    }
 
     // Save the model
     let mut out_file = File::create(prepare_opt.output)?;

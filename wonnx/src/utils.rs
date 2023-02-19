@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use crate::onnx;
 use crate::onnx::OperatorSetIdProto;
+use crate::onnx::TensorProto;
 use crate::onnx::TensorProto_DataType;
 use crate::onnx::ValueInfoProto;
 use num::FromPrimitive;
@@ -66,7 +67,7 @@ impl Shape {
 
     /// Computes the shape to which all provided shapes can be broadcast (if it exists)
     /// Inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L5
-    pub(crate) fn multi_broadcast(shapes: &[Shape]) -> Option<Shape> {
+    pub fn multi_broadcast(shapes: &[Shape]) -> Option<Shape> {
         if shapes.is_empty() {
             return None;
         }
@@ -240,6 +241,14 @@ impl ScalarType {
         })
     }
 
+    pub fn to_datatype(&self) -> TensorProto_DataType {
+        match self {
+            ScalarType::F32 => TensorProto_DataType::FLOAT,
+            ScalarType::I64 => TensorProto_DataType::INT64,
+            ScalarType::I32 => TensorProto_DataType::INT32,
+        }
+    }
+
     pub fn stride(&self) -> usize {
         match self {
             ScalarType::F32 => 4,
@@ -351,7 +360,7 @@ pub struct AttributeNotFoundError {
     node_name: String,
 }
 
-pub(crate) fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
+pub fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
     attribute: &str,
     default: Option<T>,
     node: &onnx::NodeProto,
@@ -590,9 +599,23 @@ impl From<&str> for onnx::AttributeProto {
     }
 }
 
+impl From<TensorProto> for onnx::AttributeProto {
+    fn from(value: TensorProto) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_t(value);
+        attributes
+    }
+}
+
 impl From<onnx::AttributeProto> for Vec<i64> {
     fn from(value: onnx::AttributeProto) -> Self {
         value.get_ints().to_vec()
+    }
+}
+
+impl From<onnx::AttributeProto> for TensorProto {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_t().clone()
     }
 }
 
