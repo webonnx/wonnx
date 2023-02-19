@@ -735,6 +735,19 @@ pub(crate) fn infer_forward(
                 .collect())
         }
 
+        ("ConstantOfShape", 1, 1) => {
+            let shape = static_initializer_value_i64(initializers, &node.get_input()[0])?;
+
+            let value = node
+                .get_attribute_value::<TensorProto>("value", None)
+                .map_err(ShapeInferenceError::MissingAttribute)?;
+
+            let data_type = ScalarType::from_i32(value.get_data_type())
+                .map_err(ShapeInferenceError::UnsupportedDataType)?;
+
+            Ok(vec![Shape::from(data_type, shape)])
+        }
+
         ("Constant", 0, 1) => {
             if let Ok(values) = node.get_attribute_value::<Vec<f32>>("value_floats", None) {
                 Ok(vec![Shape::from(ScalarType::F32, &[values.len() as i64])])
@@ -941,7 +954,7 @@ pub(crate) fn infer_forward(
         (
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
             | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
-            | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range",
+            | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range" | "ConstantOfShape",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(

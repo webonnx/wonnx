@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use protobuf::{ProtobufEnum, RepeatedField};
 use thiserror::Error;
@@ -71,8 +71,12 @@ pub async fn fold_constants(
                     .map(|input_name| {
                         if let Some(initializer) = initializers.get(input_name) {
                             (*initializer).try_into()
+                        } else if let Some(new_initializer) = new_initializers.get(input_name) {
+                            new_initializer.try_into()
                         } else {
-                            (&new_initializers[input_name]).try_into()
+                            // This should only happen when is_known_shape is true. In this case we will not do any GPU inference
+                            // and the contents if this tensor don't matter
+                            Ok(InputTensor::I64(Cow::Owned(vec![])))
                         }
                     })
                     .collect::<Result<_, _>>()
@@ -136,7 +140,9 @@ async fn calculate_constant_node_outputs<'a>(
     opset_version: i64,
 ) -> Result<Option<Vec<OutputTensor>>, ConstantFoldingError> {
     Ok(match node.get_op_type() {
-        "Identity" => Some(inputs.iter().map(OutputTensor::from).collect()),
+        "Identity" | "Unsqueeze" | "Squeeze" | "Reshape" => {
+            Some(inputs.iter().map(OutputTensor::from).collect())
+        }
         "Shape" => {
             let input_shape: Vec<i64> = shapes[&node.input[0]]
                 .dims
@@ -145,7 +151,7 @@ async fn calculate_constant_node_outputs<'a>(
                 .collect();
             let mut start = node.get_attribute_value("start", Some(0)).unwrap();
             let mut end = node
-                .get_attribute_value("start", Some(input_shape.len() as i64))
+                .get_attribute_value("start", Some(input_shape.len() as i64 - 1))
                 .unwrap();
             if start < 0 {
                 start += input_shape.len() as i64;
@@ -156,6 +162,8 @@ async fn calculate_constant_node_outputs<'a>(
             if start > end {
                 return Err(ConstantFoldingError::InvalidNode(format!("end attribute value ({}) for Shape node should be higher than start attribute ({})", end, start)));
             }
+
+            dbg!(&input_shape, start, end);
 
             Some(vec![OutputTensor::I64(
                 (input_shape[(start as usize)..=(end as usize)]).into(),
