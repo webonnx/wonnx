@@ -7,7 +7,7 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, TypeProto_oneof_value, ValueInfoProto,
     },
-    utils::{AttributeNotFoundError, NodeAttributes, ScalarType, Shape},
+    utils::{AttributeNotFoundError, DataTypeError, NodeAttributes, ScalarType, Shape},
 };
 
 pub fn apply_dynamic_dimensions(graph: &mut GraphProto, dynamic_dims: &HashMap<String, i64>) {
@@ -27,11 +27,27 @@ pub fn apply_dynamic_dimensions(graph: &mut GraphProto, dynamic_dims: &HashMap<S
 
 pub trait ShapeInference {
     fn infer_shapes(&mut self) -> Result<(), ShapeInferenceError>;
+    fn replace_constant_ops_with_initializers(&mut self) -> Result<(), ShapeInferenceError>;
 }
 
 /// Divide a number by the indicated dividend, then round up to the next multiple of the dividend if there is a rest.
 fn div_ceil(num: i64, div: i64) -> i64 {
     num / div + (num % div != 0) as i64
+}
+
+fn static_initializer_value_i64<'a>(
+    initializers: &HashMap<String, &'a TensorProto>,
+    name: &str,
+) -> Result<&'a [i64], ShapeInferenceError> {
+    if let Some(shape_tensor) = initializers.get(name) {
+        // Get the tensor's contents
+        Ok(shape_tensor.get_int64_data())
+    } else {
+        Err(ShapeInferenceError::Unsupported(format!(
+            "input {} is dynamic (only static initializers are supported)",
+            name
+        )))
+    }
 }
 
 /// Replaces dimension params with provided values
@@ -113,9 +129,82 @@ pub enum ShapeInferenceError {
     #[error("attribute {0} required for shape inference is missing")]
     #[from(AttributeNotFoundError)]
     MissingAttribute(AttributeNotFoundError),
+
+    #[error("unsupported data type encountered: {0}")]
+    #[from(DataTypeError)]
+    UnsupportedDataType(DataTypeError),
 }
 
 impl ShapeInference for GraphProto {
+    fn replace_constant_ops_with_initializers(
+        self: &mut GraphProto,
+    ) -> Result<(), ShapeInferenceError> {
+        for node_index in (0..self.node.len()).rev() {
+            let is_constant = self.node[node_index].get_op_type() == "Constant";
+
+            if is_constant {
+                {
+                    let node = &self.node[node_index];
+                    if node.get_output().len() != 1 {
+                        return Err(ShapeInferenceError::InvalidNode(
+                            node.get_name().to_string(),
+                            format!(
+                                "Constant op must have one output, has {}",
+                                node.get_output().len()
+                            ),
+                        ));
+                    }
+
+                    // Create an initializer
+                    let mut initializer = TensorProto::new();
+
+                    // Get constant value
+                    if let Ok(values) = node.get_attribute_value::<Vec<f32>>("value_floats", None) {
+                        initializer.set_data_type(ScalarType::F32.to_datatype().value());
+                        initializer.set_dims(vec![values.len() as i64]);
+                        initializer.set_float_data(values);
+                    } else if let Ok(values) =
+                        node.get_attribute_value::<Vec<i64>>("value_ints", None)
+                    {
+                        initializer.set_data_type(ScalarType::I64.to_datatype().value());
+                        initializer.set_dims(vec![values.len() as i64]);
+                        initializer.set_int64_data(values);
+                    } else if let Ok(values) = node.get_attribute_value::<i64>("value_int", None) {
+                        initializer.set_int64_data(vec![values]);
+                        initializer.set_data_type(ScalarType::I64.to_datatype().value());
+                        initializer.set_dims(vec![1]);
+                    } else if let Ok(values) = node.get_attribute_value::<f32>("value_float", None)
+                    {
+                        initializer.set_float_data(vec![values]);
+                        initializer.set_data_type(ScalarType::F32.to_datatype().value());
+                        initializer.set_dims(vec![1]);
+                    } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
+                        initializer = tp;
+                        fix_raw_tensor(&mut initializer)?;
+                    } else {
+                        log::debug!("Constant node attributes: {:?}", node.attribute);
+                        return Err(ShapeInferenceError::Unsupported(
+                            "Constant node with data types other than float, int".to_string(),
+                        ));
+                    }
+
+                    log::info!(
+                        "Replacing Constant node '{}' with an initializer (name='{}', shape={:?})",
+                        node.get_name(),
+                        node.output[0].clone(),
+                        initializer.dims
+                    );
+                    log::debug!("initializer: {initializer:?}");
+
+                    initializer.set_name(node.output[0].clone()); // Needs to happen here because the name can be overwritten above when there is a tensor in the "value" attribute
+                    self.initializer.push(initializer);
+                }
+                self.node.remove(node_index);
+            }
+        }
+        Ok(())
+    }
+
     fn infer_shapes(self: &mut GraphProto) -> Result<(), ShapeInferenceError> {
         let mut shapes = dimensions_infos(self)?;
         log::debug!("known shapes before shape inference: {shapes:#?}");
@@ -280,6 +369,104 @@ fn infer_forward(
                 ScalarType::I64,
                 &[rank.clamp(start, end)],
             )])
+        }
+
+        ("Slice", num_inputs @ 3..=5, 1) => {
+            let data_shape = input_shapes[0];
+
+            // All negative values in `starts[i]` and `ends[i]` have `dims[axes[i]]` added to them,
+            // where `dims` are the dimensions of `input`.
+            let mut starts: Vec<i64> =
+                static_initializer_value_i64(initializers, &node.get_input()[1])?
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, s)| {
+                        if *s < 0 {
+                            *s + data_shape.dim(idx) as i64
+                        } else {
+                            *s
+                        }
+                    })
+                    .collect();
+            if starts.is_empty() {
+                log::warn!(
+                    "starts not set for Slice, generating it... name={}",
+                    node.get_input()[1]
+                );
+                starts = (0..data_shape.rank()).map(|_| 1).collect();
+            }
+            let mut ends: Vec<i64> =
+                static_initializer_value_i64(initializers, &node.get_input()[2])?
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, s)| {
+                        if *s < 0 {
+                            *s + data_shape.dim(idx) as i64
+                        } else {
+                            *s
+                        }
+                    })
+                    .collect();
+            if ends.is_empty() {
+                log::warn!("ends not set for Slice, generating it...");
+                ends = data_shape.dims.iter().map(|x| *x as i64).collect();
+            }
+
+            // If `axes` are omitted, they are set to `[0, ..., r-1]`.
+            let axes: Vec<i64> = if num_inputs > 3 {
+                let x: Vec<i64> =
+                    static_initializer_value_i64(initializers, &node.get_input()[3])?.into();
+                if x.is_empty() {
+                    (0..(data_shape.rank() as i64)).collect()
+                } else {
+                    x
+                }
+            } else {
+                (0..(data_shape.rank() as i64)).collect()
+            };
+
+            // If `steps` are omitted, they are set to `[1, ..., 1]` of length `len(starts)`
+            let steps: Vec<i64> = if num_inputs > 4 {
+                static_initializer_value_i64(initializers, &node.get_input()[4])?.into()
+            } else {
+                (0..(data_shape.rank() as i64)).map(|_| 1).collect()
+            };
+
+            if axes.len() != steps.len() {
+                return Err(ShapeInferenceError::InvalidNode(node.get_name().to_string(), format!("length of axes attribute ({}) must be equal to length of steps attribute ({})", axes.len(), steps.len())));
+            }
+
+            // All negative elements of `axes` are made non-negatve by adding `r` to them, where`r =rank(input)`.
+            let axes: Vec<i64> = axes
+                .into_iter()
+                .map(|x| {
+                    if x < 0 {
+                        x + data_shape.rank() as i64
+                    } else {
+                        x
+                    }
+                })
+                .collect();
+
+            let mut output_shape: Vec<i64> =
+                input_shapes[0].dims.iter().map(|x| *x as i64).collect();
+
+            // https://github.com/onnx/onnx/blob/fb80e3ade84e9f406711aa41b9f3665753158371/onnx/defs/tensor/defs.cc#L969
+            for (axis_index, axis) in axes.iter().enumerate() {
+                let mut start = starts[axis_index];
+                let mut end = ends[axis_index];
+                let mut step = steps[axis_index];
+                process_slice_inputs(
+                    data_shape.dim(*axis as usize) as i64,
+                    &mut start,
+                    &mut end,
+                    &mut step,
+                )?;
+                let temp = div_ceil(end - start, step).max(0);
+                output_shape[*axis as usize] = temp;
+            }
+
+            Ok(vec![Shape::from(data_shape.data_type, &output_shape)])
         }
 
         ("ReduceMean", 1, 1) => {
@@ -691,7 +878,7 @@ fn infer_forward(
         (
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
             | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
-            | "Unsqueeze" | "Cast" | "Squeeze",
+            | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
@@ -708,6 +895,59 @@ fn infer_forward(
             Err(ShapeInferenceError::Unsupported(op_type.to_string()))
         }
     }
+}
+
+/// https://github.com/onnx/onnx/blob/fb80e3ade84e9f406711aa41b9f3665753158371/onnx/defs/tensor/defs.cc#L814
+fn process_slice_inputs(
+    input_rank: i64,
+    start: &mut i64,
+    end: &mut i64,
+    step: &mut i64,
+) -> Result<(), ShapeInferenceError> {
+    // process step
+    if *step == 0 {
+        return Err(ShapeInferenceError::InvalidNode(
+            "".to_string(),
+            "step value must not be zero for slice".to_string(),
+        ));
+    }
+    // process start
+    if *start < 0 {
+        *start += input_rank;
+    }
+    if *step < 0 {
+        *start = (*start).clamp(0, input_rank - 1);
+    } else {
+        *start = (*start).clamp(0, input_rank);
+    }
+
+    // process end
+    if *end < 0 {
+        *end += input_rank;
+    }
+    if *step < 0 {
+        *end = (*end).clamp(-1, input_rank - 1);
+    } else {
+        *end = (*end).clamp(0, input_rank);
+    }
+    Ok(())
+}
+
+/// Some tensors only have the raw data field filled. This function moves that data to the respective fields (i.e. int64_data)
+/// depending on the data type specified.
+fn fix_raw_tensor(tensor: &mut TensorProto) -> Result<(), ShapeInferenceError> {
+    if tensor.has_raw_data() {
+        let raw_data = tensor.take_raw_data();
+        match ScalarType::from_i32(tensor.get_data_type())
+            .map_err(ShapeInferenceError::UnsupportedDataType)?
+        {
+            ScalarType::F32 => tensor.set_float_data(bytemuck::cast_slice(&raw_data[..]).to_vec()),
+            ScalarType::I64 => tensor.set_int64_data(bytemuck::cast_slice(&raw_data[..]).to_vec()),
+            ScalarType::I32 => tensor.set_int32_data(bytemuck::cast_slice(&raw_data[..]).to_vec()),
+            ScalarType::U8 => tensor.set_raw_data(bytemuck::cast_slice(&raw_data[..]).to_vec()),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

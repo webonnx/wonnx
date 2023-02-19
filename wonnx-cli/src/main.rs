@@ -215,6 +215,7 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
 
     // Shape inference
     if prepare_opt.infer_shapes {
+        model.mut_graph().replace_constant_ops_with_initializers()?;
         model.mut_graph().infer_shapes()?;
     }
 
