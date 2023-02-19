@@ -100,14 +100,22 @@ pub async fn fold_constants(
                     let output_shapes = infer_forward(node, &input_shapes, &initializers)
                         .map_err(ConstantFoldingError::ShapeInferenceError)?;
 
+                    log::debug!("output_shapes: {:?}", output_shapes);
+
                     for (output_index, output_name) in node.output.iter().enumerate().rev() {
                         let output_tensor = constant_output.remove(output_index);
 
+                        let output_shape = &output_shapes[output_index];
                         let mut initializer: TensorProto = output_tensor.into();
                         initializer.set_name(output_name.clone());
+                        initializer.set_dims(output_shape.dims.iter().map(|x| *x as i64).collect());
                         new_initializers.insert(output_name.clone(), initializer);
-                        shapes.insert(output_name.clone(), output_shapes[output_index].clone());
+                        shapes.insert(output_name.clone(), output_shape.clone());
                         folded_node_indexes.push(node_index);
+                        log::info!(
+                            "folded output '{output_name}' (#{output_index}) of node {} shape={output_shape}",
+                            node.get_name(),
+                        );
                     }
                 } else {
                     foldable_nodes.push(node.get_name().to_string());
