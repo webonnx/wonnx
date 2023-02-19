@@ -19,6 +19,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	var rest = gidx;
 	{% for dim in o_shape[0] %}
 		{% if dim > 1 %}
+		{
 			let out_index = rest / {{ o_chunks[0][loop.index0] }}u;
 
 			{% if lhs_padded_shape[loop.index0] > 1 %}
@@ -29,6 +30,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 				rhs_index = rhs_index + (out_index * {{ rhs_padded_chunks[loop.index0] }}u);
 			{% endif %}
 			rest = rest % {{ o_chunks[0][loop.index0] }}u;
+		}
 		{% endif %}
 	{% endfor %}
 

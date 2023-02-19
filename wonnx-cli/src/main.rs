@@ -1,6 +1,6 @@
 use crate::info::info_table;
 use info::print_graph;
-use prettytable::{cell, row, Table};
+use prettytable::{row, Table};
 use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::fs::File;
@@ -24,7 +24,8 @@ async fn run() -> Result<(), NNXError> {
 
     match opt.cmd {
         Command::Devices => {
-            let instance = wgpu::Instance::new(wgpu::Backends::all());
+            let instance_descriptor = wgpu::InstanceDescriptor::default();
+            let instance = wgpu::Instance::new(instance_descriptor);
             let adapters = instance.enumerate_adapters(wgpu::Backends::all());
             let mut adapters_table = Table::new();
             adapters_table.add_row(row![b->"Adapter", b->"Vendor", b->"Backend"]);

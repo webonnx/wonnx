@@ -19,15 +19,15 @@ exclude = [
 ]
 
 [dependencies]
-wgpu = "0.14.0"
-bytemuck = "1.9.1"
+wgpu = "0.15.0"
+bytemuck = "1.13.0"
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
 log = "0.4.17"
 tera = { version = "1.15.0", default-features = false }
 lazy_static = "1.4.0"
 thiserror = "1.0.31"
-serde_derive = "1.0.137"
-serde = { version = "1.0.137", features = ["derive"] }
+serde_derive = "1.0.152"
+serde = { version = "1.0.152", features = ["derive"] }
 num = "0.4.0"
 
 # We need these on WASM because the way we are reading buffers there is slightly more involved
@@ -37,8 +37,8 @@ futures = "^0.3.26"
 parking_lot = { version = "0.11.1", features = ["wasm-bindgen"]}
 
 [dev-dependencies]
-image = "0.24.2"
+image = "0.24.5"
 ndarray = "0.15.4"
 approx = "0.5.1"
 pollster = "0.2.5"
-env_logger = "0.9.0"
+env_logger = "0.10.0"

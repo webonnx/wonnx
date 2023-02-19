@@ -16,9 +16,9 @@ homepage = "https://github.com/webonnx/wonnx"
 [dependencies]
 wonnx = { version = "0.3.0" }
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
-pyo3 = { version = "0.16.5", features = ["abi3-py37"] }
+pyo3 = { version = "0.18.0", features = ["abi3-py37"] }
 pollster = "0.2.5"
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 
 # prevents package from thinking it's in the workspace
 
