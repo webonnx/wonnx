@@ -227,9 +227,12 @@ async fn calculate_constant_node_outputs<'a>(
                 return Err(ConstantFoldingError::InvalidNode(format!("end attribute value ({}) for Shape node should be higher than start attribute ({})", end, start)));
             }
 
-            Some(vec![OutputTensor::I64(
-                (input_shape[(start as usize)..=(end as usize)]).into(),
-            )])
+            let output_shape: Vec<i64> = (input_shape[(start as usize)..=(end as usize)]).into();
+            if output_shape.is_empty() {
+                log::warn!("Shape operator results in an empty output shape which is probably an issue... start={start} end={end} input_shape={}", shapes[&node.input[0]]);
+            }
+
+            Some(vec![OutputTensor::I64(output_shape)])
         }
         _ => {
             // Try to run on GPU

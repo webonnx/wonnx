@@ -122,13 +122,29 @@ pub(crate) fn dimensions_infos(
 
     for info in graph_proto.get_output() {
         if let Ok(shape) = info.get_shape() {
-            shapes_info.insert(info.get_name().to_string(), shape);
+            if shapes_info
+                .insert(info.get_name().to_string(), shape)
+                .is_some()
+            {
+                log::warn!(
+                    "already had shape information for '{}', replacing from outputs",
+                    info.get_name()
+                );
+            }
         }
     }
 
     for info in graph_proto.get_value_info() {
         if let Ok(shape) = info.get_shape() {
-            shapes_info.insert(info.get_name().to_string(), shape);
+            if shapes_info
+                .insert(info.get_name().to_string(), shape)
+                .is_some()
+            {
+                log::warn!(
+                    "already had shape information for '{}', replacing from value_info",
+                    info.get_name()
+                );
+            }
         }
     }
 
@@ -494,6 +510,10 @@ pub(crate) fn infer_forward(
             let steps: Vec<i64> = if num_inputs > 4 {
                 static_initializer_value_i64(initializers, &node.get_input()[4])?.into()
             } else {
+                log::debug!(
+                    "steps not set for slice, generating it (data_shape rank={})",
+                    data_shape.rank()
+                );
                 (0..(data_shape.rank() as i64)).map(|_| 1).collect()
             };
 
