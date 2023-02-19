@@ -977,10 +977,20 @@ pub(crate) fn infer_forward(
             Ok(vec![Shape::from(input_shapes[0].data_type, &output_shape)])
         }
 
+        ("Transpose", 1, 1) => {
+            let input_dims: Vec<i64> = input_shapes[0].dims.iter().map(|x| *x as i64).collect();
+            let output_dims: Vec<i64> = match node.get_attribute_value::<Vec<i64>>("perm", None) {
+                Ok(perm) => perm.iter().map(|idx| input_dims[*idx as usize]).collect(),
+                Err(_) => input_dims.iter().rev().cloned().collect(),
+            };
+            Ok(vec![Shape::from(input_shapes[0].data_type, &output_dims)])
+        }
+
         (
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
             | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
-            | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range" | "ConstantOfShape",
+            | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range" | "ConstantOfShape"
+            | "Transpose",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
