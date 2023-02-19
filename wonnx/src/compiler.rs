@@ -1328,10 +1328,10 @@ pub fn compile(
         }
         "LRN" => {
             // https://github.com/onnx/onnx/blob/main/docs/Operators.md#lrn
-            let alpha = get_attribute("alpha", Some(0.0001), node)?;
-            let beta = get_attribute("beta", Some(0.75), node)?;
-            let bias = get_attribute("bias", Some(1.0), node)?;
-            let size = get_attribute("size", Some(1), node)?;
+            let alpha = node.get_attribute_value("alpha", Some(0.0001))?;
+            let beta = node.get_attribute_value("beta", Some(0.75))?;
+            let bias = node.get_attribute_value("bias", Some(1.0))?;
+            let size = node.get_attribute_value("size", Some(1))?;
 
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
