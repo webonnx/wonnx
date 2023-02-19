@@ -82,18 +82,14 @@ fn apply_dynamic_dimensions_value(
 }
 
 /// Retrieve all fully known value shapes
-fn dimensions_infos(
+pub(crate) fn dimensions_infos(
     graph_proto: &GraphProto,
-) -> Result<HashMap<String, Shape>, ShapeInferenceError> {
+) -> Result<HashMap<String, Shape>, DataTypeError> {
     let mut shapes_info = HashMap::new();
 
     for info in graph_proto.get_input() {
         if let Ok(shape) = info.get_shape() {
             shapes_info.insert(info.get_name().to_string(), shape);
-        } else {
-            return Err(ShapeInferenceError::IncompleteInputShape(
-                info.get_name().to_string(),
-            ));
         }
     }
 
@@ -201,7 +197,6 @@ impl ShapeInference for GraphProto {
                         node.output[0].clone(),
                         initializer.dims
                     );
-                    log::debug!("initializer: {initializer:?}");
 
                     initializer.set_name(node.output[0].clone()); // Needs to happen here because the name can be overwritten above when there is a tensor in the "value" attribute
                     self.initializer.push(initializer);
@@ -213,7 +208,8 @@ impl ShapeInference for GraphProto {
     }
 
     fn infer_shapes(self: &mut GraphProto) -> Result<(), ShapeInferenceError> {
-        let mut shapes = dimensions_infos(self)?;
+        let mut shapes =
+            dimensions_infos(self).map_err(ShapeInferenceError::UnsupportedDataType)?;
         log::debug!("known shapes before shape inference: {shapes:#?}");
 
         // Needed for Reshape
@@ -294,7 +290,7 @@ impl ShapeInference for GraphProto {
     }
 }
 
-fn infer_forward(
+pub(crate) fn infer_forward(
     node: &NodeProto,
     input_shapes: &[&Shape],
     initializers: &HashMap<String, &TensorProto>,

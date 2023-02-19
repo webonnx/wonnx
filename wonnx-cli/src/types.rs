@@ -4,10 +4,11 @@ use structopt::StructOpt;
 use thiserror::Error;
 use wonnx::{
     onnx::ModelProto,
-    utils::{OutputTensor, Shape, TensorConversionError},
+    utils::{OpsetError, OutputTensor, Shape, TensorConversionError},
     SessionError, WonnxError,
 };
 use wonnx_preprocessing::{
+    constant_folding::ConstantFoldingError,
     preparation::ShapeInferenceError,
     text::{EncodedText, PreprocessingError},
     Tensor,
@@ -75,6 +76,15 @@ pub enum NNXError {
 
     #[error("Could not infer shapes: {0}")]
     ShapeInferenceError(#[from] ShapeInferenceError),
+
+    #[error("Could not fold constants: {0}")]
+    ConstantFoldingError(#[from] ConstantFoldingError),
+
+    #[error("opset error: {0}")]
+    OpsetError(#[from] OpsetError),
+
+    #[error("the model does not reference a specific version of the ONNX opset")]
+    UnknownOpset,
 }
 
 impl FromStr for Backend {
@@ -213,6 +223,10 @@ pub struct PrepareOptions {
     /// Discard shapes in the model (if inference is also enabled, the shapes are stripped before inference)
     #[structopt(long = "discard-shapes")]
     pub discard_shapes: bool,
+
+    /// Fold constants (removes nodes whose output is all constant with constant initializers)
+    #[structopt(long = "fold-constants")]
+    pub fold_constants: bool,
 
     /// Attempt to infer value types
     #[structopt(long = "infer-shapes", short = "i")]

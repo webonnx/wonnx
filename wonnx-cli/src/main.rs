@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use structopt::StructOpt;
 use wonnx::onnx::ModelProto;
-use wonnx::utils::{OutputTensor, Shape};
+use wonnx::utils::{get_opset_version, OutputTensor, Shape};
+use wonnx_preprocessing::constant_folding::fold_constants;
 use wonnx_preprocessing::preparation::{apply_dynamic_dimensions, ShapeInference};
 use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
@@ -213,9 +214,19 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
         model.mut_graph().mut_value_info().clear();
     }
 
+    if prepare_opt.fold_constants || prepare_opt.infer_shapes {
+        model.mut_graph().replace_constant_ops_with_initializers()?;
+    }
+
+    if prepare_opt.fold_constants {
+        let opset_version = get_opset_version(&model)
+            .map_err(NNXError::OpsetError)?
+            .ok_or(NNXError::UnknownOpset)?;
+        fold_constants(model.mut_graph(), opset_version).await?;
+    }
+
     // Shape inference
     if prepare_opt.infer_shapes {
-        model.mut_graph().replace_constant_ops_with_initializers()?;
         model.mut_graph().infer_shapes()?;
     }
 

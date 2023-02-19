@@ -666,6 +666,18 @@ impl GpuStep {
                             bytemuck::cast_slice(&resize(int32_input)),
                         );
                     }
+                    InputTensor::U8(int_input) => {
+                        log::warn!("reading uint8 input as int32 (uint8 is not supported for calculation but can be used as input)");
+                        let int32_input = int_input
+                            .iter()
+                            .map(|i| i32::from_u8(*i).ok_or(GpuError::OutOfBoundsError))
+                            .collect::<Result<_, _>>()?;
+                        queue.write_buffer(
+                            input_buffer,
+                            0,
+                            bytemuck::cast_slice(&resize(int32_input)),
+                        );
+                    }
                 }
 
                 Ok(())

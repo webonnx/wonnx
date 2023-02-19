@@ -9,15 +9,15 @@ pub mod utils;
 #[macro_use]
 extern crate lazy_static;
 
-use compiler::CompileError;
-use gpu::GpuError;
+pub use compiler::CompileError;
+pub use gpu::GpuError;
 use ir::IrError;
 use optimizer::{Optimizer, OptimizerError};
 use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::path::Path;
 use std::result::Result;
-use utils::{DataTypeError, InputTensor, OutputTensor};
+use utils::{get_opset_version, DataTypeError, InputTensor, OpsetError, OutputTensor};
 
 use crate::gpu::GpuModel;
 use thiserror::Error;
@@ -68,12 +68,6 @@ pub enum SessionError {
     )]
     InvalidOutput(String),
 
-    #[error("more than one ONNX opset was specified: {0} and {1}")]
-    DuplicateOnnxOpset(i64, i64),
-
-    #[error("the model references an unknown opset: '{0}'")]
-    UnknownOpset(String),
-
     #[error("the model did not reference a specific version of the ONNX opset")]
     UnknownOnnxOpsetVersion,
 
@@ -85,6 +79,9 @@ pub enum SessionError {
 
     #[error("optimizer error: {0}")]
     OptimizerError(#[from] OptimizerError),
+
+    #[error("opset error: {0}")]
+    OpsetError(#[from] OpsetError),
 }
 
 /// Provides optional configuration when creating an inference [Session].
@@ -151,33 +148,10 @@ impl Session {
     ) -> Result<Session, SessionError> {
         let (device, queue) = resource::request_device_queue().await;
 
-        // Find the version of the ONNX operator set this model is using (this is useful because some operators' specifications change over time).
-        // Note, if any other op set than the ONNX operator set is referenced, we cannot run the model.
-        // See https://github.com/onnx/onnx/blob/master/docs/Versioning.md#operator-sets
-        let mut onnx_opset_version = None;
-        for opset_import in model.get_opset_import() {
-            match opset_import.get_domain() {
-                "" => {
-                    // This is a reference to the ONNX specification op set
-                    if let Some(onnx_version) = onnx_opset_version {
-                        if opset_import.get_version() != onnx_version {
-                            return Err(SessionError::DuplicateOnnxOpset(
-                                onnx_version,
-                                opset_import.get_version(),
-                            ));
-                        }
-                    } else {
-                        onnx_opset_version = Some(opset_import.get_version());
-                    }
-                }
-                some_other_opset => {
-                    return Err(SessionError::UnknownOpset(some_other_opset.to_string()));
-                }
-            }
-        }
-
         // Optimize and compile the model graph to a set of buffers and 'builders' which can basically run GPU shader code referencing these buffers
-        let onnx_opset_version = onnx_opset_version.ok_or(SessionError::UnknownOnnxOpsetVersion)?;
+        let onnx_opset_version = get_opset_version(&model)
+            .map_err(SessionError::OpsetError)?
+            .ok_or(SessionError::UnknownOnnxOpsetVersion)?;
 
         let mut optimizer = Optimizer::new();
         let ir = optimizer.optimize(ir::Node::from_model(&model, config.outputs.as_deref())?)?;

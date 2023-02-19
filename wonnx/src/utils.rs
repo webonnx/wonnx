@@ -4,6 +4,7 @@ use protobuf::RepeatedField;
 use serde::Serialize;
 
 use crate::onnx;
+use crate::onnx::ModelProto;
 use crate::onnx::OperatorSetIdProto;
 use crate::onnx::TensorProto;
 use crate::onnx::TensorProto_DataType;
@@ -117,10 +118,12 @@ impl Shape {
     }
 }
 
+#[derive(Clone)]
 pub enum InputTensor<'a> {
     F32(Cow<'a, [f32]>),
     I32(Cow<'a, [i32]>),
     I64(Cow<'a, [i64]>),
+    U8(Cow<'a, [u8]>),
 }
 
 impl<'a> From<&'a [f32]> for InputTensor<'a> {
@@ -138,6 +141,19 @@ impl<'a> From<&'a [i32]> for InputTensor<'a> {
 impl<'a> From<&'a [i64]> for InputTensor<'a> {
     fn from(a: &'a [i64]) -> Self {
         InputTensor::I64(Cow::Borrowed(a))
+    }
+}
+
+impl<'a> TryFrom<&'a TensorProto> for InputTensor<'a> {
+    type Error = DataTypeError;
+
+    fn try_from(value: &'a TensorProto) -> Result<Self, Self::Error> {
+        Ok(match ScalarType::from_i32(value.get_data_type())? {
+            ScalarType::F32 => InputTensor::F32(Cow::Borrowed(value.get_float_data())),
+            ScalarType::I64 => InputTensor::I64(Cow::Borrowed(value.get_int64_data())),
+            ScalarType::I32 => InputTensor::I32(Cow::Borrowed(value.get_int32_data())),
+            ScalarType::U8 => InputTensor::U8(Cow::Borrowed(value.get_raw_data())),
+        })
     }
 }
 
@@ -203,7 +219,33 @@ impl<'a> From<&InputTensor<'a>> for OutputTensor {
             InputTensor::F32(fs) => OutputTensor::F32(fs.to_vec()),
             InputTensor::I32(fs) => OutputTensor::I32(fs.to_vec()),
             InputTensor::I64(fs) => OutputTensor::I64(fs.to_vec()),
+            InputTensor::U8(fs) => OutputTensor::U8(fs.to_vec()),
         }
+    }
+}
+
+impl From<OutputTensor> for TensorProto {
+    fn from(value: OutputTensor) -> Self {
+        let mut tensor = TensorProto::new();
+        match value {
+            OutputTensor::F32(v) => {
+                tensor.set_data_type(ScalarType::F32.to_datatype().value());
+                tensor.set_float_data(v);
+            }
+            OutputTensor::I32(v) => {
+                tensor.set_data_type(ScalarType::I32.to_datatype().value());
+                tensor.set_int32_data(v);
+            }
+            OutputTensor::I64(v) => {
+                tensor.set_data_type(ScalarType::I64.to_datatype().value());
+                tensor.set_int64_data(v);
+            }
+            OutputTensor::U8(v) => {
+                tensor.set_data_type(ScalarType::U8.to_datatype().value());
+                tensor.set_raw_data(v);
+            }
+        }
+        tensor
     }
 }
 
@@ -669,6 +711,43 @@ impl From<onnx::AttributeProto> for String {
     fn from(value: onnx::AttributeProto) -> Self {
         from_utf8(value.get_s()).unwrap().to_string()
     }
+}
+
+#[derive(Error, Debug)]
+pub enum OpsetError {
+    #[error("more than one ONNX opset was specified: {0} and {1}")]
+    DuplicateOnnxOpset(i64, i64),
+
+    #[error("the model references an unknown opset: '{0}'")]
+    UnknownOpset(String),
+}
+
+pub fn get_opset_version(model: &ModelProto) -> Result<Option<i64>, OpsetError> {
+    // Find the version of the ONNX operator set this model is using (this is useful because some operators' specifications change over time).
+    // Note, if any other op set than the ONNX operator set is referenced, we cannot run the model.
+    // See https://github.com/onnx/onnx/blob/master/docs/Versioning.md#operator-sets
+    let mut onnx_opset_version = None;
+    for opset_import in model.get_opset_import() {
+        match opset_import.get_domain() {
+            "" => {
+                // This is a reference to the ONNX specification op set
+                if let Some(onnx_version) = onnx_opset_version {
+                    if opset_import.get_version() != onnx_version {
+                        return Err(OpsetError::DuplicateOnnxOpset(
+                            onnx_version,
+                            opset_import.get_version(),
+                        ));
+                    }
+                } else {
+                    onnx_opset_version = Some(opset_import.get_version());
+                }
+            }
+            some_other_opset => {
+                return Err(OpsetError::UnknownOpset(some_other_opset.to_string()));
+            }
+        }
+    }
+    Ok(onnx_opset_version)
 }
 
 #[cfg(test)]
