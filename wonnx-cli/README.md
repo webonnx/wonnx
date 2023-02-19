@@ -25,8 +25,13 @@ run a model. Currently the following heuristics are applied:
 
 ## Usage
 
-```sh
-$ nnx infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --labels ./data/models/squeeze-labels.txt --probabilities
+### Inference
+
+````sh
+nnx infer ./data/models/opt-squeeze.onnx -i data=./data/images/pelican.jpeg --labels ./data/models/squeeze-labels.txt --probabilities
+````
+
+````
 n01608432 kite: 21.820244
 n02051845 pelican: 21.112095
 n02018795 bustard: 20.359694
@@ -37,62 +42,143 @@ n02011460 bittern: 18.90648
 n02033041 dowitcher: 18.708323
 n01829413 hornbill: 18.595457
 n01616318 vulture: 17.508785
+````
 
-$ nnx infer ./data/models/opt-mnist.onnx -i Input3=./data/images/7.jpg
+````bash
+nnx infer ./data/models/opt-mnist.onnx -i Input3=./data/images/7.jpg
+````
+
+````
 [-1.2942507, 0.5192305, 8.655695, 9.474595, -13.768464, -5.8907413, -23.467274, 28.252314, -6.7598896, 3.9513395]
+````
 
-$ nnx infer ./data/models/opt-mnist.onnx -i Input3=./data/images/7.jpg --labels ./data/models/mnist-labels.txt --top=1
+````bash
+nnx infer ./data/models/opt-mnist.onnx -i Input3=./data/images/7.jpg --labels ./data/models/mnist-labels.txt --top=1
+````
+
+````
 Seven
+````
 
+### Get basic model info 
+
+```bash
 $ nnx info ./data/models/opt-mnist.onnx
-+------------------+---------------------------------------------------+
-| Model version    | 1                                                 |
-+------------------+---------------------------------------------------+
-| IR version       | 3                                                 |
-+------------------+---------------------------------------------------+
-| Producer name    | CNTK                                              |
-+------------------+---------------------------------------------------+
-| Producer version | 2.5.1                                             |
-+------------------+---------------------------------------------------+
-| Opsets           | 8                                                 |
-+------------------+---------------------------------------------------+
-| Inputs           | +--------+-------------+-----------+------+       |
-|                  | | Name   | Description | Shape     | Type |       |
-|                  | +--------+-------------+-----------+------+       |
-|                  | | Input3 |             | 1x1x28x28 | f32  |       |
-|                  | +--------+-------------+-----------+------+       |
-+------------------+---------------------------------------------------+
-| Outputs          | +------------------+-------------+-------+------+ |
-|                  | | Name             | Description | Shape | Type | |
-|                  | +------------------+-------------+-------+------+ |
-|                  | | Plus214_Output_0 |             | 1x10  | f32  | |
-|                  | +------------------+-------------+-------+------+ |
-+------------------+---------------------------------------------------+
-| Ops used         | +---------+---------------------+                 |
-|                  | | Op      | Attributes          |                 |
-|                  | +---------+---------------------+                 |
-|                  | | Reshape |                     |                 |
-|                  | +---------+---------------------+                 |
-|                  | | Gemm    | transA=0            |                 |
-|                  | |         | transB=0            |                 |
-|                  | |         | beta=1              |                 |
-|                  | |         | alpha=1             |                 |
-|                  | +---------+---------------------+                 |
-|                  | | Relu    |                     |                 |
-|                  | +---------+---------------------+                 |
-|                  | | Conv    | auto_pad=SAME_UPPER |                 |
-|                  | |         | group=1             |                 |
-|                  | |         | strides=<INTS>      |                 |
-|                  | |         | dilations=<INTS>    |                 |
-|                  | |         | kernel_shape=<INTS> |                 |
-|                  | +---------+---------------------+                 |
-|                  | | MaxPool | strides=<INTS>      |                 |
-|                  | |         | kernel_shape=<INTS> |                 |
-|                  | |         | auto_pad=NOTSET     |                 |
-|                  | |         | pads=<INTS>         |                 |
-|                  | +---------+---------------------+                 |
-+------------------+---------------------------------------------------+
-```
+````
+
+````
++------------------+----------------------------------------------------+
+| Model version    | 1                                                  |
++------------------+----------------------------------------------------+
+| IR version       | 3                                                  |
++------------------+----------------------------------------------------+
+| Producer name    | CNTK                                               |
++------------------+----------------------------------------------------+
+| Producer version | 2.5.1                                              |
++------------------+----------------------------------------------------+
+| Opsets           | 8                                                  |
++------------------+----------------------------------------------------+
+| Inputs           | +--------+-------------+-----------------+------+  |
+|                  | | Name   | Description | Shape           | Type |  |
+|                  | +--------+-------------+-----------------+------+  |
+|                  | | Input3 |             | 1 x 1 x 28 x 28 | f32  |  |
+|                  | +--------+-------------+-----------------+------+  |
++------------------+----------------------------------------------------+
+| Outputs          | +------------------+-------------+--------+------+ |
+|                  | | Name             | Description | Shape  | Type | |
+|                  | +------------------+-------------+--------+------+ |
+|                  | | Plus214_Output_0 |             | 1 x 10 | f32  | |
+|                  | +------------------+-------------+--------+------+ |
++------------------+----------------------------------------------------+
+| Ops used         | +---------+---------------------+                  |
+|                  | | Op      | Attributes          |                  |
+|                  | +---------+---------------------+                  |
+|                  | | Conv    | auto_pad=SAME_UPPER |                  |
+|                  | |         | dilations=<INTS>    |                  |
+|                  | |         | group=1             |                  |
+|                  | |         | kernel_shape=<INTS> |                  |
+|                  | |         | strides=<INTS>      |                  |
+|                  | +---------+---------------------+                  |
+|                  | | Gemm    | alpha=1             |                  |
+|                  | |         | beta=1              |                  |
+|                  | |         | transA=0            |                  |
+|                  | |         | transB=0            |                  |
+|                  | +---------+---------------------+                  |
+|                  | | MaxPool | auto_pad=NOTSET     |                  |
+|                  | |         | kernel_shape=<INTS> |                  |
+|                  | |         | pads=<INTS>         |                  |
+|                  | |         | strides=<INTS>      |                  |
+|                  | +---------+---------------------+                  |
+|                  | | Relu    |                     |                  |
+|                  | +---------+---------------------+                  |
+|                  | | Reshape |                     |                  |
+|                  | +---------+---------------------+                  |
++------------------+----------------------------------------------------+
+| Memory usage     | +--------------+----------+                        |
+|                  | | Inputs       |  26.5 KB |                        |
+|                  | +--------------+----------+                        |
+|                  | | Outputs      |     40 B |                        |
+|                  | +--------------+----------+                        |
+|                  | | Intermediate |  81.6 KB |                        |
+|                  | +--------------+----------+                        |
+|                  | | Weights      |  23.4 KB |                        |
+|                  | +--------------+----------+                        |
+|                  | | Total        | 131.6 KB |                        |
+|                  | +--------------+----------+                        |
++------------------+----------------------------------------------------+
+````
+
+### Print a trace from a particular output to input
+
+````bash
+nnx trace ./data/models/opt-mnist.onnx Plus214_Output_0
+````
+
+````
++ Plus214_Output_0: output #0 of node #7 '' (Gemm)
+| + Pooling160_Output_0_reshape0: output #0 of node #6 'Times212_reshape0' (Reshape)
+| | + Pooling160_Output_0: output #0 of node #5 'Pooling160' (MaxPool)
+| | | + ReLU114_Output_0: output #0 of node #4 'ReLU114' (Relu)
+| | | | + Convolution110_Output_0: output #0 of node #3 'Convolution110' (Conv)
+| | | | | + Pooling66_Output_0: output #0 of node #2 'Pooling66' (MaxPool)
+| | | | | | + ReLU32_Output_0: output #0 of node #1 'ReLU32' (Relu)
+| | | | | | | + Convolution28_Output_0: output #0 of node #0 'Convolution28' (Conv)
+| | | | | | | | + Input3: input
+| | | | | | | | + Parameter5: initializer
+| | | | | | | | + 23: initializer
+| | | | | + Parameter87: initializer
+| | | | | + 24: initializer
+| | + Pooling160_Output_0_reshape0_shape: initializer
+| + Parameter193_reshape1: initializer
+| + Parameter194: initializer
+````
+
+### Shape inference
+
+````bash
+RUST_LOG=info nnx prepare ./data/models/opt-mnist-clear.onnx ./data/models/opt-mnist-inferred.onnx --discard-shapes
+````
+
+````
+[2023-02-11T17:48:50Z INFO  nnx] writing model to './data/models/opt-mnist-inferred.onnx'
+[2023-02-11T17:48:50Z INFO  nnx] model written to file
+````
+
+````bash
+RUST_LOG=info nnx prepare ./data/models/opt-mnist-clear.onnx ./data/models/opt-mnist-inferred.onnx --infer-shapes  
+````
+
+````
+[2023-02-11T17:48:56Z INFO  wonnx_preprocessing::shape_inference] node Convolution28 inferred shape: 1x8x28x28:f32
+[2023-02-11T17:48:56Z INFO  wonnx_preprocessing::shape_inference] node ReLU32 inferred shape: 1x8x28x28:f32
+[2023-02-11T17:48:56Z INFO  wonnx_preprocessing::shape_inference] node Pooling66 inferred shape: 1x8x14x14:f32
+[2023-02-11T17:48:56Z INFO  wonnx_preprocessing::shape_inference] node Convolution110 inferred shape: 1x16x14x14:f32
+[2023-02-11T17:48:56Z INFO  wonnx_preprocessing::shape_inference] node ReLU114 inferred shape: 1x16x14x14:f32
+[2023-02-11T17:48:56Z INFO  wonnx_preprocessing::shape_inference] node Pooling160 inferred shape: 1x16x4x4:f32
+[2023-02-11T17:48:56Z INFO  wonnx_preprocessing::shape_inference] node Times212_reshape0 inferred shape: 1x256:f32
+[2023-02-11T17:48:56Z INFO  nnx] writing model to './data/models/opt-mnist-inferred.onnx'
+[2023-02-11T17:48:56Z INFO  nnx] model written to file
+````
 
 - Replace `nnx` with `cargo run --release --` to run development version
 - Prepend `RUST_LOG=wonnx-cli=info` to see useful logging from the CLI tool, `RUST_LOG=wonnx=info` to see logging from WONNX.

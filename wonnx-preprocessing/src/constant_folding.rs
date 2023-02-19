@@ -118,10 +118,12 @@ pub async fn fold_constants(
         graph.node.remove(*index);
     }
 
-    log::info!(
-        "The following nodes can likely be folded, but currently aren't due to missing support: {}",
-        foldable_nodes.join(", ")
-    );
+    if !foldable_nodes.is_empty() {
+        log::info!(
+            "The following nodes can likely be folded, but currently aren't due to missing support: {}",
+            foldable_nodes.join(", ")
+        );
+    }
 
     Ok(())
 }

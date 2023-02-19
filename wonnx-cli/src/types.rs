@@ -25,6 +25,20 @@ pub struct InfoOptions {
 }
 
 #[derive(Debug, StructOpt)]
+pub struct TraceOptions {
+    /// Model file (.onnx)
+    #[structopt(parse(from_os_str))]
+    pub model: PathBuf,
+
+    /// Output to trace
+    pub output_name: String,
+
+    /// Maximum depth to show
+    #[structopt(long = "max-depth")]
+    pub maximum_depth: Option<usize>,
+}
+
+#[derive(Debug, StructOpt)]
 pub enum Backend {
     Gpu,
     #[cfg(feature = "cpu")]
@@ -251,6 +265,9 @@ pub enum Command {
 
     /// Return a GraphViz direct graph of the nodes in the model
     Graph(InfoOptions),
+
+    /// Prints the dependencies of a particular output
+    Trace(TraceOptions),
 
     /// Prepare a model by applying user-specified transformations. By default no transformations are applied and the input model is simply written to the output
     Prepare(PrepareOptions),

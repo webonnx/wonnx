@@ -5,6 +5,7 @@ use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::fs::File;
 use structopt::StructOpt;
+use trace::trace_command;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::{get_opset_version, OutputTensor, Shape};
 use wonnx_preprocessing::constant_folding::fold_constants;
@@ -14,6 +15,7 @@ use wonnx_preprocessing::Tensor;
 
 mod gpu;
 mod info;
+mod trace;
 mod types;
 mod utils;
 
@@ -65,6 +67,22 @@ async fn run() -> Result<(), NNXError> {
             )
             .expect("Could not deserialize the model");
             print_graph(&model);
+            Ok(())
+        }
+
+        Command::Trace(trace_opt) => {
+            // Load the model
+            let model_path = trace_opt
+                .model
+                .clone()
+                .into_os_string()
+                .into_string()
+                .expect("invalid path");
+            let model = ModelProto::parse_from_bytes(
+                &std::fs::read(model_path).expect("ONNX Model path not found."),
+            )
+            .expect("Could not deserialize the model");
+            trace_command(&model, &trace_opt);
             Ok(())
         }
 
