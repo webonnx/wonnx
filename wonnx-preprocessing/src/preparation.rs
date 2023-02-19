@@ -209,6 +209,27 @@ fn infer_forward(
         node.get_output().len(),
     ) {
         ("Identity" | "Sqrt" | "Relu", 1, 1) => Ok(vec![input_shapes[0].clone()]),
+
+        ("Cast", 1, 1) => {
+            let to_value: i64 = node
+                .get_attribute_value("to", None)
+                .map_err(ShapeInferenceError::MissingAttribute)?;
+            let to_data_type = ScalarType::from_i32(to_value as i32).map_err(|_| {
+                ShapeInferenceError::InvalidNode(
+                    node.get_name().to_string(),
+                    format!(
+                        "invalid value for to attribute ({}) for Cast operator",
+                        to_value
+                    ),
+                )
+            })?;
+
+            let mut output_shape = input_shapes[0].clone();
+            output_shape.data_type = to_data_type;
+
+            Ok(vec![output_shape])
+        }
+
         ("Gather", 2, 1) => {
             // https://github.com/onnx/onnx/blob/ceaeafa4cd2156c69dd9699bbdd2aa7d39e7c74c/onnx/defs/tensor/defs.cc#L1601
             let r = input_shapes[0].rank() as i64;
@@ -304,7 +325,13 @@ fn infer_forward(
             } else {
                 Err(ShapeInferenceError::InvalidNode(
                     node.get_name().to_string(),
-                    "two inputs must be broadcastable".to_string(),
+                    format!(
+                        "two inputs (left {} shape: {}, right {} shape: {}) must be broadcastable",
+                        node.get_input()[0],
+                        node.get_input()[1],
+                        input_shapes[0],
+                        input_shapes[1]
+                    ),
                 ))
             }
         }
@@ -587,9 +614,73 @@ fn infer_forward(
             Ok((0..num_outputs).map(|_| shape.clone()).collect())
         }
 
+        ("Unsqueeze", num_inputs @ 1..=2, 1) => {
+            let axes: Vec<i64> = if num_inputs == 2 {
+                let shape_tensor_name = &node.get_input()[1];
+                if let Some(shape_tensor) = initializers.get(shape_tensor_name) {
+                    // Get the tensor's contents
+                    shape_tensor.get_int64_data().to_vec()
+                } else {
+                    return Err(ShapeInferenceError::Unsupported(
+                        "Unsqueeze with dynamic axis inputs".to_string(),
+                    ));
+                }
+            } else {
+                node.get_attribute_value("axes", None)
+                    .map_err(ShapeInferenceError::MissingAttribute)?
+            };
+
+            let output_rank = input_shapes[0].rank() + axes.len();
+            let mut input_shape: Vec<i64> =
+                input_shapes[0].dims.iter().map(|x| *x as i64).collect();
+            for i in axes {
+                let index = if i < 0 {
+                    ((output_rank as i64) + i) as usize
+                } else {
+                    i as usize
+                };
+                input_shape.insert(index, 1);
+            }
+
+            Ok(vec![Shape::from(input_shapes[0].data_type, &input_shape)])
+        }
+
+        ("Squeeze", num_inputs @ 1..=2, 1) => {
+            let has_axes = num_inputs == 2;
+            let axes: Vec<i64> = if has_axes {
+                let shape_tensor_name = &node.get_input()[1];
+                if let Some(shape_tensor) = initializers.get(shape_tensor_name) {
+                    // Get the tensor's contents
+                    shape_tensor.get_int64_data().to_vec()
+                } else {
+                    return Err(ShapeInferenceError::Unsupported(
+                        "Unsqueeze with dynamic axis inputs".to_string(),
+                    ));
+                }
+            } else {
+                vec![]
+            };
+
+            let output_shape: Vec<i64> = input_shapes[0]
+                .dims
+                .iter()
+                .enumerate()
+                .flat_map(|(idx, dim)| {
+                    if (has_axes && axes.contains(&(idx as i64))) || (!has_axes && *dim == 1) {
+                        vec![]
+                    } else {
+                        vec![*dim as i64]
+                    }
+                })
+                .collect();
+
+            Ok(vec![Shape::from(input_shapes[0].data_type, &output_shape)])
+        }
+
         (
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
-            | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat",
+            | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
+            | "Unsqueeze" | "Cast" | "Squeeze",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
