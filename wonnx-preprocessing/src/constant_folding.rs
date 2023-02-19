@@ -8,7 +8,10 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, ValueInfoProto,
     },
-    utils::{model_with_opset, DataTypeError, InputTensor, NodeAttributes, OutputTensor, Shape},
+    utils::{
+        model_with_opset, DataTypeError, InputTensor, NodeAttributes, OutputTensor, ScalarType,
+        Shape,
+    },
     CompileError, GpuError, Session, SessionError,
 };
 
@@ -143,6 +146,59 @@ async fn calculate_constant_node_outputs<'a>(
         "Identity" | "Unsqueeze" | "Squeeze" | "Reshape" => {
             Some(inputs.iter().map(OutputTensor::from).collect())
         }
+        "Cast" => {
+            let cast_to_type =
+                ScalarType::from_i32(node.get_attribute_value::<i64>("to", None).map_err(|_| {
+                    ConstantFoldingError::InvalidNode("to attribute missing for Cast ".to_string())
+                })? as i32)
+                .map_err(ConstantFoldingError::UnsupportedDataType)?;
+            let input_tensor = &inputs[0];
+
+            let output_tensor = match (input_tensor, cast_to_type) {
+                (InputTensor::F32(v), ScalarType::F32) => OutputTensor::F32(v.to_vec()),
+                (InputTensor::F32(v), ScalarType::I64) => {
+                    OutputTensor::I64(v.iter().map(|x| *x as i64).collect())
+                }
+                (InputTensor::F32(v), ScalarType::I32) => {
+                    OutputTensor::I32(v.iter().map(|x| *x as i32).collect())
+                }
+                (InputTensor::F32(v), ScalarType::U8) => {
+                    OutputTensor::U8(v.iter().map(|x| *x as u8).collect())
+                }
+                (InputTensor::I32(v), ScalarType::F32) => {
+                    OutputTensor::F32(v.iter().map(|x| *x as f32).collect())
+                }
+                (InputTensor::I32(v), ScalarType::I64) => {
+                    OutputTensor::I64(v.iter().map(|x| *x as i64).collect())
+                }
+                (InputTensor::I32(v), ScalarType::I32) => OutputTensor::I32(v.to_vec()),
+                (InputTensor::I32(v), ScalarType::U8) => {
+                    OutputTensor::U8(v.iter().map(|x| *x as u8).collect())
+                }
+                (InputTensor::I64(v), ScalarType::F32) => {
+                    OutputTensor::F32(v.iter().map(|x| *x as f32).collect())
+                }
+                (InputTensor::I64(v), ScalarType::I64) => OutputTensor::I64(v.to_vec()),
+                (InputTensor::I64(v), ScalarType::I32) => {
+                    OutputTensor::I32(v.iter().map(|x| *x as i32).collect())
+                }
+                (InputTensor::I64(v), ScalarType::U8) => {
+                    OutputTensor::U8(v.iter().map(|x| *x as u8).collect())
+                }
+                (InputTensor::U8(v), ScalarType::F32) => {
+                    OutputTensor::F32(v.iter().map(|x| *x as f32).collect())
+                }
+                (InputTensor::U8(v), ScalarType::I64) => {
+                    OutputTensor::I64(v.iter().map(|x| *x as i64).collect())
+                }
+                (InputTensor::U8(v), ScalarType::I32) => {
+                    OutputTensor::I32(v.iter().map(|x| *x as i32).collect())
+                }
+                (InputTensor::U8(v), ScalarType::U8) => OutputTensor::U8(v.to_vec()),
+            };
+
+            Some(vec![output_tensor])
+        }
         "Shape" => {
             let input_shape: Vec<i64> = shapes[&node.input[0]]
                 .dims
@@ -162,8 +218,6 @@ async fn calculate_constant_node_outputs<'a>(
             if start > end {
                 return Err(ConstantFoldingError::InvalidNode(format!("end attribute value ({}) for Shape node should be higher than start attribute ({})", end, start)));
             }
-
-            dbg!(&input_shape, start, end);
 
             Some(vec![OutputTensor::I64(
                 (input_shape[(start as usize)..=(end as usize)]).into(),
