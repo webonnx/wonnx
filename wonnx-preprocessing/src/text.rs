@@ -191,6 +191,15 @@ impl EncodedText {
             .map(|o| o.1)
             .max()
             .unwrap();
+        assert!(min_offset <= max_offset);
+        if max_offset > chars.len() - 1 {
+            return Answer {
+                text: "".to_string(),
+                tokens: vec![],
+                score: 0.0,
+            };
+        }
+
         let answer = chars[min_offset..max_offset].iter().collect::<String>();
 
         Answer {
