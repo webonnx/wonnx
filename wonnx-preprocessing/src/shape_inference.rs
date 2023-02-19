@@ -35,6 +35,7 @@ fn div_ceil(num: i64, div: i64) -> i64 {
     num / div + (num % div != 0) as i64
 }
 
+/// Retrieve the value of the initializer with the given name as a vector if i64 values.
 fn static_initializer_value_i64<'a>(
     initializers: &HashMap<String, &'a TensorProto>,
     name: &str,
@@ -81,7 +82,7 @@ fn apply_dynamic_dimensions_value(
     }
 }
 
-/// Retrieve all fully known value shapes
+/// Retrieve all fully known value shapes from a graph
 pub(crate) fn dimensions_infos(
     graph_proto: &GraphProto,
 ) -> Result<HashMap<String, Shape>, DataTypeError> {

@@ -422,4 +422,16 @@ nnx prepare model.onnx model-prepared.onnx --set batch_size=1 --set sequence_len
 ````
 
 To perform shape inference programmatically, use `apply_dynamic_dimensions` and `ShapeInference::infer_shapes` from the 
-`wonnx_preprocessing::preparation` module.
+`wonnx_preprocessing::shape_inference` module.
+
+### Constant folding
+
+Some models contain subgraphs whose output can be determined statically, as they do not depend on the specific inputs provided
+during inference. WONNX can replace such constant intermediate values with static values ('constant folding'). This is
+supported in the following cases:
+
+* Output of nodes of the `Constant` op type
+* Output of nodes of which all inputs are constant (possibly after folding), *and* for which the operator is supported by WONNX.
+
+To perform constant folding from the CLI, pass the `--fold-constants` argument. To perform constant folding programmatically,
+use `wonnx_preprocessing::constant_folding::fold_constants`.
