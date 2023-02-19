@@ -134,8 +134,24 @@ pub(crate) fn dimensions_infos(
 
     for info in graph_proto.get_initializer() {
         if let Ok(data_type) = ScalarType::from_i32(info.get_data_type()) {
-            let shape = Shape::from(data_type, info.get_dims());
-            shapes_info.insert(info.get_name().to_string(), shape);
+            let mut shape = Shape::from(data_type, info.get_dims());
+            if shape.rank() == 0 {
+                log::warn!(
+                    "shape for '{}' initializer has zero rank, fixing to be [1]",
+                    info.get_name().to_string()
+                );
+                shape.dims = vec![1];
+                log::debug!("initializer: {:?}", info);
+            }
+            if shapes_info
+                .insert(info.get_name().to_string(), shape)
+                .is_some()
+            {
+                log::warn!(
+                    "already shape information for '{}', replacing from initializer",
+                    info.get_name()
+                );
+            }
         }
     }
 
