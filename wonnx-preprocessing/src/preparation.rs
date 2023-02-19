@@ -274,14 +274,16 @@ pub fn infer_forward(
         }
 
         ("Sub" | "Pow" | "Add" | "Div" | "Mul", 2, 1) => {
-            let Some(output_shape) = Shape::multi_broadcast(&[input_shapes[0].clone(), input_shapes[1].clone()]) else {
-				return Err(ShapeInferenceError::InvalidNode(
+            if let Some(output_shape) =
+                Shape::multi_broadcast(&[input_shapes[0].clone(), input_shapes[1].clone()])
+            {
+                Ok(vec![output_shape])
+            } else {
+                Err(ShapeInferenceError::InvalidNode(
                     node.get_name().to_string(),
                     "two inputs must be broadcastable".to_string(),
-                ));
-			};
-
-            Ok(vec![output_shape])
+                ))
+            }
         }
 
         ("Constant", 0, 1) => {
