@@ -271,6 +271,17 @@ fn infer_forward(
             )]);
         }
 
+        ("Shape", 1, 1) => {
+            let rank = input_shapes[0].rank() as i64;
+            let start: i64 = node.get_attribute_value("start", Some(0)).unwrap();
+            let end: i64 = node.get_attribute_value("end", Some(rank)).unwrap();
+
+            Ok(vec![Shape::from(
+                ScalarType::I64,
+                &[rank.clamp(start, end)],
+            )])
+        }
+
         ("ReduceMean", 1, 1) => {
             // https://github.com/onnx/onnx/blob/main/docs/Changelog.md#reducemean-18
             let noop_with_empty_axes = node
