@@ -234,7 +234,7 @@ impl<'model> Node<'model> {
                 node_definitions_by_output
                     .insert(input.get_name().to_string(), NodeDefinition::Input(input));
             } else {
-                log::info!(
+                log::debug!(
                     "Skipping input definition {}: already defined",
                     input.get_name()
                 );

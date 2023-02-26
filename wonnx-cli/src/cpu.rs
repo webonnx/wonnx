@@ -101,7 +101,7 @@ impl Inferer for CPUInferer {
         }
 
         let result = self.model.run(cpu_inputs_ordered)?;
-        log::info!("cpu result: {:?}", result);
+        log::debug!("cpu result: {:?}", result);
 
         let mut output_tensors = HashMap::<String, OutputTensor>::new();
 
@@ -115,7 +115,7 @@ impl Inferer for CPUInferer {
                     .enumerate()
                     .find(|x| &self.model.model.outlet_labels[x.1] == output_name)
                 {
-                    log::info!(
+                    log::debug!(
                         "output node with name '{}' has idx {:?} (and tract id {}, slot {}, name '{}')",
                         output_name,
                         idx.0,

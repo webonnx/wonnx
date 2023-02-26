@@ -150,7 +150,7 @@ impl GpuModel {
         }
 
         // Upload the data (for initializers etc.) by submitting an empty command queue
-        log::info!("submit initializer buffers");
+        log::debug!("submit initializer buffers");
         let encoder = gpu_model
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -240,7 +240,7 @@ impl GpuModel {
 
         // Sequence self (if by now we haven't yet)
         if let std::collections::hash_map::Entry::Vacant(e) = node_outputs.entry(node_identifier) {
-            log::info!(
+            log::debug!(
                 "sequence {:?} (outputs readable={:?})",
                 node.definition,
                 outputs_readable
@@ -298,7 +298,7 @@ impl GpuModel {
                     }
 
                     let input_shape = input_def.get_shape()?;
-                    log::info!(
+                    log::debug!(
                         "creating input buffer for {} shape {} size {}",
                         input_def.get_name(),
                         input_shape,
@@ -348,7 +348,7 @@ impl GpuModel {
         for step in &self.steps {
             step.encode(&self.queue, &mut encoder, inference_inputs)?;
         }
-        log::info!("submit inference steps");
+        log::debug!("submit inference steps");
         self.queue.submit(Some(encoder.finish()));
         log::info!("inference completed");
         self.read_outputs(inference_inputs).await
@@ -388,7 +388,7 @@ impl TensorProtoExtra for TensorProto {
     fn buffer(&self, device: &wgpu::Device, readable: bool) -> Result<Buffer, GpuError> {
         let scalar_type = ScalarType::from_i32(self.get_data_type())?;
         let input_shape = Shape::from(scalar_type, self.get_dims());
-        log::info!(
+        log::debug!(
             "creating buffer for tensor {} shape {}",
             self.get_name(),
             input_shape
@@ -497,7 +497,7 @@ impl<'model> OperatorDefinition<'model> {
             .enumerate()
             .map(|(output_index, output_name)| {
                 let value_shape = &self.output_shapes[output_index];
-                log::info!(
+                log::debug!(
                     "Creating op output buffer for output #{} ({}) of {} shaped {}",
                     output_index,
                     output_name,
@@ -625,7 +625,7 @@ impl GpuStep {
                 let input_data = inputs
                     .get(input_name)
                     .ok_or_else(|| GpuError::InferenceInputMissing(input_name.to_string()))?;
-                log::info!("- write input data for {}", input_name);
+                log::debug!("write input data for {}", input_name);
 
                 match input_data {
                     InputTensor::F32(float_input) => {
@@ -694,11 +694,9 @@ impl GpuTensor {
             let (sender, receiver) =
                 futures::channel::oneshot::channel::<Result<OutputTensor, GpuError>>();
 
-            log::info!("downloadbuffer read_buffer call");
-
             wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
                 // Called on download completed
-                log::info!(
+                log::debug!(
                     "downloadbuffer read_buffer callback res={:?}",
                     buffer.is_ok()
                 );
