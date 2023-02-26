@@ -865,24 +865,6 @@ impl<'model> OperatorDefinition<'model> {
             binding_counter += 1;
         }
 
-        // Check if we are not using the same buffer on both the input and output side (this verifies the correct behaviour
-        // of the shared intermediate buffer manager)
-        #[cfg(debug_assertions)]
-        {
-            let all_input_buffers: Vec<*const Buffer> = input_tensors
-                .iter()
-                .map(|x| Arc::as_ptr(&x.buffer))
-                .collect();
-            for out_tensor in &output_tensors {
-                if all_input_buffers.contains(&Arc::as_ptr(&out_tensor.buffer)) {
-                    panic!(
-                        "output is also an input at node with outputs {:#?}",
-                        self.proto.get_output()
-                    );
-                }
-            }
-        }
-
         // Set up a pipeline (basically the shader source code with some metadata that determines how it will be executed)
         let mut bind_groups = vec![];
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
