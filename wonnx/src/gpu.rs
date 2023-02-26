@@ -306,7 +306,11 @@ impl GpuModel {
 
         let mut buffer_manager = BufferManager::new();
 
-        GpuModel::pre_sequence(root.clone(), &mut readable_nodes, &mut buffer_manager)?;
+        let mut nodes = vec![];
+        let mut nodes_seen = HashSet::new();
+        GpuModel::topological_sort(root.clone(), &mut nodes_seen, &mut nodes);
+        drop(nodes_seen);
+        GpuModel::pre_sequence(&nodes, &mut readable_nodes, &mut buffer_manager)?;
 
         #[cfg(debug_assertions)]
         {
@@ -367,6 +371,7 @@ impl GpuModel {
         Ok(gpu_model)
     }
 
+    /// Traverse the graph and sort nodes in the order of execution (topological sort)
     fn topological_sort<'model>(
         node: Arc<Node<'model>>,
         nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
@@ -393,15 +398,10 @@ impl GpuModel {
     /// for intermediate values (which may be re-used). For this reason, a 'breadth first'-search is performed (whereas
     /// `GpuModel::sequence` will perform a depth-first search).
     fn pre_sequence<'model>(
-        node: Arc<Node<'model>>,
+        nodes: &[Arc<Node<'model>>],
         nodes_readable: &mut HashSet<NodeIdentifier<'model>>,
         buffer_manager: &mut BufferManager<'model>,
     ) -> Result<(), GpuError> {
-        // Topologically sort nodes
-        let mut nodes_seen = HashSet::new();
-        let mut nodes = vec![];
-        GpuModel::topological_sort(node, &mut nodes_seen, &mut nodes);
-
         for node in nodes.iter().rev() {
             let node_identifier = node.identifier();
             let mut outputs_readable = nodes_readable.contains(&node_identifier);
