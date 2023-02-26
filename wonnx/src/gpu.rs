@@ -1,6 +1,7 @@
 //! Manages execution of shader code and buffer allocation on the GPU
 use std::{
     borrow::Cow,
+    cell::RefCell,
     collections::{HashMap, HashSet},
     convert::TryInto,
     sync::Arc,
@@ -9,7 +10,7 @@ use std::{
 use bytemuck::NoUninit;
 use num::FromPrimitive;
 use thiserror::Error;
-use wgpu::{Buffer, BufferAsyncError, BufferUsages, CommandEncoder};
+use wgpu::{Buffer, BufferAsyncError, BufferUsages, CommandEncoder, Device};
 
 use crate::{
     compiler::{compile, CompileError, CompiledNode},
@@ -89,6 +90,187 @@ enum InferenceOutput {
     Tensor(GpuTensor),
 }
 
+/// The buffer manager tracks the use of buffers and manages recycling (sharing) of buffers for intermediate values that
+/// are passed from node to node. It can be used to assign a `LeasableBuffer` to each node output in the graph. This
+/// works as follows: in `GpuModel::pre_sequence`, the model is traversed starting from the output node. As soon as a node
+/// needs to use the output from another node (that executes earlier in the graph), the `pre_sequence` function calls `lease`
+/// on the buffer manager. This indicates the end of the 'lifetime' of the buffer for that intermediate buffer (if another
+/// node also uses the same node output, a second call to `lease` will be made, but this will have no effect as the lifetime
+/// cannot be shortened). When the node that actually produces the intermediate value is encountered, `release` is called
+/// on the buffer manager, indicating that the buffer is now free to be re-used for nodes that execute before this node.
+/// When assigning buffers, the buffer manager takes care to assign a buffer of a matching size whenever possible.
+struct BufferManager<'a> {
+    assignments: HashMap<Output<'a>, Arc<RefCell<LeaseableBuffer>>>,
+    free: Vec<Arc<RefCell<LeaseableBuffer>>>,
+
+    /// Counter for assigning buffer IDs (only available in debug)
+    #[cfg(debug_assertions)]
+    buffer_id_counter: usize,
+
+    /// The total size of individual buffer requests (only tracked in debug builds)
+    #[cfg(debug_assertions)]
+    total_unshared_bytes: usize,
+}
+
+type Output<'model> = (NodeIdentifier<'model>, usize);
+
+/// A `LeaseableBuffer` is a buffer that may be re-used multiple times during graph execution. Each time a buffer of a
+/// different size may be needed; the shared buffer takes the largest size requested.
+#[derive(Debug)]
+struct LeaseableBuffer {
+    #[cfg(debug_assertions)]
+    id: usize,
+    largest_size: usize,
+    buffer: Option<Arc<Buffer>>,
+}
+
+impl LeaseableBuffer {
+    fn allocated_on(&mut self, device: &Device) -> Arc<Buffer> {
+        match self.buffer {
+            Some(ref b) => {
+                // TODO check buffer belongs to the same device, otherwise panic
+                b.clone()
+            }
+            None => {
+                log::debug!("allocating shared intermediate buffer {self:?}");
+
+                #[cfg(debug_assertions)]
+                let name = format!("Shared_{}", self.id);
+
+                #[cfg(not(debug_assertions))]
+                let name = String::from("shared_intermediate");
+
+                let b = Arc::new(resource::buffer(
+                    device,
+                    self.largest_size,
+                    &name,
+                    BufferUsages::STORAGE,
+                ));
+                self.buffer = Some(b.clone());
+                b
+            }
+        }
+    }
+}
+
+impl<'a> BufferManager<'a> {
+    fn new() -> BufferManager<'a> {
+        BufferManager {
+            #[cfg(debug_assertions)]
+            buffer_id_counter: 0,
+            assignments: HashMap::new(),
+            free: vec![],
+
+            #[cfg(debug_assertions)]
+            total_unshared_bytes: 0,
+        }
+    }
+
+    /// Tells the buffer manager that the node producing a value for a certain shared buffer has been encountered. Hence
+    /// nodes executing before it may re-use the buffer as long as it is unused again when this node executes.
+    fn release(
+        &mut self,
+        node_identifier: NodeIdentifier<'a>,
+        output_index: usize,
+        output_size_bytes: usize,
+    ) {
+        if let Some(buffer) = self
+            .assignments
+            .get(&(node_identifier.clone(), output_index))
+        {
+            let mut buffer_raw = buffer.borrow_mut();
+            log::debug!("shared intermediate buffer: free {buffer_raw:?} size={output_size_bytes}");
+
+            // Only track statistics while debugging
+            #[cfg(debug_assertions)]
+            {
+                self.total_unshared_bytes += output_size_bytes;
+            }
+
+            buffer_raw.largest_size = buffer_raw.largest_size.max(output_size_bytes);
+            drop(buffer_raw);
+            self.free.push(buffer.clone());
+        } else {
+            log::debug!("shared intermediate buffer: unused: {node_identifier:?}@{output_index}");
+        }
+    }
+
+    /// Allocates a new leaseable shared buffer
+    fn new_buffer(&mut self) -> Arc<RefCell<LeaseableBuffer>> {
+        #[cfg(debug_assertions)]
+        let id = {
+            let x = self.buffer_id_counter;
+            self.buffer_id_counter += 1;
+            x
+        };
+        Arc::new(RefCell::new(LeaseableBuffer {
+            #[cfg(debug_assertions)]
+            id,
+            largest_size: 0,
+            buffer: None,
+        }))
+    }
+
+    /// Returns a buffer that can be (re-)used. If there are multiple buffers on the free list, the function will look for
+    /// the buffer that has a `largest_size` that is the closest match to the requested size. If there is just one buffer
+    /// on the free list, it will be returned. If the free list is empty, the function will create a new leaseable buffer.
+    fn new_or_free_buffer(&mut self, output_bytes: usize) -> Arc<RefCell<LeaseableBuffer>> {
+        let closest_index = match self
+            .free
+            .binary_search_by(|b| b.as_ref().borrow().largest_size.cmp(&output_bytes))
+        {
+            Ok(x) => x,
+            Err(x) => x,
+        };
+        if closest_index < self.free.len() {
+            self.free.remove(closest_index)
+        } else if !self.free.is_empty() {
+            self.free.pop().unwrap()
+        } else {
+            self.new_buffer()
+        }
+    }
+
+    /// Tells the buffer manager that a certain value is used by a node and that nodes executing before it may not re-use
+    /// the same buffer until a node is encountered that actually producdes a value in the buffer. As outputs can be used
+    /// by multiple nodes, `lease` can be called multiple times (but only one call to `release` is necessary).
+    fn lease(
+        &mut self,
+        node_identifier: NodeIdentifier<'a>,
+        output_index: usize,
+        output_bytes: usize,
+    ) {
+        let output = (node_identifier, output_index);
+        #[allow(clippy::map_entry)]
+        if !self.assignments.contains_key(&output) {
+            let ac = self.new_or_free_buffer(output_bytes);
+            log::debug!("intermediate buffer lease {output:?} => {:?}", ac);
+            self.assignments.insert(output, ac);
+        }
+    }
+
+    /// Returns the total size of shared buffers currently assigned
+    #[cfg(debug_assertions)]
+    fn total_shared_size(&self) -> usize {
+        use std::iter::FromIterator;
+        let unique_buffers: HashSet<(usize, usize)> = HashSet::from_iter(
+            self.assignments
+                .values()
+                .map(|x| (x.as_ref().borrow().id, x.as_ref().borrow().largest_size)),
+        );
+        unique_buffers.iter().map(|x| x.1).sum()
+    }
+
+    /// Returns the total size of shared buffers currently assigned
+    #[cfg(debug_assertions)]
+    fn shared_buffer_count(&self) -> usize {
+        use std::iter::FromIterator;
+        let unique_buffers: HashSet<usize> =
+            HashSet::from_iter(self.assignments.values().map(|x| x.as_ref().borrow().id));
+        unique_buffers.len()
+    }
+}
+
 impl GpuModel {
     /// Create a version of the specified model for which inference can be performed using the powers of the GPU
     pub fn from(
@@ -110,14 +292,33 @@ impl GpuModel {
         let mut node_outputs = HashMap::<NodeIdentifier, Vec<GpuTensor>>::new();
         let mut nodes_seen = HashSet::new();
 
-        GpuModel::pre_sequence(root.clone(), &mut readable_nodes, &mut nodes_seen)?;
+        let mut buffer_manager = BufferManager::new();
+
+        GpuModel::pre_sequence(
+            root.clone(),
+            &mut readable_nodes,
+            &mut nodes_seen,
+            &mut buffer_manager,
+        )?;
         nodes_seen.clear();
+
+        #[cfg(debug_assertions)]
+        {
+            let total_shared_size = buffer_manager.total_shared_size();
+            log::info!(
+                "shared intermediate value buffers: {} buffers, total unshared size is {}b, total shared size is {total_shared_size}b, improvement {}x",
+                buffer_manager.shared_buffer_count(),
+                buffer_manager.total_unshared_bytes,
+               (buffer_manager.total_unshared_bytes as f64) / (total_shared_size as f64)
+            );
+        }
 
         gpu_model.sequence(
             root.clone(),
             &readable_nodes,
             &mut node_outputs,
             &mut nodes_seen,
+            &mut buffer_manager,
         )?;
 
         // Find out which outputs we should return as inference outputs
@@ -162,38 +363,74 @@ impl GpuModel {
     /// Run a first pass over the IR graph to determine the outputs of which nodes are supposed to be readable as outputs
     /// of the graph after inference. This needs to be done in a separate pass because otherwise we may run into an issue
     /// where nodes are not marked as 'outputs readable' when their outputs are used by some node while also being used as
-    /// output (and the sequenceer migth simply follow one 'path' before the other).
+    /// output (and the sequenceer might simply follow one 'path' before the other). This pass is also used to assign buffers
+    /// for intermediate values (which may be re-used). For this reason, a 'breadth first'-search is performed (whereas
+    /// `GpuModel::sequence` will perform a depth-first search).
     fn pre_sequence<'model>(
         node: Arc<Node<'model>>,
         nodes_readable: &mut HashSet<NodeIdentifier<'model>>,
         nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
+        buffer_manager: &mut BufferManager<'model>,
     ) -> Result<(), GpuError> {
-        let node_identifier = node.identifier();
-        let mut outputs_readable = nodes_readable.contains(&node_identifier);
+        let mut nodes_step = vec![node];
 
-        for node_input in &node.inputs {
-            let identifier = node_input.source_node.identifier();
-            // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
-            if let NodeDefinition::Outputs { .. } = &node.definition {
-                nodes_readable.insert(identifier.clone());
-                outputs_readable = true;
-            }
+        while !nodes_step.is_empty() {
+            let mut next_step_nodes = vec![];
 
-            if outputs_readable {
-                if let NodeDefinition::Operator(op_def) = &node.definition {
-                    // For these ops we just forward the buffer (so we should also forward readability)
-                    if op_forwards_input(op_def.proto.get_op_type()) {
+            for node in nodes_step {
+                let node_identifier = node.identifier();
+                let mut outputs_readable = nodes_readable.contains(&node_identifier);
+
+                for node_input in &node.inputs {
+                    // Tell the buffer manager that we are consuming an intermediate result produced by some earlier op
+                    if let NodeDefinition::Operator(ref source_node_def) =
+                        node_input.source_node.definition
+                    {
+                        let output_shape = &source_node_def.output_shapes[node_input.output_index];
+                        buffer_manager.lease(
+                            node_input.source_node.identifier(),
+                            node_input.output_index,
+                            output_shape.buffer_bytes(),
+                        );
+                    }
+
+                    let identifier = node_input.source_node.identifier();
+                    // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
+                    if let NodeDefinition::Outputs { .. } = &node.definition {
                         nodes_readable.insert(identifier.clone());
+                        outputs_readable = true;
+                    }
+
+                    if outputs_readable {
+                        if let NodeDefinition::Operator(op_def) = &node.definition {
+                            // For these ops we just forward the buffer (so we should also forward readability)
+                            if op_forwards_input(op_def.proto.get_op_type()) {
+                                nodes_readable.insert(identifier.clone());
+                            }
+                        }
+                    }
+
+                    if !nodes_seen.contains(&identifier) {
+                        nodes_seen.insert(identifier.clone());
+                        next_step_nodes.push(node_input.source_node.clone());
+                    }
+                }
+
+                // Tell the buffer manager we are producing an intermediate value; nodes that run 'before' us may reuse this buffer
+                if let NodeDefinition::Operator(op_def) = &node.definition {
+                    for (output_index, output_shape) in op_def.output_shapes.iter().enumerate() {
+                        buffer_manager.release(
+                            node_identifier.clone(),
+                            output_index,
+                            output_shape.buffer_bytes(),
+                        );
                     }
                 }
             }
 
-            if !nodes_seen.contains(&identifier) {
-                nodes_seen.insert(identifier.clone());
-                // Sequence the source node
-                GpuModel::pre_sequence(node_input.source_node.clone(), nodes_readable, nodes_seen)?;
-            }
+            nodes_step = next_step_nodes;
         }
+
         Ok(())
     }
 
@@ -205,6 +442,7 @@ impl GpuModel {
         nodes_readable: &HashSet<NodeIdentifier<'model>>,
         node_outputs: &mut HashMap<NodeIdentifier<'model>, Vec<GpuTensor>>,
         nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
+        buffer_manager: &mut BufferManager<'model>,
     ) -> Result<(), GpuError> {
         let node_identifier = node.identifier();
         let outputs_readable = nodes_readable.contains(&node_identifier);
@@ -217,12 +455,14 @@ impl GpuModel {
             // If we haven't seen this input node yet, sequence it now
             if !nodes_seen.contains(&identifier) {
                 nodes_seen.insert(identifier.clone());
+
                 // Sequence the source node
                 self.sequence(
                     node_input.source_node.clone(),
                     nodes_readable,
                     node_outputs,
                     nodes_seen,
+                    buffer_manager,
                 )?;
             }
 
@@ -253,11 +493,24 @@ impl GpuModel {
                 // outputs forwarded from the (only) input node of this operation (if the operation itself only modifies
                 // metadata, e.g. shapes, or is a no-op).
                 NodeDefinition::Operator(op_def) => {
+                    // Can we use shared buffers for outputs of this node?
+                    let shared_buffers: Vec<Option<Arc<RefCell<LeaseableBuffer>>>> =
+                        (0..op_def.output_shapes.len())
+                            .map(|output_index| {
+                                let identifier = node.identifier();
+                                buffer_manager
+                                    .assignments
+                                    .get(&(identifier, output_index))
+                                    .cloned()
+                            })
+                            .collect();
+
                     let gpu_op = op_def.gpu_op(
                         &self.device,
                         outputs_readable,
                         self.onnx_opset_version,
                         &input_tensors,
+                        &shared_buffers,
                     )?;
 
                     match &gpu_op {
@@ -474,6 +727,7 @@ impl<'model> OperatorDefinition<'model> {
         outputs_readable: bool,
         opset_version: i64,
         input_tensors: &[GpuTensor],
+        shared_buffers: &[Option<Arc<RefCell<LeaseableBuffer>>>],
     ) -> Result<GpuStep, GpuError> {
         let proto = &self.proto;
 
@@ -497,26 +751,36 @@ impl<'model> OperatorDefinition<'model> {
             .enumerate()
             .map(|(output_index, output_name)| {
                 let value_shape = &self.output_shapes[output_index];
-                log::debug!(
-                    "Creating op output buffer for output #{} ({}) of {} shaped {}",
-                    output_index,
-                    output_name,
-                    proto.get_name(),
-                    value_shape
-                );
 
-                let buffer_usage = if outputs_readable {
-                    BufferUsages::STORAGE | BufferUsages::COPY_SRC
-                } else {
-                    BufferUsages::STORAGE
+                let buffer = match shared_buffers.get(output_index) {
+                    Some(Some(shared_buffer)) if !outputs_readable => {
+                        let mut shared_buffer = shared_buffer.borrow_mut();
+                        shared_buffer.allocated_on(device)
+                    }
+                    _ => {
+                        log::debug!(
+                            "creating non-shared buffer for output #{} ({}) of {} shaped {}",
+                            output_index,
+                            output_name,
+                            proto.get_name(),
+                            value_shape
+                        );
+
+                        let buffer_usage = if outputs_readable {
+                            BufferUsages::STORAGE | BufferUsages::COPY_SRC
+                        } else {
+                            BufferUsages::STORAGE
+                        };
+
+                        Arc::new(resource::buffer(
+                            device,
+                            value_shape.buffer_bytes(),
+                            output_name.as_str(),
+                            buffer_usage,
+                        ))
+                    }
                 };
 
-                let buffer = Arc::new(resource::buffer(
-                    device,
-                    value_shape.buffer_bytes(),
-                    output_name.as_str(),
-                    buffer_usage,
-                ));
                 GpuTensor {
                     buffer,
                     shape: value_shape.clone(),

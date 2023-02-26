@@ -210,7 +210,6 @@ impl<'model> Node<'model> {
 
         // Collect intializer info
         for initializer in model.get_graph().get_initializer().iter() {
-            log::debug!("Initializer {}", initializer.get_name());
             node_definitions_by_output.insert(
                 initializer.get_name().to_string(),
                 NodeDefinition::Tensor(Box::new(Cow::Borrowed(initializer))),
@@ -230,7 +229,6 @@ impl<'model> Node<'model> {
         // Collect input name
         for input in model.get_graph().get_input().iter() {
             if !node_definitions_by_output.contains_key(input.get_name()) {
-                log::debug!("Input {}", input.get_name());
                 node_definitions_by_output
                     .insert(input.get_name().to_string(), NodeDefinition::Input(input));
             } else {
@@ -304,6 +302,15 @@ impl<'model> Debug for NodeDefinition<'model> {
 /// Wrap an Arc<Node> in a struct so we can implement pointer-based comparison for it, and use them as keys in a HashSet/HashMap
 #[derive(Clone)]
 pub struct NodeIdentifier<'model>(Arc<Node<'model>>);
+
+impl<'model> Debug for NodeIdentifier<'model> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("NodeIdentifier")
+            .field(&Arc::as_ptr(&self.0))
+            .field(&self.0.definition.get_name())
+            .finish()
+    }
+}
 
 impl<'model> Hash for NodeIdentifier<'model> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
