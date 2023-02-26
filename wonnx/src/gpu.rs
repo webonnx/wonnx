@@ -181,6 +181,12 @@ impl<'a> BufferManager<'a> {
             let mut buffer_raw = buffer.borrow_mut();
             log::debug!("shared intermediate buffer: free {buffer_raw:?} size={output_size_bytes}");
 
+            // The buffer may not already be released
+            assert!(
+                !self.free.iter().any(|x| x.as_ptr() == buffer.as_ptr()),
+                "shared intermediate buffer lease already released"
+            );
+
             // Only track statistics while debugging
             #[cfg(debug_assertions)]
             {
@@ -196,7 +202,7 @@ impl<'a> BufferManager<'a> {
     }
 
     /// Allocates a new leaseable shared buffer
-    fn new_buffer(&mut self) -> Arc<RefCell<LeaseableBuffer>> {
+    fn new_buffer(&mut self, size: usize) -> Arc<RefCell<LeaseableBuffer>> {
         #[cfg(debug_assertions)]
         let id = {
             let x = self.buffer_id_counter;
@@ -206,7 +212,7 @@ impl<'a> BufferManager<'a> {
         Arc::new(RefCell::new(LeaseableBuffer {
             #[cfg(debug_assertions)]
             id,
-            largest_size: 0,
+            largest_size: size,
             buffer: None,
         }))
     }
@@ -215,19 +221,26 @@ impl<'a> BufferManager<'a> {
     /// the buffer that has a `largest_size` that is the closest match to the requested size. If there is just one buffer
     /// on the free list, it will be returned. If the free list is empty, the function will create a new leaseable buffer.
     fn new_or_free_buffer(&mut self, output_bytes: usize) -> Arc<RefCell<LeaseableBuffer>> {
-        let closest_index = match self
-            .free
-            .binary_search_by(|b| b.as_ref().borrow().largest_size.cmp(&output_bytes))
-        {
-            Ok(x) => x,
-            Err(x) => x,
-        };
-        if closest_index < self.free.len() {
-            self.free.remove(closest_index)
-        } else if !self.free.is_empty() {
-            self.free.pop().unwrap()
-        } else {
-            self.new_buffer()
+        let mut closest_index = None;
+        let mut closest_size_diff: Option<usize> = None;
+        for (idx, b) in self.free.iter().enumerate() {
+            let rb = b.as_ref().borrow();
+            match closest_size_diff {
+                None => {
+                    closest_index = Some(idx);
+                    closest_size_diff = Some(rb.largest_size.abs_diff(output_bytes))
+                }
+                Some(d) if d > rb.largest_size.abs_diff(output_bytes) => {
+                    closest_index = Some(idx);
+                    closest_size_diff = Some(rb.largest_size.abs_diff(output_bytes))
+                }
+                _ => {}
+            }
+        }
+
+        match closest_index {
+            Some(idx) => self.free.remove(idx),
+            None => self.new_buffer(output_bytes),
         }
     }
 
@@ -290,17 +303,10 @@ impl GpuModel {
         // Walk the IR DAG and encode into GPU execution steps
         let mut readable_nodes: HashSet<NodeIdentifier> = HashSet::new();
         let mut node_outputs = HashMap::<NodeIdentifier, Vec<GpuTensor>>::new();
-        let mut nodes_seen = HashSet::new();
 
         let mut buffer_manager = BufferManager::new();
 
-        GpuModel::pre_sequence(
-            root.clone(),
-            &mut readable_nodes,
-            &mut nodes_seen,
-            &mut buffer_manager,
-        )?;
-        nodes_seen.clear();
+        GpuModel::pre_sequence(root.clone(), &mut readable_nodes, &mut buffer_manager)?;
 
         #[cfg(debug_assertions)]
         {
@@ -313,6 +319,7 @@ impl GpuModel {
             );
         }
 
+        let mut nodes_seen = HashSet::new();
         gpu_model.sequence(
             root.clone(),
             &readable_nodes,
@@ -360,6 +367,25 @@ impl GpuModel {
         Ok(gpu_model)
     }
 
+    fn topological_sort<'model>(
+        node: Arc<Node<'model>>,
+        nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
+        sorted_nodes: &mut Vec<Arc<Node<'model>>>,
+    ) {
+        let identifier = node.identifier();
+        if !nodes_seen.contains(&identifier) {
+            nodes_seen.insert(identifier);
+            for node_input in &node.inputs {
+                GpuModel::topological_sort(
+                    node_input.source_node.clone(),
+                    nodes_seen,
+                    sorted_nodes,
+                );
+            }
+            sorted_nodes.push(node);
+        }
+    }
+
     /// Run a first pass over the IR graph to determine the outputs of which nodes are supposed to be readable as outputs
     /// of the graph after inference. This needs to be done in a separate pass because otherwise we may run into an issue
     /// where nodes are not marked as 'outputs readable' when their outputs are used by some node while also being used as
@@ -369,55 +395,63 @@ impl GpuModel {
     fn pre_sequence<'model>(
         node: Arc<Node<'model>>,
         nodes_readable: &mut HashSet<NodeIdentifier<'model>>,
-        nodes_seen: &mut HashSet<NodeIdentifier<'model>>,
         buffer_manager: &mut BufferManager<'model>,
     ) -> Result<(), GpuError> {
-        let mut nodes_step = vec![node];
+        // Topologically sort nodes
+        let mut nodes_seen = HashSet::new();
+        let mut nodes = vec![];
+        GpuModel::topological_sort(node, &mut nodes_seen, &mut nodes);
 
-        while !nodes_step.is_empty() {
-            let mut next_step_nodes = vec![];
+        for node in nodes.iter().rev() {
+            let node_identifier = node.identifier();
+            let mut outputs_readable = nodes_readable.contains(&node_identifier);
 
-            for node in nodes_step {
-                let node_identifier = node.identifier();
-                let mut outputs_readable = nodes_readable.contains(&node_identifier);
-
-                for node_input in &node.inputs {
-                    // Tell the buffer manager that we are consuming an intermediate result produced by some earlier op
-                    if let NodeDefinition::Operator(ref source_node_def) =
-                        node_input.source_node.definition
+            for node_input in &node.inputs {
+                // Tell the buffer manager that we are consuming an intermediate result produced by some earlier op
+                if let NodeDefinition::Operator(ref source_node_def) =
+                    node_input.source_node.definition
+                {
+                    // If the input node forwards a buffer, we need to take a lease on *its* input
+                    let mut ultimate_input = node_input.clone();
+                    while let NodeDefinition::Operator(ultimate_input_op_def) =
+                        ultimate_input.source_node.definition()
                     {
-                        let output_shape = &source_node_def.output_shapes[node_input.output_index];
-                        buffer_manager.lease(
-                            node_input.source_node.identifier(),
-                            node_input.output_index,
-                            output_shape.buffer_bytes(),
-                        );
-                    }
-
-                    let identifier = node_input.source_node.identifier();
-                    // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
-                    if let NodeDefinition::Outputs { .. } = &node.definition {
-                        nodes_readable.insert(identifier.clone());
-                        outputs_readable = true;
-                    }
-
-                    if outputs_readable {
-                        if let NodeDefinition::Operator(op_def) = &node.definition {
-                            // For these ops we just forward the buffer (so we should also forward readability)
-                            if op_forwards_input(op_def.proto.get_op_type()) {
-                                nodes_readable.insert(identifier.clone());
-                            }
+                        if op_forwards_input(ultimate_input_op_def.proto.get_op_type()) {
+                            assert_eq!(ultimate_input.source_node.inputs.len(), 1);
+                            ultimate_input = ultimate_input.source_node.inputs[0].clone();
+                        } else {
+                            break;
                         }
                     }
 
-                    if !nodes_seen.contains(&identifier) {
-                        nodes_seen.insert(identifier.clone());
-                        next_step_nodes.push(node_input.source_node.clone());
-                    }
+                    let output_shape = &source_node_def.output_shapes[node_input.output_index];
+                    buffer_manager.lease(
+                        ultimate_input.source_node.identifier(),
+                        ultimate_input.output_index,
+                        output_shape.buffer_bytes(),
+                    );
                 }
 
-                // Tell the buffer manager we are producing an intermediate value; nodes that run 'before' us may reuse this buffer
-                if let NodeDefinition::Operator(op_def) = &node.definition {
+                let source_node_identifier = node_input.source_node.identifier();
+                // If this node is an output node, mark input nodes as 'readable', meaning that their output buffers need to be created as readable buffers
+                if let NodeDefinition::Outputs { .. } = &node.definition {
+                    nodes_readable.insert(source_node_identifier.clone());
+                    outputs_readable = true;
+                }
+
+                if outputs_readable {
+                    if let NodeDefinition::Operator(op_def) = &node.definition {
+                        // For these ops we just forward the buffer (so we should also forward readability)
+                        if op_forwards_input(op_def.proto.get_op_type()) {
+                            nodes_readable.insert(source_node_identifier.clone());
+                        }
+                    }
+                }
+            }
+
+            // Tell the buffer manager we are producing an intermediate value; nodes that run 'before' us may reuse this buffer
+            if let NodeDefinition::Operator(op_def) = &node.definition {
+                if !op_forwards_input(op_def.proto.get_op_type()) {
                     for (output_index, output_shape) in op_def.output_shapes.iter().enumerate() {
                         buffer_manager.release(
                             node_identifier.clone(),
@@ -427,8 +461,6 @@ impl GpuModel {
                     }
                 }
             }
-
-            nodes_step = next_step_nodes;
         }
 
         Ok(())
@@ -803,7 +835,7 @@ impl<'model> OperatorDefinition<'model> {
                     error: ce,
                 }
             })?;
-        log::debug!("shader: {}", shader);
+        log::trace!("shader: {}", shader);
 
         // Bind input and output buffers to the shader
         let mut binding_counter: usize = 0;
@@ -831,6 +863,24 @@ impl<'model> OperatorDefinition<'model> {
                 resource: output_tensor.buffer.as_entire_binding(),
             });
             binding_counter += 1;
+        }
+
+        // Check if we are not using the same buffer on both the input and output side (this verifies the correct behaviour
+        // of the shared intermediate buffer manager)
+        #[cfg(debug_assertions)]
+        {
+            let all_input_buffers: Vec<*const Buffer> = input_tensors
+                .iter()
+                .map(|x| Arc::as_ptr(&x.buffer))
+                .collect();
+            for out_tensor in &output_tensors {
+                if all_input_buffers.contains(&Arc::as_ptr(&out_tensor.buffer)) {
+                    panic!(
+                        "output is also an input at node with outputs {:#?}",
+                        self.proto.get_output()
+                    );
+                }
+            }
         }
 
         // Set up a pipeline (basically the shader source code with some metadata that determines how it will be executed)
@@ -907,7 +957,7 @@ impl GpuStep {
                         );
                     }
                     InputTensor::I64(int_input) => {
-                        log::warn!("reading int64 input as int32 (int64 is not supported for calculation but can be used as input as long as values fit in int32)");
+                        log::warn!("reading int64 input '{input_name}' as int32 (int64 is not supported for calculation but can be used as input as long as values fit in int32)");
                         let int32_input = int_input
                             .iter()
                             .map(|i| i32::from_i64(*i).ok_or(GpuError::OutOfBoundsError))
