@@ -4,6 +4,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     convert::TryInto,
+    ops::Sub,
     sync::Arc,
 };
 
@@ -221,6 +222,15 @@ impl<'a> BufferManager<'a> {
     /// the buffer that has a `largest_size` that is the closest match to the requested size. If there is just one buffer
     /// on the free list, it will be returned. If the free list is empty, the function will create a new leaseable buffer.
     fn new_or_free_buffer(&mut self, output_bytes: usize) -> Arc<RefCell<LeaseableBuffer>> {
+        // TODO remove when usize::abs_diff is stabilized / MSRV is raised
+        fn abs_difference<T: Sub<Output = T> + Ord>(x: T, y: T) -> T {
+            if x < y {
+                y - x
+            } else {
+                x - y
+            }
+        }
+
         let mut closest_index = None;
         let mut closest_size_diff: Option<usize> = None;
         for (idx, b) in self.free.iter().enumerate() {
@@ -228,11 +238,11 @@ impl<'a> BufferManager<'a> {
             match closest_size_diff {
                 None => {
                     closest_index = Some(idx);
-                    closest_size_diff = Some(rb.largest_size.abs_diff(output_bytes))
+                    closest_size_diff = Some(abs_difference(rb.largest_size, output_bytes))
                 }
-                Some(d) if d > rb.largest_size.abs_diff(output_bytes) => {
+                Some(d) if d > abs_difference(rb.largest_size, output_bytes) => {
                     closest_index = Some(idx);
-                    closest_size_diff = Some(rb.largest_size.abs_diff(output_bytes))
+                    closest_size_diff = Some(abs_difference(rb.largest_size, output_bytes))
                 }
                 _ => {}
             }
