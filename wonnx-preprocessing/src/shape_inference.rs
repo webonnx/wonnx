@@ -407,6 +407,20 @@ pub(crate) fn infer_forward(
             Ok(vec![output_shape])
         }
 
+        ("GlobalAveragePool", 1, 1) => {
+            let mut output_shape = input_shapes[0].clone();
+            if output_shape.rank() < 2 {
+                return Err(ShapeInferenceError::InvalidNode(
+                    node.get_name().to_string(),
+                    format!("invalid input rank for GlobalAveragePool: {output_shape}",),
+                ));
+            }
+            for a in 2..output_shape.dims.len() {
+                output_shape.dims[a] = 1;
+            }
+            Ok(vec![output_shape])
+        }
+
         ("Gather", 2, 1) => {
             // https://github.com/onnx/onnx/blob/ceaeafa4cd2156c69dd9699bbdd2aa7d39e7c74c/onnx/defs/tensor/defs.cc#L1601
             let r = input_shapes[0].rank() as i64;
