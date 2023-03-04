@@ -378,7 +378,8 @@ pub(crate) fn infer_forward(
         input_shapes.len(),
         node.get_output().len(),
     ) {
-        (
+        ("Clip", 1..=3, 1)
+        | (
             "Identity" | "Sqrt" | "Relu" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin" | "Asinh"
             | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil"
             | "Floor",
