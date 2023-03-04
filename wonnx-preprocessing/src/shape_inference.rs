@@ -606,7 +606,7 @@ pub(crate) fn infer_forward(
             )])
         }
 
-        ("Sub" | "Pow" | "Add" | "Div" | "Mul", 2, 1) => {
+        ("Sub" | "Pow" | "Add" | "Div" | "Mul" | "Mod", 2, 1) => {
             if let Some(output_shape) =
                 Shape::multi_broadcast(&[input_shapes[0].clone(), input_shapes[1].clone()])
             {
@@ -1033,7 +1033,7 @@ pub(crate) fn infer_forward(
             | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
             | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range" | "ConstantOfShape"
             | "Transpose" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin" | "Asinh" | "Atan" | "Atanh"
-            | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil" | "Floor",
+            | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil" | "Floor" | "Mod",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
