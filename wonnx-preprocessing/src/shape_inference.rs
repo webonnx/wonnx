@@ -378,7 +378,13 @@ pub(crate) fn infer_forward(
         input_shapes.len(),
         node.get_output().len(),
     ) {
-        ("Identity" | "Sqrt" | "Relu", 1, 1) => Ok(vec![input_shapes[0].clone()]),
+        (
+            "Identity" | "Sqrt" | "Relu" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin" | "Asinh"
+            | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil"
+            | "Floor",
+            1,
+            1,
+        ) => Ok(vec![input_shapes[0].clone()]),
 
         ("Cast", 1, 1) => {
             let to_value: i64 = node
@@ -1026,7 +1032,8 @@ pub(crate) fn infer_forward(
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
             | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
             | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range" | "ConstantOfShape"
-            | "Transpose",
+            | "Transpose" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin" | "Asinh" | "Atan" | "Atanh"
+            | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil" | "Floor",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(

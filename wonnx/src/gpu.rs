@@ -926,11 +926,11 @@ impl<'model> OperatorDefinition<'model> {
 impl GpuStep {
     /// Writes the necessary commands for the GPU to execute this step into the command queue. Among other things this means
     /// writing the inference input data to the appropriate (already created) buffers.
-    fn encode<'a>(
+    fn encode(
         &self,
         queue: &wgpu::Queue,
         encoder: &mut CommandEncoder,
-        inputs: &HashMap<String, InputTensor<'a>>,
+        inputs: &HashMap<String, InputTensor>,
     ) -> Result<(), GpuError> {
         match self {
             GpuStep::None | GpuStep::Forward(_) | GpuStep::Initializer(_) => {
