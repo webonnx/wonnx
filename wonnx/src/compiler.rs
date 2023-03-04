@@ -1,6 +1,6 @@
 //! Compiles individual ONNX ops to a WebGPU shader using WGSL templates
 use crate::utils::{
-    ceil, get_attribute, AttributeNotFoundError, DataTypeError, MultiType, ScalarType, Shape,
+    ceil, AttributeNotFoundError, DataTypeError, MultiType, NodeAttributes, ScalarType, Shape,
 };
 use num::integer::gcd;
 use tera::{Context, Tera};
@@ -305,7 +305,8 @@ pub fn compile(
         | "ReduceL1" | "ReduceL2" | "ReduceLogSum" | "ReduceLogSumExp"
         | "ReduceSumSquare") => {
             let all_axes: Vec<i64> = (0..(i_dims[0].len() as i64)).collect();
-            let axes: Vec<i64> = get_attribute("axes", Some(all_axes), node)?
+            let axes: Vec<i64> = node
+                .get_attribute_value("axes", Some(all_axes))?
                 .into_iter()
                 .map(|idx| {
                     if idx < 0 {
@@ -360,7 +361,7 @@ pub fn compile(
 
         "OneHot" => {
             // Currently only OneHot on the last axis is supported
-            let axis = get_attribute("axis", Some(-1), node)?;
+            let axis = node.get_attribute_value("axis", Some(-1))?;
             if axis != -1 {
                 return Err(CompileError::UnimplementedVariant {
                     variant: format!("axis={}", axis),
@@ -404,7 +405,7 @@ pub fn compile(
             // Input 0 is data, input 1 is indices
             // Which axis to gather on. Negative value means counting dimensions from the back. Accepted range is [-r, r-1] where r = rank(data).
             // Default is 0. See https://github.com/onnx/onnx/blob/main/docs/Operators.md#attributes-25
-            let axis = get_attribute("axis", Some(0), node)?;
+            let axis = node.get_attribute_value("axis", Some(0))?;
             if axis != 0 {
                 return Err(CompileError::UnimplementedVariant {
                     variant: format!("axis={}", axis),
@@ -445,7 +446,15 @@ pub fn compile(
 
         "Cast" => {
             let cast_to_type =
-                ScalarType::from_i32(get_attribute::<i64>("to", None, node)? as i32)?;
+                ScalarType::from_i32(node.get_attribute_value::<i64>("to", None)? as i32)?;
+
+            if !cast_to_type.wgsl_supported() {
+                return Err(CompileError::UnimplementedVariant {
+                    variant: format!("with data type {} (WGSL limitation)", cast_to_type),
+                    op: "Cast".to_string(),
+                });
+            }
+
             context.insert("cast_to_type", cast_to_type.wgsl_type_name());
 
             let (x_threads, workgroup_size_x) = workgroup_size(
@@ -471,7 +480,7 @@ pub fn compile(
 
             /* Describes the axis of the inputs when coerced to 2D; defaults to one because the 0th axis most likely
             describes the batch_size. From version 13 onwards, counting backwards is also allowed. */
-            let mut axis = get_attribute("axis", Some(default_axis), node)?;
+            let mut axis = node.get_attribute_value("axis", Some(default_axis))?;
             if axis < 0 {
                 if opset_version >= 13 {
                     axis += input_shapes[0].rank() as i64;
@@ -549,7 +558,7 @@ pub fn compile(
         // Arithmetic operation
         op @ ("Add" | "And" | "Div" | "Equal" | "Greater" | "GreaterOrEqual" | "Less"
         | "LessOrEqual" | "Mod" | "Mul" | "Or" | "Sub" | "Pow" | "PRelu") => {
-            let broadcast = get_attribute("broadcast", Some(0), node)?;
+            let broadcast = node.get_attribute_value("broadcast", Some(0))?;
             if broadcast != 0 {
                 return Err(CompileError::UnimplementedVariant {
                     op: op.to_string(),
@@ -641,7 +650,7 @@ pub fn compile(
                 });
             } else {
                 // Not broadcasting
-                let coefficient = get_attribute("coefficient", Some(1.0), node)?;
+                let coefficient = node.get_attribute_value("coefficient", Some(1.0))?;
                 context.insert("coefficient", &coefficient);
 
                 let (x_threads, workgroup_size_x) = workgroup_size(
@@ -663,7 +672,7 @@ pub fn compile(
             /* Prior to version 9, BatchNormalization supported a 'spatial' mode where input mean/variance are of shape
             [C,W,H] instead of just [C]. See https://github.com/onnx/onnx/blob/master/docs/Changelog.md#BatchNormalization-7.
             This mode is not supported. */
-            if let Ok(spatial_value) = get_attribute::<i64>("spatial", None, node) {
+            if let Ok(spatial_value) = node.get_attribute_value::<i64>("spatial", None) {
                 if opset_version < 9 {
                     return Err(CompileError::UnimplementedVariant {
                         op: "BatchNormalization".to_string(),
@@ -718,7 +727,7 @@ pub fn compile(
             context.insert("elem_stride", &elem_type.stride());
 
             // The default for epsilon is 1e05, see https://github.com/onnx/onnx/blob/master/docs/Changelog.md#attributes-252
-            let epsilon = get_attribute("epsilon", Some(1e-05), node)?;
+            let epsilon = node.get_attribute_value("epsilon", Some(1e-05))?;
             context.insert("epsilon", &epsilon);
             context.insert(
                 "batch_size",
@@ -745,9 +754,9 @@ pub fn compile(
         op @ ("Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu"
         | "LeakyRelu") => {
             let alpha = if op == "LeakyRelu" {
-                get_attribute("alpha", Some(0.01), node)?
+                node.get_attribute_value("alpha", Some(0.01))?
             } else {
-                get_attribute("alpha", Some(1.0), node)?
+                node.get_attribute_value("alpha", Some(1.0))?
             };
             context.insert("alpha", &alpha);
 
@@ -799,16 +808,16 @@ pub fn compile(
                 context.insert("op_type", "AveragePool");
             }
 
-            let auto_pad = get_attribute("auto_pad", Some("NOTSET".to_string()), node)?;
-            let dilations = get_attribute("dilations", Some(vec![1, 1]), node)?;
+            let auto_pad = node.get_attribute_value("auto_pad", Some("NOTSET".to_string()))?;
+            let dilations = node.get_attribute_value("dilations", Some(vec![1, 1]))?;
             let kernel_shape = if is_global_average_pool {
                 vec![input_shapes[0].dim(2) as i64, input_shapes[0].dim(3) as i64]
             } else {
-                get_attribute::<Vec<i64>>("kernel_shape", None, node)?
+                node.get_attribute_value::<Vec<i64>>("kernel_shape", None)?
             };
-            let strides = get_attribute("strides", Some(vec![1, 1]), node)?;
-            let pads = get_attribute("pads", Some(vec![0, 0, 0, 0]), node)?;
-            let count_include_pad = get_attribute("count_include_pad", Some(0), node)?;
+            let strides = node.get_attribute_value("strides", Some(vec![1, 1]))?;
+            let pads = node.get_attribute_value("pads", Some(vec![0, 0, 0, 0]))?;
+            let count_include_pad = node.get_attribute_value("count_include_pad", Some(0))?;
 
             let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
@@ -873,7 +882,7 @@ pub fn compile(
                 }
                 "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish" => {
                     // Alpha is the Leaky Relu attribute
-                    let alpha = get_attribute("alpha", Some(0.01), node)?;
+                    let alpha = node.get_attribute_value("alpha", Some(0.01))?;
                     context.insert("alpha", &alpha);
 
                     let scalar_type = agreed_type(input_shapes, output_shapes)?;
@@ -1009,9 +1018,9 @@ pub fn compile(
 
             if op == "Gemm" {
                 // Check if A resp. B should be transposed, or C should be broadcast (default: 0 = false)
-                let transpose_a = get_attribute("transA", Some(0), node)?;
-                let transpose_b = get_attribute("transB", Some(0), node)?;
-                let broadcast = get_attribute("broadcast", Some(0), node)?;
+                let transpose_a = node.get_attribute_value("transA", Some(0))?;
+                let transpose_b = node.get_attribute_value("transB", Some(0))?;
+                let broadcast = node.get_attribute_value("broadcast", Some(0))?;
 
                 if transpose_a != 0 || transpose_b != 0 || broadcast != 0 {
                     return Err(CompileError::UnimplementedVariant {
@@ -1063,7 +1072,7 @@ pub fn compile(
             // See https://github.com/gfx-rs/naga/issues/1896
             let scalar_type = agreed_type(input_shapes, output_shapes)?;
             match scalar_type {
-                ScalarType::I32 | ScalarType::I64 => {
+                ScalarType::I32 | ScalarType::I64 | ScalarType::U8 => {
                     return Err(CompileError::UnimplementedVariant {
                         variant: "with integers".to_string(),
                         op: op.to_string(),
@@ -1073,8 +1082,8 @@ pub fn compile(
             }
 
             // Obtain alpha and beta coefficients
-            let alpha = get_attribute("alpha", Some(1.0), node)?;
-            let beta = get_attribute("beta", Some(1.0), node)?;
+            let alpha = node.get_attribute_value("alpha", Some(1.0))?;
+            let beta = node.get_attribute_value("beta", Some(1.0))?;
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);
 
@@ -1133,10 +1142,9 @@ pub fn compile(
             }
         }
         "Resize" => {
-            let coordinate_transformation_mode = get_attribute(
+            let coordinate_transformation_mode = node.get_attribute_value(
                 "coordinate_transformation_mode",
                 Some("half_pixel".to_string()),
-                node,
             )?;
             context.insert(
                 "coordinate_transformation_mode",
@@ -1149,9 +1157,9 @@ pub fn compile(
                 "align_corners" => {}
                 "asymmetric" => {}
                 "tf_crop_and_resize" => {
-                    let roi = get_attribute::<Vec<i64>>("roi", None, node)?;
+                    let roi = node.get_attribute_value::<Vec<i64>>("roi", None)?;
                     let extrapolation_value =
-                        get_attribute("extrapolation_value", Some(0.0), node)?;
+                        node.get_attribute_value("extrapolation_value", Some(0.0))?;
                     context.insert("roi", &roi);
                     context.insert("extrapolation_value", &extrapolation_value);
                 }
@@ -1166,9 +1174,9 @@ pub fn compile(
                 }
             }
 
-            let scales = get_attribute::<Vec<f32>>("scales", Some(vec![]), node)?;
+            let scales = node.get_attribute_value::<Vec<f32>>("scales", Some(vec![]))?;
             let scale_prints = if scales.is_empty() {
-                let sizes = get_attribute::<Vec<i64>>("sizes", Some(vec![]), node)?;
+                let sizes = node.get_attribute_value::<Vec<i64>>("sizes", Some(vec![]))?;
                 sizes
                     .iter()
                     .enumerate()
@@ -1181,16 +1189,15 @@ pub fn compile(
                 scales.iter().map(|x| format!("{:.2}", x)).collect()
             };
 
-            let mode = get_attribute("mode", Some("nearest".to_string()), node)?;
+            let mode = node.get_attribute_value("mode", Some("nearest".to_string()))?;
             context.insert("mode", &mode);
             context.insert("scales", &scale_prints);
 
             match mode.as_str() {
                 "nearest" => {
-                    let nearest_mode = get_attribute(
+                    let nearest_mode = node.get_attribute_value(
                         "nearest_mode",
                         Some("round_prefer_floor".to_string()),
-                        node,
                     )?;
                     match nearest_mode.as_str() {
                         "floor" => {}
@@ -1203,7 +1210,7 @@ pub fn compile(
                     }
                 }
                 "cubic" => {
-                    let cubic_coeff_a = get_attribute("cubic_coeff_a", Some(-0.75), node)?;
+                    let cubic_coeff_a = node.get_attribute_value("cubic_coeff_a", Some(-0.75))?;
                     context.insert("cubic_coeff_a", &cubic_coeff_a);
                     return Err(CompileError::UnimplementedVariant {
                         op: String::from("Resize"),
@@ -1219,7 +1226,7 @@ pub fn compile(
                 }
             };
 
-            let exclude_outside = get_attribute("exclude_outside", Some(0), node)?;
+            let exclude_outside = node.get_attribute_value("exclude_outside", Some(0))?;
             context.insert("exclude_outside", &exclude_outside);
 
             NodeTemplate {
@@ -1230,7 +1237,7 @@ pub fn compile(
         }
         "Sum" => return Err(CompileError::UnimplementedOp(String::from("Sum"))),
         "Split" => {
-            let mut axis = get_attribute("axis", Some(0), node)?;
+            let mut axis = node.get_attribute_value("axis", Some(0))?;
             if axis < 0 {
                 axis += input_shapes[0].rank() as i64
             }
@@ -1241,7 +1248,7 @@ pub fn compile(
                 .map(|x| (x * split_chunk) as _)
                 .collect();
 
-            let split = get_attribute::<Vec<i64>>("split", Some(default_split), node)?;
+            let split = node.get_attribute_value::<Vec<i64>>("split", Some(default_split))?;
             context.insert("split", &split);
 
             NodeTemplate {
@@ -1251,7 +1258,7 @@ pub fn compile(
             }
         }
         "Pad" => {
-            let mode = get_attribute("mode", Some("constant".to_string()), node)?;
+            let mode = node.get_attribute_value("mode", Some("constant".to_string()))?;
             match mode.as_str() {
                 "constant" => {}
                 _ => {
@@ -1262,7 +1269,7 @@ pub fn compile(
                 }
             }
 
-            let pads: Vec<i64> = get_attribute("pads", None, node)?;
+            let pads: Vec<i64> = node.get_attribute_value("pads", None)?;
             if pads.len() != input_shapes[0].rank() * 2 {
                 return Err(CompileError::InvalidAttributeValue {
                     attribute: "pads".into(),
@@ -1270,7 +1277,7 @@ pub fn compile(
                     opset_version,
                 });
             }
-            let constant_value = get_attribute("constant_value", Some(0.0), node)?;
+            let constant_value = node.get_attribute_value("constant_value", Some(0.0))?;
             context.insert("constant_value", &constant_value);
 
             #[derive(serde::Serialize)]
@@ -1299,7 +1306,7 @@ pub fn compile(
         "Transpose" => {
             let n_dims: i64 = input_shapes[0].rank() as i64;
             let default = (0..n_dims).rev().collect::<Vec<i64>>();
-            let perms: Vec<i64> = get_attribute("perm", Some(default), node)?;
+            let perms: Vec<i64> = node.get_attribute_value("perm", Some(default))?;
 
             // The number of elements in the permutations list must be equal to the output shape rank
             if perms.len() != output_shapes[0].rank() {
@@ -1329,10 +1336,10 @@ pub fn compile(
         }
         "LRN" => {
             // https://github.com/onnx/onnx/blob/main/docs/Operators.md#lrn
-            let alpha = get_attribute("alpha", Some(0.0001), node)?;
-            let beta = get_attribute("beta", Some(0.75), node)?;
-            let bias = get_attribute("bias", Some(1.0), node)?;
-            let size = get_attribute("size", Some(1), node)?;
+            let alpha = node.get_attribute_value("alpha", Some(0.0001))?;
+            let beta = node.get_attribute_value("beta", Some(0.75))?;
+            let bias = node.get_attribute_value("bias", Some(1.0))?;
+            let size = node.get_attribute_value("size", Some(1))?;
 
             context.insert("alpha", &alpha);
             context.insert("beta", &beta);

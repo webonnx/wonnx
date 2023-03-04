@@ -96,5 +96,6 @@ pub fn tensor_to_js_value(tensor: OutputTensor) -> JsValue {
         OutputTensor::F32(fs) => serde_wasm_bindgen::to_value(&fs).unwrap(),
         OutputTensor::I32(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
         OutputTensor::I64(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
+        OutputTensor::U8(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
     }
 }

@@ -4,10 +4,12 @@ use structopt::StructOpt;
 use thiserror::Error;
 use wonnx::{
     onnx::ModelProto,
-    utils::{OutputTensor, Shape, TensorConversionError},
+    utils::{OpsetError, OutputTensor, Shape, TensorConversionError},
     SessionError, WonnxError,
 };
 use wonnx_preprocessing::{
+    constant_folding::ConstantFoldingError,
+    shape_inference::ShapeInferenceError,
     text::{EncodedText, PreprocessingError},
     Tensor,
 };
@@ -20,6 +22,20 @@ pub struct InfoOptions {
     /// Model file (.onnx)
     #[structopt(parse(from_os_str))]
     pub model: PathBuf,
+}
+
+#[derive(Debug, StructOpt)]
+pub struct TraceOptions {
+    /// Model file (.onnx)
+    #[structopt(parse(from_os_str))]
+    pub model: PathBuf,
+
+    /// Output to trace
+    pub output_name: String,
+
+    /// Maximum depth to show
+    #[structopt(long = "max-depth")]
+    pub maximum_depth: Option<usize>,
 }
 
 #[derive(Debug, StructOpt)]
@@ -71,6 +87,18 @@ pub enum NNXError {
 
     #[error("Protobuf error: {0}")]
     ProtobufError(#[from] ProtobufError),
+
+    #[error("Could not infer shapes: {0}")]
+    ShapeInferenceError(#[from] ShapeInferenceError),
+
+    #[error("Could not fold constants: {0}")]
+    ConstantFoldingError(#[from] ConstantFoldingError),
+
+    #[error("opset error: {0}")]
+    OpsetError(#[from] OpsetError),
+
+    #[error("the model does not reference a specific version of the ONNX opset")]
+    UnknownOpset,
 }
 
 impl FromStr for Backend {
@@ -206,6 +234,18 @@ pub struct PrepareOptions {
     #[structopt(parse(from_os_str))]
     pub output: PathBuf,
 
+    /// Discard shapes in the model (if inference is also enabled, the shapes are stripped before inference)
+    #[structopt(long = "discard-shapes")]
+    pub discard_shapes: bool,
+
+    /// Fold constants (removes nodes whose output is all constant with constant initializers)
+    #[structopt(long = "fold-constants")]
+    pub fold_constants: bool,
+
+    /// Attempt to infer value types
+    #[structopt(long = "infer-shapes", short = "i")]
+    pub infer_shapes: bool,
+
     /// Set dimension parameter to a value (e.g. "--set batch_size=1"). This parameter can occur multiple times to set multiple different parameters
     #[structopt(long = "set", parse(try_from_str = parse_key_val), number_of_values = 1, value_name = "parameter_name=value")]
     pub set_dimension: Vec<(String, String)>,
@@ -225,6 +265,9 @@ pub enum Command {
 
     /// Return a GraphViz direct graph of the nodes in the model
     Graph(InfoOptions),
+
+    /// Prints the dependencies of a particular output
+    Trace(TraceOptions),
 
     /// Prepare a model by applying user-specified transformations. By default no transformations are applied and the input model is simply written to the output
     Prepare(PrepareOptions),

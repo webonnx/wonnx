@@ -408,6 +408,18 @@ impl TensorProtoExtra for TensorProto {
                     },
                 )
             }
+            ScalarType::U8 => {
+                // WGSL doesn't support 8 bit unsigned integers, so we load them as 32 bit ints
+                log::warn!("initializers with uint8 data type are not supported, converting into int32 initializer");
+                let ints: Vec<i32> = self
+                    .get_raw_data()
+                    .iter()
+                    .map(|x| (*x).try_into())
+                    .collect::<Result<Vec<i32>, _>>()
+                    .map_err(|_e| GpuError::OutOfBoundsError)?;
+                let raw_data = bytemuck::cast_slice(&ints);
+                buffer_with_bytes(device, readable, self.get_name(), raw_data)
+            }
             ScalarType::I64 => {
                 // WGSL doesn't support 64 bit integers, so we load 64 bit tensors as 32 bit ints
                 log::warn!("initializers with int64 data type are not supported, converting into int32 initializer");
@@ -654,6 +666,18 @@ impl GpuStep {
                             bytemuck::cast_slice(&resize(int32_input)),
                         );
                     }
+                    InputTensor::U8(int_input) => {
+                        log::warn!("reading uint8 input as int32 (uint8 is not supported for calculation but can be used as input)");
+                        let int32_input = int_input
+                            .iter()
+                            .map(|i| i32::from_u8(*i).ok_or(GpuError::OutOfBoundsError))
+                            .collect::<Result<_, _>>()?;
+                        queue.write_buffer(
+                            input_buffer,
+                            0,
+                            bytemuck::cast_slice(&resize(int32_input)),
+                        );
+                    }
                 }
 
                 Ok(())
@@ -745,6 +769,9 @@ impl GpuTensor {
             }
             ScalarType::I32 => {
                 OutputTensor::I32(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
+            }
+            ScalarType::U8 => {
+                OutputTensor::U8(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
             }
             ScalarType::I64 => {
                 log::warn!("reading int64 output as int32 because internally int64 scalars are not supported");

@@ -4,7 +4,9 @@ use protobuf::RepeatedField;
 use serde::Serialize;
 
 use crate::onnx;
+use crate::onnx::ModelProto;
 use crate::onnx::OperatorSetIdProto;
+use crate::onnx::TensorProto;
 use crate::onnx::TensorProto_DataType;
 use crate::onnx::ValueInfoProto;
 use num::FromPrimitive;
@@ -66,7 +68,7 @@ impl Shape {
 
     /// Computes the shape to which all provided shapes can be broadcast (if it exists)
     /// Inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L5
-    pub(crate) fn multi_broadcast(shapes: &[Shape]) -> Option<Shape> {
+    pub fn multi_broadcast(shapes: &[Shape]) -> Option<Shape> {
         if shapes.is_empty() {
             return None;
         }
@@ -116,10 +118,12 @@ impl Shape {
     }
 }
 
+#[derive(Clone)]
 pub enum InputTensor<'a> {
     F32(Cow<'a, [f32]>),
     I32(Cow<'a, [i32]>),
     I64(Cow<'a, [i64]>),
+    U8(Cow<'a, [u8]>),
 }
 
 impl<'a> From<&'a [f32]> for InputTensor<'a> {
@@ -140,6 +144,19 @@ impl<'a> From<&'a [i64]> for InputTensor<'a> {
     }
 }
 
+impl<'a> TryFrom<&'a TensorProto> for InputTensor<'a> {
+    type Error = DataTypeError;
+
+    fn try_from(value: &'a TensorProto) -> Result<Self, Self::Error> {
+        Ok(match ScalarType::from_i32(value.get_data_type())? {
+            ScalarType::F32 => InputTensor::F32(Cow::Borrowed(value.get_float_data())),
+            ScalarType::I64 => InputTensor::I64(Cow::Borrowed(value.get_int64_data())),
+            ScalarType::I32 => InputTensor::I32(Cow::Borrowed(value.get_int32_data())),
+            ScalarType::U8 => InputTensor::U8(Cow::Borrowed(value.get_raw_data())),
+        })
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum TensorConversionError {
     #[error("could not convert to the requested type becaue a value could not be represented in the target type")]
@@ -155,6 +172,7 @@ pub enum OutputTensor {
     F32(Vec<f32>),
     I32(Vec<i32>),
     I64(Vec<i64>),
+    U8(Vec<u8>),
 }
 
 impl TryFrom<OutputTensor> for Vec<f32> {
@@ -172,6 +190,10 @@ impl TryFrom<OutputTensor> for Vec<f32> {
                 .into_iter()
                 .map(|i| f32::from_i64(i).ok_or(TensorConversionError::OutOfBoundsError))
                 .collect::<Result<_, _>>(),
+            OutputTensor::U8(ints) => ints
+                .into_iter()
+                .map(|i| f32::from_u8(i).ok_or(TensorConversionError::OutOfBoundsError))
+                .collect::<Result<_, _>>(),
         }
     }
 }
@@ -184,7 +206,7 @@ impl<'a> TryFrom<&'a OutputTensor> for &'a [f32] {
     fn try_from(value: &'a OutputTensor) -> Result<Self, Self::Error> {
         match value {
             OutputTensor::F32(floats) => Ok(floats.as_slice()),
-            OutputTensor::I32(_) | OutputTensor::I64(_) => {
+            OutputTensor::I32(_) | OutputTensor::I64(_) | OutputTensor::U8(_) => {
                 Err(TensorConversionError::DataTypeError)
             }
         }
@@ -197,7 +219,33 @@ impl<'a> From<&InputTensor<'a>> for OutputTensor {
             InputTensor::F32(fs) => OutputTensor::F32(fs.to_vec()),
             InputTensor::I32(fs) => OutputTensor::I32(fs.to_vec()),
             InputTensor::I64(fs) => OutputTensor::I64(fs.to_vec()),
+            InputTensor::U8(fs) => OutputTensor::U8(fs.to_vec()),
         }
+    }
+}
+
+impl From<OutputTensor> for TensorProto {
+    fn from(value: OutputTensor) -> Self {
+        let mut tensor = TensorProto::new();
+        match value {
+            OutputTensor::F32(v) => {
+                tensor.set_data_type(ScalarType::F32.to_datatype().value());
+                tensor.set_float_data(v);
+            }
+            OutputTensor::I32(v) => {
+                tensor.set_data_type(ScalarType::I32.to_datatype().value());
+                tensor.set_int32_data(v);
+            }
+            OutputTensor::I64(v) => {
+                tensor.set_data_type(ScalarType::I64.to_datatype().value());
+                tensor.set_int64_data(v);
+            }
+            OutputTensor::U8(v) => {
+                tensor.set_data_type(ScalarType::U8.to_datatype().value());
+                tensor.set_raw_data(v);
+            }
+        }
+        tensor
     }
 }
 
@@ -222,6 +270,7 @@ pub enum ScalarType {
     F32,
     I64,
     I32,
+    U8,
 }
 
 impl ScalarType {
@@ -236,8 +285,18 @@ impl ScalarType {
             TensorProto_DataType::FLOAT => ScalarType::F32,
             TensorProto_DataType::INT64 => ScalarType::I64,
             TensorProto_DataType::INT32 => ScalarType::I32,
+            TensorProto_DataType::UINT8 => ScalarType::U8,
             _ => return Err(DataTypeError::NotSupported(onnx)),
         })
+    }
+
+    pub fn to_datatype(&self) -> TensorProto_DataType {
+        match self {
+            ScalarType::F32 => TensorProto_DataType::FLOAT,
+            ScalarType::I64 => TensorProto_DataType::INT64,
+            ScalarType::I32 => TensorProto_DataType::INT32,
+            ScalarType::U8 => TensorProto_DataType::UINT8,
+        }
     }
 
     pub fn stride(&self) -> usize {
@@ -245,6 +304,16 @@ impl ScalarType {
             ScalarType::F32 => 4,
             ScalarType::I32 => 4,
             ScalarType::I64 => 8,
+            ScalarType::U8 => 1, // ! TODO check this
+        }
+    }
+
+    pub fn wgsl_supported(&self) -> bool {
+        match self {
+            ScalarType::F32 => true,
+            ScalarType::I32 => true,
+            ScalarType::I64 => false,
+            ScalarType::U8 => false, // ! TODO check this
         }
     }
 
@@ -253,13 +322,14 @@ impl ScalarType {
             ScalarType::F32 => "f32",
             ScalarType::I32 => "i32",
             ScalarType::I64 => "i64",
+            ScalarType::U8 => "u8", // ! TODO check this
         }
     }
 
     pub fn is_float(&self) -> bool {
         match self {
             ScalarType::F32 => true,
-            ScalarType::I32 | ScalarType::I64 => false,
+            ScalarType::I32 | ScalarType::I64 | ScalarType::U8 => false,
         }
     }
 }
@@ -334,12 +404,13 @@ impl Display for Shape {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}",
+            "{}:{}",
             self.dims
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>()
-                .join("x")
+                .join("x"),
+            self.data_type
         )
     }
 }
@@ -351,23 +422,40 @@ pub struct AttributeNotFoundError {
     node_name: String,
 }
 
-pub(crate) fn get_attribute<T: std::convert::From<onnx::AttributeProto>>(
-    attribute: &str,
-    default: Option<T>,
-    node: &onnx::NodeProto,
-) -> Result<T, AttributeNotFoundError> {
-    match (
-        node.get_attribute()
+pub trait NodeAttributes {
+    fn has_attribute(&self, attribute_name: &str) -> bool;
+    fn get_attribute_value<T: std::convert::From<onnx::AttributeProto>>(
+        &self,
+        attribute: &str,
+        default: Option<T>,
+    ) -> Result<T, AttributeNotFoundError>;
+}
+
+impl NodeAttributes for onnx::NodeProto {
+    fn has_attribute(&self, attribute_name: &str) -> bool {
+        self.get_attribute()
             .iter()
-            .find(|attr| attr.get_name() == attribute),
-        default,
-    ) {
-        (Some(attr), _) => Ok(attr.clone().into()),
-        (None, Some(default_attr)) => Ok(default_attr),
-        (None, None) => Err(AttributeNotFoundError {
-            attribute: attribute.to_string(),
-            node_name: node.get_name().to_string(),
-        }),
+            .any(|attr| attr.get_name() == attribute_name)
+    }
+
+    fn get_attribute_value<T: std::convert::From<onnx::AttributeProto>>(
+        &self,
+        attribute: &str,
+        default: Option<T>,
+    ) -> Result<T, AttributeNotFoundError> {
+        match (
+            self.get_attribute()
+                .iter()
+                .find(|attr| attr.get_name() == attribute),
+            default,
+        ) {
+            (Some(attr), _) => Ok(attr.clone().into()),
+            (None, Some(default_attr)) => Ok(default_attr),
+            (None, None) => Err(AttributeNotFoundError {
+                attribute: attribute.to_string(),
+                node_name: self.get_name().to_string(),
+            }),
+        }
     }
 }
 
@@ -590,9 +678,23 @@ impl From<&str> for onnx::AttributeProto {
     }
 }
 
+impl From<TensorProto> for onnx::AttributeProto {
+    fn from(value: TensorProto) -> Self {
+        let mut attributes = crate::onnx::AttributeProto::new();
+        attributes.set_t(value);
+        attributes
+    }
+}
+
 impl From<onnx::AttributeProto> for Vec<i64> {
     fn from(value: onnx::AttributeProto) -> Self {
         value.get_ints().to_vec()
+    }
+}
+
+impl From<onnx::AttributeProto> for TensorProto {
+    fn from(value: onnx::AttributeProto) -> Self {
+        value.get_t().clone()
     }
 }
 
@@ -618,6 +720,43 @@ impl From<onnx::AttributeProto> for String {
     fn from(value: onnx::AttributeProto) -> Self {
         from_utf8(value.get_s()).unwrap().to_string()
     }
+}
+
+#[derive(Error, Debug)]
+pub enum OpsetError {
+    #[error("more than one ONNX opset was specified: {0} and {1}")]
+    DuplicateOnnxOpset(i64, i64),
+
+    #[error("the model references an unknown opset: '{0}'")]
+    UnknownOpset(String),
+}
+
+pub fn get_opset_version(model: &ModelProto) -> Result<Option<i64>, OpsetError> {
+    // Find the version of the ONNX operator set this model is using (this is useful because some operators' specifications change over time).
+    // Note, if any other op set than the ONNX operator set is referenced, we cannot run the model.
+    // See https://github.com/onnx/onnx/blob/master/docs/Versioning.md#operator-sets
+    let mut onnx_opset_version = None;
+    for opset_import in model.get_opset_import() {
+        match opset_import.get_domain() {
+            "" => {
+                // This is a reference to the ONNX specification op set
+                if let Some(onnx_version) = onnx_opset_version {
+                    if opset_import.get_version() != onnx_version {
+                        return Err(OpsetError::DuplicateOnnxOpset(
+                            onnx_version,
+                            opset_import.get_version(),
+                        ));
+                    }
+                } else {
+                    onnx_opset_version = Some(opset_import.get_version());
+                }
+            }
+            some_other_opset => {
+                return Err(OpsetError::UnknownOpset(some_other_opset.to_string()));
+            }
+        }
+    }
+    Ok(onnx_opset_version)
 }
 
 #[cfg(test)]
@@ -709,6 +848,11 @@ mod tests {
         assert_eq!(
             Shape::multi_broadcast(&[shape(&[3, 4, 5]), shape(&[2, 4, 1, 1])]),
             None
+        );
+
+        assert_eq!(
+            Shape::multi_broadcast(&[shape(&[1, 255, 768]), shape(&[1, 255, 1])]),
+            Some(shape(&[1, 255, 768])),
         );
     }
 }

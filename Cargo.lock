@@ -4039,6 +4039,7 @@ dependencies = [
 name = "wonnx-preprocessing"
 version = "0.3.0"
 dependencies = [
+ "bytemuck",
  "env_logger",
  "image",
  "log",

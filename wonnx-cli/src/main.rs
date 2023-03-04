@@ -5,14 +5,17 @@ use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::fs::File;
 use structopt::StructOpt;
+use trace::trace_command;
 use wonnx::onnx::ModelProto;
-use wonnx::utils::{OutputTensor, Shape};
-use wonnx_preprocessing::preparation::apply_dynamic_dimensions;
+use wonnx::utils::{get_opset_version, OutputTensor, Shape};
+use wonnx_preprocessing::constant_folding::fold_constants;
+use wonnx_preprocessing::shape_inference::{apply_dynamic_dimensions, ShapeInference};
 use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
 
 mod gpu;
 mod info;
+mod trace;
 mod types;
 mod utils;
 
@@ -64,6 +67,22 @@ async fn run() -> Result<(), NNXError> {
             )
             .expect("Could not deserialize the model");
             print_graph(&model);
+            Ok(())
+        }
+
+        Command::Trace(trace_opt) => {
+            // Load the model
+            let model_path = trace_opt
+                .model
+                .clone()
+                .into_os_string()
+                .into_string()
+                .expect("invalid path");
+            let model = ModelProto::parse_from_bytes(
+                &std::fs::read(model_path).expect("ONNX Model path not found."),
+            )
+            .expect("Could not deserialize the model");
+            trace_command(&model, &trace_opt);
             Ok(())
         }
 
@@ -163,6 +182,15 @@ fn print_output(
                         }
                     }
                 }
+                wonnx::utils::OutputTensor::U8(ints) => {
+                    for i in ints {
+                        if print_newlines {
+                            println!("{}", i);
+                        } else {
+                            print!("{}", i);
+                        }
+                    }
+                }
             }
         }
     }
@@ -185,20 +213,49 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
     )
     .expect("Could not deserialize the model");
 
-    let mut dynamic_dims = HashMap::<String, i64>::new();
+    // Set dynamic dimension parameters
+    if !prepare_opt.set_dimension.is_empty() {
+        let mut dynamic_dims = HashMap::<String, i64>::new();
 
-    for (dim_name, dim_dimstring) in prepare_opt.set_dimension {
-        let dim_value = dim_dimstring
-            .parse::<i64>()
-            .expect("invalid dimension value");
-        dynamic_dims.insert(dim_name, dim_value);
+        for (dim_name, dim_dimstring) in prepare_opt.set_dimension {
+            let dim_value = dim_dimstring
+                .parse::<i64>()
+                .expect("invalid dimension value");
+            dynamic_dims.insert(dim_name, dim_value);
+        }
+
+        apply_dynamic_dimensions(model.mut_graph(), &dynamic_dims);
     }
 
-    apply_dynamic_dimensions(model.mut_graph(), &dynamic_dims);
+    // Discard shapes
+    if prepare_opt.discard_shapes {
+        model.mut_graph().mut_value_info().clear();
+    }
+
+    if prepare_opt.fold_constants || prepare_opt.infer_shapes {
+        model.mut_graph().replace_constant_ops_with_initializers()?;
+    }
+
+    if prepare_opt.fold_constants {
+        let opset_version = get_opset_version(&model)
+            .map_err(NNXError::OpsetError)?
+            .ok_or(NNXError::UnknownOpset)?;
+        fold_constants(model.mut_graph(), opset_version).await?;
+    }
+
+    // Shape inference
+    if prepare_opt.infer_shapes {
+        model.mut_graph().infer_shapes()?;
+    }
 
     // Save the model
+    log::info!(
+        "writing model to '{}'",
+        prepare_opt.output.to_string_lossy()
+    );
     let mut out_file = File::create(prepare_opt.output)?;
     model.write_to_writer(&mut out_file)?;
+    log::info!("model written to file");
 
     Ok(())
 }
