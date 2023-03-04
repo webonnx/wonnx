@@ -1,7 +1,7 @@
 use human_bytes::human_bytes;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use prettytable::{cell, row, table, Table};
+use prettytable::{row, table, Table};
 use wonnx::{
     onnx::{GraphProto, ModelProto, NodeProto, ValueInfoProto},
     utils::{ScalarType, Shape},

@@ -1,6 +1,6 @@
 use crate::info::info_table;
 use info::print_graph;
-use prettytable::{cell, row, Table};
+use prettytable::{row, Table};
 use protobuf::{self, Message};
 use std::collections::HashMap;
 use std::fs::File;
@@ -33,8 +33,13 @@ async fn run() -> Result<(), NNXError> {
             adapters_table.add_row(row![b->"Adapter", b->"Vendor", b->"Backend"]);
             for adapter in adapters {
                 let info = adapter.get_info();
-                adapters_table.add_row(row![info.name, info.vendor, format!("{:?}", info.backend)]);
+                adapters_table.add_row(row![
+                    info.name,
+                    format!("{}", info.vendor),
+                    format!("{:?}", info.backend)
+                ]);
             }
+
             adapters_table.printstd();
             Ok(())
         }
