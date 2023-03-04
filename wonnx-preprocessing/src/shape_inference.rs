@@ -287,80 +287,79 @@ impl ShapeInference for GraphProto {
                 node.get_output().join(", ")
             );
 
-            // If this node already has a shape, do not change it
-            if !node
+            // Do shape inference if this node has at least one output for which the shape is not yet known
+            if node
                 .get_output()
                 .iter()
                 .any(|output_name| !shapes.contains_key(output_name.as_str()))
             {
-                continue;
-            }
+                log::debug!("node needs shape inference: {}", node.get_name());
 
-            log::debug!("Node needs inference: {}", node.get_name());
-
-            let input_shapes: Vec<&Shape> = node
-                .get_input()
-                .iter()
-                .map(|name| {
-                    shapes
-                        .get(name)
-                        .ok_or_else(|| ShapeInferenceError::MissingInputShape(name.clone()))
-                })
-                .collect::<Result<_, ShapeInferenceError>>()?;
-
-            let output_shapes = infer_forward(node, &input_shapes, &initializers)?;
-
-            // Check inferred shapes
-            for (output_index, shape) in output_shapes.iter().enumerate() {
-                if shape.rank() == 0 {
-                    log::warn!(
-                        "inferred shape for output {output_index} of node '{}' is empty: {shape}",
-                        node.get_name()
-                    );
-                }
-            }
-
-            log::info!(
-                "node {} inferred shape: {}",
-                node.get_name(),
-                output_shapes
+                let input_shapes: Vec<&Shape> = node
+                    .get_input()
                     .iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            );
+                    .map(|name| {
+                        shapes
+                            .get(name)
+                            .ok_or_else(|| ShapeInferenceError::MissingInputShape(name.clone()))
+                    })
+                    .collect::<Result<_, ShapeInferenceError>>()?;
 
-            if output_shapes.len() != node.get_output().len() {
-                panic!("number of outputs inferred does not match node output count");
-            }
+                let output_shapes = infer_forward(node, &input_shapes, &initializers)?;
 
-            // Cache the inferred shapes and write to model
-            for (output_idx, output_name) in node.get_output().iter().enumerate() {
-                let output_shape = &output_shapes[output_idx];
-                shapes.insert(output_name.clone(), output_shape.clone());
-                let mut vip = ValueInfoProto::new();
-                vip.set_name(output_name.clone());
+                // Check inferred shapes
+                for (output_index, shape) in output_shapes.iter().enumerate() {
+                    if shape.rank() == 0 {
+                        log::warn!(
+                            "inferred shape for output {output_index} of node '{}' is empty: {shape}",
+                            node.get_name()
+                        );
+                    }
+                }
 
-                let mut tip = TypeProto::new();
-                let mut ttp = TypeProto_Tensor::new();
-                ttp.set_elem_type(output_shape.data_type.to_datatype().value());
-
-                let mut tsp = TensorShapeProto::new();
-                tsp.set_dim(
-                    output_shape
-                        .dims
+                log::info!(
+                    "node {} inferred output shapes: {}",
+                    node.get_name(),
+                    output_shapes
                         .iter()
-                        .map(|d| {
-                            let mut tspd = TensorShapeProto_Dimension::new();
-                            tspd.set_dim_value(*d as i64);
-                            tspd
-                        })
-                        .collect(),
+                        .enumerate()
+                        .map(|(idx, x)| format!("{}={x}", node.output[idx]))
+                        .collect::<Vec<String>>()
+                        .join(", ")
                 );
-                ttp.set_shape(tsp);
-                tip.set_tensor_type(ttp);
-                vip.set_field_type(tip);
-                self.value_info.push(vip);
+
+                if output_shapes.len() != node.get_output().len() {
+                    panic!("number of outputs inferred does not match node output count");
+                }
+
+                // Cache the inferred shapes and write to model
+                for (output_idx, output_name) in node.get_output().iter().enumerate() {
+                    let output_shape = &output_shapes[output_idx];
+                    shapes.insert(output_name.clone(), output_shape.clone());
+                    let mut vip = ValueInfoProto::new();
+                    vip.set_name(output_name.clone());
+
+                    let mut tip = TypeProto::new();
+                    let mut ttp = TypeProto_Tensor::new();
+                    ttp.set_elem_type(output_shape.data_type.to_datatype().value());
+
+                    let mut tsp = TensorShapeProto::new();
+                    tsp.set_dim(
+                        output_shape
+                            .dims
+                            .iter()
+                            .map(|d| {
+                                let mut tspd = TensorShapeProto_Dimension::new();
+                                tspd.set_dim_value(*d as i64);
+                                tspd
+                            })
+                            .collect(),
+                    );
+                    ttp.set_shape(tsp);
+                    tip.set_tensor_type(ttp);
+                    vip.set_field_type(tip);
+                    self.value_info.push(vip);
+                }
             }
         }
 
@@ -897,9 +896,9 @@ pub(crate) fn infer_forward(
                     .collect();
                 Ok(vec![Shape::from(input_shapes[0].data_type, &output_shape)])
             } else {
-                Err(ShapeInferenceError::Unsupported(
-                    "Reshape with dynamic shape tensor".to_string(),
-                ))
+                Err(ShapeInferenceError::Unsupported(format!(
+                    "Reshape with dynamic shape tensor (input name is {shape_tensor_name})"
+                )))
             }
         }
 
