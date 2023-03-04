@@ -305,7 +305,7 @@ impl ShapeInference for GraphProto {
                     })
                     .collect::<Result<_, ShapeInferenceError>>()?;
 
-                let output_shapes = infer_forward(node, &input_shapes, &initializers)?;
+                let output_shapes = infer_output_shapes(node, &input_shapes, &initializers)?;
 
                 // Check inferred shapes
                 for (output_index, shape) in output_shapes.iter().enumerate() {
@@ -367,7 +367,7 @@ impl ShapeInference for GraphProto {
     }
 }
 
-pub(crate) fn infer_forward(
+pub(crate) fn infer_output_shapes(
     node: &NodeProto,
     input_shapes: &[&Shape],
     initializers: &HashMap<String, &TensorProto>,
@@ -857,6 +857,7 @@ pub(crate) fn infer_forward(
 
         ("Reshape", 2, 1) => {
             let shape_tensor_name = &node.get_input()[1];
+
             if let Some(shape_tensor) = initializers.get(shape_tensor_name) {
                 // Get the tensor's contents
                 let shape_tensor_contents = shape_tensor.get_int64_data();

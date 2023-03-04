@@ -15,7 +15,7 @@ use wonnx::{
     CompileError, GpuError, Session, SessionError,
 };
 
-use crate::shape_inference::{dimensions_infos, infer_forward, ShapeInferenceError};
+use crate::shape_inference::{dimensions_infos, infer_output_shapes, ShapeInferenceError};
 
 #[derive(Error, Debug)]
 pub enum ConstantFoldingError {
@@ -97,7 +97,7 @@ pub async fn fold_constants(
                     let mut all_initializers: HashMap<String, &TensorProto> = HashMap::new();
                     all_initializers.extend(initializers.iter().map(|(k, v)| (k.clone(), *v)));
                     all_initializers.extend(new_initializers.iter().map(|(k, v)| (k.clone(), v)));
-                    let output_shapes = infer_forward(node, &input_shapes, &initializers)
+                    let output_shapes = infer_output_shapes(node, &input_shapes, &initializers)
                         .map_err(ConstantFoldingError::ShapeInferenceError)?;
 
                     log::debug!("output_shapes: {:?}", output_shapes);
@@ -242,7 +242,7 @@ async fn calculate_constant_node_outputs<'a>(
                 .map(|input_name| &shapes[input_name])
                 .collect();
 
-            let output_shapes = infer_forward(node, &input_shapes, initializers)
+            let output_shapes = infer_output_shapes(node, &input_shapes, initializers)
                 .map_err(ConstantFoldingError::ShapeInferenceError)?;
 
             let mut graph = GraphProto::new();
