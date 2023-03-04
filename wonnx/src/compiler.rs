@@ -332,7 +332,7 @@ pub fn compile(
                 .collect();
             let chunks_with_dims_preserved = Shape::from(scalar_type, &dims_removed).chunks();
 
-            log::info!(
+            log::debug!(
                 "reduce Op={} axes={:?} output_shape={:?} chunks_with_dims_preserved={:?} output_length={}",
                 op,
                 axes,
@@ -510,15 +510,6 @@ pub fn compile(
             let right_of_axis_chunk = input_shapes[0].dims[((axis + 1) as usize)..]
                 .iter()
                 .product::<u64>();
-            log::info!(
-                "axis={}, left_of_axis={:?} slice={:?} axis_chunk={:?} slice={:?} right_of_axis_chunk={:?}",
-                axis,
-                left_of_axis,
-                &input_shapes[0].dims[0..(axis as usize)],
-                axis_chunk,
-                &input_shapes[0].dims[(axis as usize)..],
-                right_of_axis_chunk
-            );
 
             context.insert("axis_chunk", &axis_chunk);
 
@@ -1431,7 +1422,7 @@ fn workgroup_size(
     Ok(if x > max_x {
         let workgroup_size = ceil(x, max_x) as _;
         let threads = ceil(x, workgroup_size as u64) as _;
-        log::info!(
+        log::debug!(
             "number of items ({}) exceeds maximum number of threads ({}); adjusting workgroup size={} and threads={} (this will compute {} items)",
             x,
             max_x,
