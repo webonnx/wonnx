@@ -1143,6 +1143,11 @@ pub(crate) fn infer_output_shapes(
             Ok(vec![Shape::from(input_shapes[0].data_type, &output_dims)])
         }
 
+        ("BatchNormalization", 1.., 1) => {
+            // The first output's shape is equal to the input's shape
+            Ok(vec![input_shapes[0].clone()])
+        }
+
         (
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
             | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
