@@ -479,9 +479,9 @@ pub(crate) fn infer_output_shapes(
     ) {
         ("Clip", 1..=3, 1)
         | (
-            "Identity" | "Sqrt" | "Relu" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin" | "Asinh"
-            | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil"
-            | "Floor",
+            "Identity" | "Sqrt" | "Relu" | "LeakyRelu" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin"
+            | "Asinh" | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg"
+            | "Ceil" | "Floor",
             1,
             1,
         ) => Ok(vec![input_shapes[0].clone()]),
@@ -1150,10 +1150,11 @@ pub(crate) fn infer_output_shapes(
 
         (
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
-            | "Constant" | "Relu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape" | "Concat"
-            | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range" | "ConstantOfShape"
-            | "Transpose" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin" | "Asinh" | "Atan" | "Atanh"
-            | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil" | "Floor" | "Mod",
+            | "Constant" | "Relu" | "LeakyRelu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape"
+            | "Concat" | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range"
+            | "ConstantOfShape" | "Transpose" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin" | "Asinh"
+            | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil"
+            | "Floor" | "Mod",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
