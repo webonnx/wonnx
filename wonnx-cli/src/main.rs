@@ -1,4 +1,5 @@
 use crate::info::info_table;
+use crate::utils::ValueInfoProtoUtil;
 use info::print_graph;
 use prettytable::{row, Table};
 use protobuf::{self, Message};
@@ -216,6 +217,30 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
         &std::fs::read(model_path).expect("ONNX Model path not found."),
     )
     .expect("Could not deserialize the model");
+
+    // Set input shapes
+    if !prepare_opt.set_input.is_empty() {
+        for (input_name, shape_string) in prepare_opt.set_input {
+            let new_dims: Vec<i64> = shape_string
+                .split(',')
+                .map(|x| x.parse::<i64>().expect("invalid number"))
+                .collect();
+            match model
+                .mut_graph()
+                .input
+                .iter_mut()
+                .find(|n| n.get_name() == input_name)
+            {
+                Some(input) => {
+                    let data_type = input.data_type().map_err(|_| NNXError::InvalidInputShape)?;
+                    let shape = Shape::from(data_type, &new_dims);
+                    input.set_shape(&shape);
+                    log::info!("setting shape of input {input_name} to {shape}");
+                }
+                None => return Err(NNXError::InputNotFound(input_name)),
+            }
+        }
+    }
 
     // Set dynamic dimension parameters
     if !prepare_opt.set_dimension.is_empty() {

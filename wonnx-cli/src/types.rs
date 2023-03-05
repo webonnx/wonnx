@@ -249,6 +249,10 @@ pub struct PrepareOptions {
     /// Set dimension parameter to a value (e.g. "--set batch_size=1"). This parameter can occur multiple times to set multiple different parameters
     #[structopt(long = "set", parse(try_from_str = parse_key_val), number_of_values = 1, value_name = "parameter_name=value")]
     pub set_dimension: Vec<(String, String)>,
+
+    /// Set input shape (e.g. "--set-input input_1=3,1,255,255)")
+    #[structopt(long = "set-input", parse(try_from_str = parse_key_val), number_of_values = 1, value_name = "parameter_name=value")]
+    pub set_input: Vec<(String, String)>,
 }
 
 #[derive(Debug, StructOpt)]

@@ -8,6 +8,11 @@ use crate::onnx::ModelProto;
 use crate::onnx::OperatorSetIdProto;
 use crate::onnx::TensorProto;
 use crate::onnx::TensorProto_DataType;
+use crate::onnx::TensorShapeProto;
+use crate::onnx::TensorShapeProto_Dimension;
+use crate::onnx::TypeProto;
+use crate::onnx::TypeProto_Tensor;
+use crate::onnx::TypeProto_oneof_value;
 use crate::onnx::ValueInfoProto;
 use num::FromPrimitive;
 use std::borrow::Cow;
@@ -493,6 +498,23 @@ impl ValueInfoProto {
             },
             None => return Err(DataTypeError::Undefined),
         })
+    }
+
+    pub fn set_shape(&mut self, shape: &Shape) {
+        let mut tpt = TypeProto_Tensor::new();
+        tpt.set_elem_type(shape.data_type.to_datatype().value());
+
+        let mut tsp = TensorShapeProto::new();
+        tsp.dim.extend(shape.dims.iter().map(|x| {
+            let mut tspd = TensorShapeProto_Dimension::new();
+            tspd.set_dim_value(*x as i64);
+            tspd
+        }));
+        tpt.set_shape(tsp);
+
+        let mut tp = TypeProto::new();
+        tp.value = Some(TypeProto_oneof_value::tensor_type(tpt));
+        self.set_field_type(tp);
     }
 }
 
