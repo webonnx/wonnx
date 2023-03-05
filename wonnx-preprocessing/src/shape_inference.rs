@@ -149,15 +149,7 @@ pub(crate) fn dimensions_infos(
 
     for info in graph_proto.get_initializer() {
         if let Ok(data_type) = ScalarType::from_i32(info.get_data_type()) {
-            let mut shape = Shape::from(data_type, info.get_dims());
-            if shape.rank() == 0 {
-                log::warn!(
-                    "shape for '{}' initializer has zero rank, fixing to be [1]",
-                    info.get_name().to_string()
-                );
-                shape.dims = vec![1];
-                log::debug!("initializer: {:?}", info);
-            }
+            let shape = Shape::from(data_type, info.get_dims());
             if shapes_info
                 .insert(info.get_name().to_string(), shape)
                 .is_some()
@@ -244,7 +236,6 @@ fn replace_constant_ops_with_initializers(
                 } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
                     initializer = tp;
                     fix_raw_tensor(&mut initializer)?;
-                    log::debug!("RAW TENSOR: {initializer:?}");
                 } else {
                     log::debug!("Constant node attributes: {:?}", node.attribute);
                     return Err(ShapeInferenceError::Unsupported(
