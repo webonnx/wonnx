@@ -93,23 +93,13 @@ To work on wonnx itself, follow the following steps:
 
 - Install Rust
 - Install Vulkan, Metal, or DX12 for the GPU API.
-- Ensure Git LFS is installed or use the download link: https://wonnx.s3.eu-west-3.amazonaws.com/data.zip 
-> Please avoid heavy-usage of this community hosting.
 - git clone this repo.
 
 ```bash 
 git clone https://github.com/webonnx/wonnx.git
-# With Git LFS
-git lfs install
-# With Download link
-wget https://wonnx.s3.eu-west-3.amazonaws.com/data.zip
-rm -rf data
-unzip data.zip
 ```
 
-Ensure Git LFS is initialized and has downloaded the model files (in `wonnx/examples/data/models`). Then, you're all set!
-
-You can run one of the included examples through cargo:
+Then, you're all set! You can run one of the included examples through cargo:
 
 ```bash
 cargo run --example squeeze --release
@@ -117,20 +107,27 @@ cargo run --example squeeze --release
 
 ## Running other models
 
-- To run an onnx model, first simplify it with [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
+- To run an onnx model, first simplify it with `nnx prepare` (substitute with `cargo run -- prepare` when inside this repo):
+
+````bash
+nnx prepare -i ./some-model.onnx ./some-model-prepared.onnx
+````
+
+To specify dynamic dimension parameters, add e.g. `--set batch_size=1`.
+
+You can also use an external tool, such as [onnx-simplifier](https://github.com/daquexian/onnx-simplifier), with the command:
 
 ```bash
 # pip install -U pip && pip install onnx-simplifier
 python -m onnxsim mnist-8.onnx opt-mnist.onnx
 ```
 
-- Then you can run it following the example in the examples folder:
+- Then you can run it using the CLI (see [README](./wonnx-cli/README.md) or programmatically, following the 
+[examples in the examples folder](./wonnx/examples/). To run an example:
 
 ```bash
 cargo run --example mnist --release
 ```
-
-Examples are available in the [examples folder](./wonnx/examples/).
 
 ## Tested models
 
