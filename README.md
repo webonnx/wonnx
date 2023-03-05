@@ -430,8 +430,10 @@ Some models contain subgraphs whose output can be determined statically, as they
 during inference. WONNX can replace such constant intermediate values with static values ('constant folding'). This is
 supported in the following cases:
 
-* Output of nodes of the `Constant` op type
+* Output of nodes of the `Constant` op type (these are replaced with initializers)
+* Output of nodes of the `Shape` op type where the shape of the input is known (up front or during inference)
 * Output of nodes of which all inputs are constant (possibly after folding), *and* for which the operator is supported by WONNX.
 
-To perform constant folding from the CLI, pass the `--fold-constants` argument. To perform constant folding programmatically,
-use `wonnx_preprocessing::constant_folding::fold_constants`.
+Constant folding is performed as part of shape inference, unless disabled (from the CLI pass `--no-fold-constants` to disable). This
+is done in order to support models that dynamically calculate shapes using operators such as `Shape`/`Squeeze`/`Unsqueeze` depending
+on dynamically set dimension parameters (e.g. batch size).
