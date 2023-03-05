@@ -4,7 +4,7 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 
 use ::wonnx::Session;
-#[pyclass]
+#[pyclass(name = "Session")]
 #[repr(transparent)]
 pub struct PySession {
     pub session: Session,

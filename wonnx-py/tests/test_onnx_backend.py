@@ -37,7 +37,7 @@ class DummyRep(BackendRep):
         self.inputs = inputs
         self.outputs = outputs
         self.outputs_shape = outputs_shape
-        self.session = wonnx.PySession.from_bytes(onnx._serialize(model))
+        self.session = wonnx.Session.from_bytes(onnx._serialize(model))
         self.rtol = 1
         pass
 

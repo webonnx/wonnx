@@ -28,7 +28,7 @@ def test_parse_model():
     model_def = helper.make_model(graph_def, producer_name="onnx-example")
     model = onnx.shape_inference.infer_shapes(model_def)
 
-    session = wonnx.PySession.from_bytes(onnx._serialize(model))
+    session = wonnx.Session.from_bytes(onnx._serialize(model))
     inputs = {"x": [-1.0, 2.0]}
     assert session.run(inputs) == {"y": [0.0, 2.0]}, "Single Relu does not work"
 
@@ -36,7 +36,7 @@ def test_parse_model():
 def test_from_path():
 
     # Create the model (ModelProto)
-    session = wonnx.PySession.from_path(
+    session = wonnx.Session.from_path(
         "../examples/data/models/single_relu.onnx"
     )
     inputs = {"x": [-1.0, 2.0]}
@@ -51,7 +51,7 @@ def test_mnist():
     input = np.reshape(gray, (1, 1, 28, 28))
     # Create the model (ModelProto)
 
-    session = wonnx.PySession.from_path(
+    session = wonnx.Session.from_path(
         "../examples/data/models/opt-mnist.onnx"
     )
     inputs = {"Input3": input.flatten().tolist()}
@@ -79,7 +79,7 @@ def test_squeezenet():
     input_tensor = transform(image)
     # Create the model (ModelProto)
 
-    session = wonnx.PySession.from_path(
+    session = wonnx.Session.from_path(
         "../examples/data/models/opt-squeeze.onnx"
     )
     inputs = {"data": input_tensor.flatten().tolist()}

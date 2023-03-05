@@ -48,8 +48,8 @@ pip install wonnx
 And then, to use:
 
 ```python
-from wonnx import PySession
-session = PySession.from_path(
+from wonnx import Session
+session = Session.from_path(
     "../data/models/single_relu.onnx"
 )
 inputs = {"x": [-1.0, 2.0]}
