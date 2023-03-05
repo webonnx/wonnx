@@ -7,7 +7,7 @@ members = [
 	"wonnx-wasm"
 ]
 
-default-members = ["wonnx", "wonnx-cli"]
+default-members = ["wonnx", "wonnx-cli", "wonnx-preprocessing"]
 resolver = "2"
 
 [patch.crates-io]
