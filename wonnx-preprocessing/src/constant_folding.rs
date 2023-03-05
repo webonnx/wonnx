@@ -15,16 +15,11 @@ use wonnx::{
     CompileError, GpuError, Session, SessionError,
 };
 
-use crate::shape_inference::{dimensions_infos, infer_output_shapes, ShapeInferenceError};
-
 #[derive(Error, Debug)]
 pub enum ConstantFoldingError {
     #[error("unsupported data type encountered: {0}")]
     #[from(DataTypeError)]
     UnsupportedDataType(DataTypeError),
-
-    #[error("could not infer shape for folded node: {0}")]
-    ShapeInferenceError(ShapeInferenceError),
 
     #[error("invalid node: {0}")]
     InvalidNode(String),
@@ -34,120 +29,12 @@ pub enum ConstantFoldingError {
     CalculationError(SessionError),
 }
 
-pub async fn fold_constants(
-    graph: &mut GraphProto,
-    opset_version: i64,
-) -> Result<(), ConstantFoldingError> {
-    let mut new_initializers: HashMap<String, TensorProto> = HashMap::new();
-    let mut folded_node_indexes: Vec<usize> = vec![];
-    let mut foldable_nodes: Vec<String> = vec![];
-
-    {
-        let mut shapes =
-            dimensions_infos(graph).map_err(ConstantFoldingError::UnsupportedDataType)?;
-        let initializers: HashMap<String, &TensorProto> = HashMap::from_iter(
-            graph
-                .initializer
-                .iter()
-                .map(|x| (x.get_name().to_string(), x)),
-        );
-
-        for (node_index, node) in graph.node.iter().enumerate() {
-            // If nodes have all-constant inputs, their output can be folded to a constant as long as the node is deterministic
-            let all_inputs_are_constant = node.input.iter().all(|input_name| {
-                initializers.contains_key(input_name) || new_initializers.contains_key(input_name)
-            });
-            let is_known_shape_node =
-                node.get_op_type() == "Shape" && shapes.contains_key(&node.input[0]);
-            if all_inputs_are_constant || is_known_shape_node {
-                // This node can be folded
-                log::debug!("Node '{}' can be folded (all inputs constant: {all_inputs_are_constant}, is known shape node: {is_known_shape_node})", node.get_name());
-                let input_shapes: Vec<&Shape> = node
-                    .input
-                    .iter()
-                    .map(|input_name| &shapes[input_name])
-                    .collect();
-
-                let inputs: Vec<InputTensor> = node
-                    .input
-                    .iter()
-                    .map(|input_name| {
-                        if let Some(initializer) = initializers.get(input_name) {
-                            (*initializer).try_into()
-                        } else if let Some(new_initializer) = new_initializers.get(input_name) {
-                            new_initializer.try_into()
-                        } else {
-                            // This should only happen when is_known_shape is true. In this case we will not do any GPU inference
-                            // and the contents if this tensor don't matter
-                            Ok(InputTensor::I64(Cow::Owned(vec![])))
-                        }
-                    })
-                    .collect::<Result<_, _>>()
-                    .map_err(ConstantFoldingError::UnsupportedDataType)?;
-                if let Some(mut constant_output) = calculate_constant_node_outputs(
-                    node,
-                    &shapes,
-                    &inputs,
-                    &initializers,
-                    opset_version,
-                )
-                .await?
-                {
-                    // Infer output shapes
-                    let mut all_initializers: HashMap<String, &TensorProto> = HashMap::new();
-                    all_initializers.extend(initializers.iter().map(|(k, v)| (k.clone(), *v)));
-                    all_initializers.extend(new_initializers.iter().map(|(k, v)| (k.clone(), v)));
-                    let output_shapes = infer_output_shapes(node, &input_shapes, &initializers)
-                        .map_err(ConstantFoldingError::ShapeInferenceError)?;
-
-                    log::debug!("output_shapes: {:?}", output_shapes);
-
-                    for (output_index, output_name) in node.output.iter().enumerate().rev() {
-                        let output_tensor = constant_output.remove(output_index);
-
-                        let output_shape = &output_shapes[output_index];
-                        let mut initializer: TensorProto = output_tensor.into();
-                        initializer.set_name(output_name.clone());
-                        initializer.set_dims(output_shape.dims.iter().map(|x| *x as i64).collect());
-                        new_initializers.insert(output_name.clone(), initializer);
-                        shapes.insert(output_name.clone(), output_shape.clone());
-                        folded_node_indexes.push(node_index);
-                        log::info!(
-                            "folded output '{output_name}' (#{output_index}) of node {} shape={output_shape}",
-                            node.get_name(),
-                        );
-                    }
-                } else {
-                    foldable_nodes.push(node.get_name().to_string());
-                }
-            }
-        }
-    }
-
-    // Insert initializers that we created
-    graph.initializer.extend(new_initializers.into_values());
-
-    // Remove folded nodes
-    folded_node_indexes.sort();
-    for index in folded_node_indexes.iter().rev() {
-        graph.node.remove(*index);
-    }
-
-    if !foldable_nodes.is_empty() {
-        log::info!(
-            "The following nodes can likely be folded, but currently aren't due to missing support: {}",
-            foldable_nodes.join(", ")
-        );
-    }
-
-    Ok(())
-}
-
-async fn calculate_constant_node_outputs<'a>(
+pub(crate) async fn calculate_constant_node_outputs<'a>(
     node: &'a NodeProto,
-    shapes: &HashMap<String, Shape>,
-    inputs: &[InputTensor<'a>],
-    initializers: &HashMap<String, &TensorProto>,
+    shapes: &'a HashMap<String, Shape>,
+    inputs: &'a [InputTensor<'a>],
+    output_shapes: &[Shape],
+    _initializers: &HashMap<String, Cow<'a, TensorProto>>,
     opset_version: i64,
 ) -> Result<Option<Vec<OutputTensor>>, ConstantFoldingError> {
     Ok(match node.get_op_type() {
@@ -213,15 +100,6 @@ async fn calculate_constant_node_outputs<'a>(
         }
         _ => {
             // Try to run on GPU
-            let input_shapes: Vec<&Shape> = node
-                .input
-                .iter()
-                .map(|input_name| &shapes[input_name])
-                .collect();
-
-            let output_shapes = infer_output_shapes(node, &input_shapes, initializers)
-                .map_err(ConstantFoldingError::ShapeInferenceError)?;
-
             let mut graph = GraphProto::new();
             graph.set_input(RepeatedField::from(
                 node.input
@@ -327,7 +205,7 @@ fn input_to_value_info(shape: &Shape, name: &str) -> ValueInfoProto {
     vip
 }
 
-pub(crate) fn calculate_shape_operator(
+fn calculate_shape_operator(
     node: &NodeProto,
     input_shape: &Shape,
 ) -> Result<OutputTensor, ConstantFoldingError> {

@@ -238,11 +238,11 @@ pub struct PrepareOptions {
     #[structopt(long = "discard-shapes")]
     pub discard_shapes: bool,
 
-    /// Fold constants (removes nodes whose output is all constant with constant initializers)
-    #[structopt(long = "fold-constants")]
-    pub fold_constants: bool,
+    /// Do not fold constants during shape inference (folding removes nodes whose output is all constant with constant initializers)
+    #[structopt(long = "no-fold-constants")]
+    pub no_fold_constants: bool,
 
-    /// Attempt to infer value types
+    /// Attempt to infer value types and performs constant folding (unless --no-fold-constants is specified)
     #[structopt(long = "infer-shapes", short = "i")]
     pub infer_shapes: bool,
 

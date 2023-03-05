@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use protobuf::ProtobufEnum;
 use thiserror::Error;
@@ -7,8 +7,12 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, TypeProto_oneof_value, ValueInfoProto,
     },
-    utils::{AttributeNotFoundError, DataTypeError, NodeAttributes, ScalarType, Shape},
+    utils::{
+        AttributeNotFoundError, DataTypeError, InputTensor, NodeAttributes, ScalarType, Shape,
+    },
 };
+
+use crate::constant_folding::{calculate_constant_node_outputs, ConstantFoldingError};
 
 pub fn apply_dynamic_dimensions(graph: &mut GraphProto, dynamic_dims: &HashMap<String, i64>) {
     // Apply to values
@@ -32,7 +36,7 @@ fn div_ceil(num: i64, div: i64) -> i64 {
 
 /// Retrieve the value of the initializer with the given name as a vector if i64 values.
 fn static_initializer_value_i64<'a>(
-    initializers: &HashMap<String, &'a TensorProto>,
+    initializers: &'a HashMap<String, Cow<'a, TensorProto>>,
     name: &str,
 ) -> Result<&'a [i64], ShapeInferenceError> {
     if let Some(shape_tensor) = initializers.get(name) {
@@ -190,9 +194,14 @@ pub enum ShapeInferenceError {
     #[error("unsupported data type encountered: {0}")]
     #[from(DataTypeError)]
     UnsupportedDataType(DataTypeError),
+
+    #[error("constant folding failed: {0}")]
+    #[from(ConstantFoldingError)]
+    ConstantFoldingError(ConstantFoldingError),
 }
 
-pub fn replace_constant_ops_with_initializers(
+/// Replaces nodes of op type Constant with an initializer
+fn replace_constant_ops_with_initializers(
     graph: &mut GraphProto,
 ) -> Result<(), ShapeInferenceError> {
     for node_index in (0..graph.node.len()).rev() {
@@ -235,6 +244,7 @@ pub fn replace_constant_ops_with_initializers(
                 } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
                     initializer = tp;
                     fix_raw_tensor(&mut initializer)?;
+                    log::debug!("RAW TENSOR: {initializer:?}");
                 } else {
                     log::debug!("Constant node attributes: {:?}", node.attribute);
                     return Err(ShapeInferenceError::Unsupported(
@@ -258,19 +268,29 @@ pub fn replace_constant_ops_with_initializers(
     Ok(())
 }
 
-pub async fn infer_shapes(graph: &mut GraphProto) -> Result<(), ShapeInferenceError> {
+pub async fn infer_shapes(
+    graph: &mut GraphProto,
+    should_fold_constants: bool,
+    opset_version: i64,
+) -> Result<(), ShapeInferenceError> {
+    let mut foldable_nodes: Vec<String> = vec![];
+    let mut folded_node_indexes: Vec<usize> = vec![];
+
+    if should_fold_constants {
+        replace_constant_ops_with_initializers(graph)?;
+    }
+
     let mut shapes = dimensions_infos(graph).map_err(ShapeInferenceError::UnsupportedDataType)?;
-    log::debug!("known shapes before shape inference: {shapes:#?}");
 
     // Needed for Reshape
-    let initializers: HashMap<String, &TensorProto> = HashMap::from_iter(
+    let mut initializers: HashMap<String, Cow<TensorProto>> = HashMap::from_iter(
         graph
             .initializer
             .iter()
-            .map(|x| (x.get_name().to_string(), x)),
+            .map(|x| (x.get_name().to_string(), Cow::Borrowed(x))),
     );
 
-    for node in &mut graph.node {
+    for (node_index, node) in graph.node.iter().enumerate() {
         log::debug!(
             "node: {} {} inputs {} -> outputs {}",
             node.get_op_type(),
@@ -352,7 +372,105 @@ pub async fn infer_shapes(graph: &mut GraphProto) -> Result<(), ShapeInferenceEr
                 vip.set_field_type(tip);
                 graph.value_info.push(vip);
             }
+
+            // Can we fold the node altogether?
+            let can_fold = should_fold_constants && {
+                let all_inputs_are_constant = node
+                    .input
+                    .iter()
+                    .all(|input_name| initializers.contains_key(input_name));
+                let is_known_shape_node =
+                    node.get_op_type() == "Shape" && shapes.contains_key(&node.input[0]);
+                all_inputs_are_constant || is_known_shape_node
+            };
+
+            if can_fold {
+                log::debug!("node '{}' can be folded", node.get_name());
+
+                // Collect constant inputs
+                let inputs: Vec<InputTensor> = node
+                    .input
+                    .iter()
+                    .map(|input_name| {
+                        if let Some(initializer) = initializers.get(input_name) {
+                            InputTensor::try_from(initializer.as_ref())
+                        } else {
+                            // This should only happen when is_known_shape is true. In this case we will not do any GPU inference
+                            // and the contents if this tensor don't matter
+                            Ok(InputTensor::I64(Cow::Owned(vec![])))
+                        }
+                    })
+                    .collect::<Result<_, _>>()
+                    .map_err(|x| {
+                        ShapeInferenceError::ConstantFoldingError(
+                            ConstantFoldingError::UnsupportedDataType(x),
+                        )
+                    })?;
+
+                if let Some(mut constant_output) = calculate_constant_node_outputs(
+                    node,
+                    &shapes,
+                    &inputs,
+                    &output_shapes,
+                    &initializers,
+                    opset_version,
+                )
+                .await
+                .map_err(ShapeInferenceError::ConstantFoldingError)?
+                {
+                    // Save constant outputs as initializers
+                    for (output_index, output_name) in node.output.iter().enumerate().rev() {
+                        let output_tensor = constant_output.remove(output_index);
+
+                        let output_shape = &output_shapes[output_index];
+                        let mut initializer: TensorProto = output_tensor.into();
+                        initializer.set_name(output_name.clone());
+                        initializer.set_dims(output_shape.dims.iter().map(|x| *x as i64).collect());
+                        initializers.insert(output_name.clone(), Cow::Owned(initializer));
+
+                        assert_eq!(
+                            &shapes[output_name], output_shape,
+                            "output shape should be the same after folding"
+                        );
+                        folded_node_indexes.push(node_index);
+
+                        log::info!(
+                            "folded output '{output_name}' (#{output_index}) of node {} shape={output_shape}",
+                            node.get_name(),
+                        );
+                    }
+                } else {
+                    foldable_nodes.push(node.get_name().to_string());
+                }
+            }
         }
+    }
+
+    // Remove folded nodes
+    folded_node_indexes.sort();
+    for index in folded_node_indexes.iter().rev() {
+        graph.node.remove(*index);
+    }
+
+    // Save newly created initializers
+    let new_initializers: Vec<TensorProto> = initializers
+        .into_iter()
+        .flat_map(|(_, x)| match x {
+            Cow::Owned(z) => Some(z),
+            Cow::Borrowed(_) => None,
+        })
+        .collect();
+
+    for new_initializer in new_initializers {
+        graph.initializer.push(new_initializer);
+    }
+
+    // Notify about missing fold implementations
+    if !foldable_nodes.is_empty() {
+        log::info!(
+            "The following nodes can likely be folded, but currently aren't due to missing support: {}",
+            foldable_nodes.join(", ")
+        );
     }
 
     Ok(())
@@ -361,7 +479,7 @@ pub async fn infer_shapes(graph: &mut GraphProto) -> Result<(), ShapeInferenceEr
 pub(crate) fn infer_output_shapes(
     node: &NodeProto,
     input_shapes: &[&Shape],
-    initializers: &HashMap<String, &TensorProto>,
+    initializers: &HashMap<String, Cow<TensorProto>>,
 ) -> Result<Vec<Shape>, ShapeInferenceError> {
     match (
         node.get_op_type(),
@@ -850,17 +968,10 @@ pub(crate) fn infer_output_shapes(
             let shape_tensor_name = &node.get_input()[1];
 
             if let Some(shape_tensor) = initializers.get(shape_tensor_name) {
+                let allow_zero = node.get_attribute_value("allowzero", Some(0)).unwrap() == 1;
+
                 // Get the tensor's contents
                 let shape_tensor_contents = shape_tensor.get_int64_data();
-                let shape_tensor_product: i64 = shape_tensor_contents.iter().product();
-
-                if shape_tensor_product != input_shapes[0].element_count() as i64 {
-                    return Err(ShapeInferenceError::InvalidNode(
-            			node.get_name().to_string(),
-						format!("Reshape shape tensor (element count={}) must have the same number of elements as the input tensor's rank ({})", shape_tensor_product, input_shapes[0].element_count())));
-                }
-
-                let allow_zero = node.get_attribute_value("allowzero", Some(0)).unwrap() == 1;
 
                 // The -1 value is allowed but not supported
                 for dim in shape_tensor_contents {
@@ -886,6 +997,13 @@ pub(crate) fn infer_output_shapes(
                         }
                     })
                     .collect();
+
+                if output_shape.iter().product::<i64>() != input_shapes[0].element_count() as i64 {
+                    return Err(ShapeInferenceError::InvalidNode(
+            			node.get_name().to_string(),
+						format!("Reshape input tensor (element count={}) must have the same number of elements as specified by the new shape ({})", input_shapes[0].element_count(), output_shape.iter().product::<i64>())));
+                }
+
                 Ok(vec![Shape::from(input_shapes[0].data_type, &output_shape)])
             } else {
                 Err(ShapeInferenceError::Unsupported(format!(
@@ -1129,7 +1247,7 @@ mod tests {
         let graph = model.mut_graph();
         let infos = dimensions_infos(graph).unwrap();
         graph.value_info.clear();
-        infer_shapes(graph).await.unwrap();
+        infer_shapes(graph, false, 13).await.unwrap();
         let new_infos = dimensions_infos(graph).unwrap();
         assert_eq!(infos, new_infos);
     }
