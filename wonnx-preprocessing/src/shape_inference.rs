@@ -1222,6 +1222,8 @@ fn fix_raw_tensor(tensor: &mut TensorProto) -> Result<(), ShapeInferenceError> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use protobuf::Message;
     use wonnx::onnx::ModelProto;
 
@@ -1230,7 +1232,7 @@ mod tests {
     use super::dimensions_infos;
 
     /// Load a model, strip (and stash) all shape info for intermediate values, then re-infer shapes and compare with stashed original
-    async fn test_shape_inference_for_model(path: &str) {
+    async fn test_shape_inference_for_model(path: &str, should_fold_constants: bool) {
         let mut model =
             ModelProto::parse_from_bytes(&std::fs::read(path).expect("ONNX Model path not found."))
                 .unwrap();
@@ -1238,9 +1240,28 @@ mod tests {
         let graph = model.mut_graph();
         let infos = dimensions_infos(graph).unwrap();
         graph.value_info.clear();
-        infer_shapes(graph, false, 13).await.unwrap();
+        infer_shapes(graph, should_fold_constants, 13)
+            .await
+            .unwrap();
         let new_infos = dimensions_infos(graph).unwrap();
-        assert_eq!(infos, new_infos);
+
+        let keys_in_old: HashSet<String> = infos.keys().cloned().collect();
+        let keys_in_new: HashSet<String> = new_infos.keys().cloned().collect();
+        let all_keys: HashSet<String> = keys_in_old.union(&keys_in_new).cloned().collect();
+
+        for key in all_keys {
+            if !keys_in_old.contains(&key) || !keys_in_new.contains(&key) || infos[&key].is_empty()
+            {
+                // Key is new after shape inference (the original model was apparently missing shapes)
+                // Key missing after shape inference (this may be the result of constant folding)
+                // Empty dims in source means missing... ignore
+            } else {
+                assert_eq!(
+                    infos[&key], new_infos[&key],
+                    "different shape inferred for {key}"
+                )
+            }
+        }
     }
 
     #[test]
@@ -1248,9 +1269,11 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
 
         pollster::block_on(async {
-            test_shape_inference_for_model("../data/models/opt-mnist.onnx").await;
-            test_shape_inference_for_model("../data/models/opt-squeeze.onnx").await;
-            test_shape_inference_for_model("../data/models/single_relu.onnx").await;
+            test_shape_inference_for_model("../data/models/opt-mnist.onnx", false).await;
+            test_shape_inference_for_model("../data/models/opt-squeeze.onnx", false).await;
+            test_shape_inference_for_model("../data/models/single_relu.onnx", false).await;
+            test_shape_inference_for_model("../data/models/single_relu.onnx", false).await;
+            test_shape_inference_for_model("../data/models/mobilenetv2-7.onnx", true).await;
         });
     }
 }
