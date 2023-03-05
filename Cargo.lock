@@ -4143,6 +4143,7 @@ dependencies = [
  "image",
  "log",
  "ndarray",
+ "pollster",
  "protobuf",
  "serde_json",
  "thiserror",

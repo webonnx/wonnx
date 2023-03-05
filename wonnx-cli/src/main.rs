@@ -252,7 +252,7 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
 
     // Shape inference
     if prepare_opt.infer_shapes {
-        infer_shapes(model.mut_graph())?;
+        infer_shapes(model.mut_graph()).await?;
     }
 
     // Save the model

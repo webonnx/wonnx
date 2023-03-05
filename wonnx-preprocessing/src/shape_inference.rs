@@ -258,7 +258,7 @@ pub fn replace_constant_ops_with_initializers(
     Ok(())
 }
 
-pub fn infer_shapes(graph: &mut GraphProto) -> Result<(), ShapeInferenceError> {
+pub async fn infer_shapes(graph: &mut GraphProto) -> Result<(), ShapeInferenceError> {
     let mut shapes = dimensions_infos(graph).map_err(ShapeInferenceError::UnsupportedDataType)?;
     log::debug!("known shapes before shape inference: {shapes:#?}");
 
@@ -1121,7 +1121,7 @@ mod tests {
     use super::dimensions_infos;
 
     /// Load a model, strip (and stash) all shape info for intermediate values, then re-infer shapes and compare with stashed original
-    fn test_shape_inference_for_model(path: &str) {
+    async fn test_shape_inference_for_model(path: &str) {
         let mut model =
             ModelProto::parse_from_bytes(&std::fs::read(path).expect("ONNX Model path not found."))
                 .unwrap();
@@ -1129,15 +1129,19 @@ mod tests {
         let graph = model.mut_graph();
         let infos = dimensions_infos(graph).unwrap();
         graph.value_info.clear();
-        infer_shapes(graph).unwrap();
+        infer_shapes(graph).await.unwrap();
         let new_infos = dimensions_infos(graph).unwrap();
         assert_eq!(infos, new_infos);
     }
 
     #[test]
     fn test_shape_inference() {
-        test_shape_inference_for_model("../data/models/opt-mnist.onnx");
-        test_shape_inference_for_model("../data/models/opt-squeeze.onnx");
-        test_shape_inference_for_model("../data/models/single_relu.onnx");
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        pollster::block_on(async {
+            test_shape_inference_for_model("../data/models/opt-mnist.onnx").await;
+            test_shape_inference_for_model("../data/models/opt-squeeze.onnx").await;
+            test_shape_inference_for_model("../data/models/single_relu.onnx").await;
+        });
     }
 }
