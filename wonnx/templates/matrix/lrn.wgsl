@@ -19,5 +19,5 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         square_sum += I * I;
     }
 
-    output_0.data[c] = input_0.data[ c ] / pow({{bias}} + ({{alpha}} / {{size}}.0) * square_sum,{{beta}});
+    output_0.data[c] = input_0.data[ c ] / pow({{ scalar_type }}({{ bias }}) + ({{ scalar_type }}({{ alpha }}) / {{ scalar_type }}({{ size }})) * square_sum, {{ scalar_type }}({{ beta }}));
 }
