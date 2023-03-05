@@ -421,7 +421,7 @@ dimension parameters; the `-i` flag enables shape inference):
 nnx prepare model.onnx model-prepared.onnx --set batch_size=1 --set sequence_length=255 -i
 ````
 
-To perform shape inference programmatically, use `apply_dynamic_dimensions` and `ShapeInference::infer_shapes` from the 
+To perform shape inference programmatically, use `apply_dynamic_dimensions` and `infer_shapes` from the 
 `wonnx_preprocessing::shape_inference` module.
 
 ### Constant folding
