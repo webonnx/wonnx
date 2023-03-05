@@ -5,6 +5,11 @@ on:
     # Sequence of patterns matched against refs/tags
     tags:
       - "v*" # Push events to matching wonnx-py-v*
+
+env:
+  RUST_BACKTRACE: 1
+  RUST_VERSION: 1.66
+
 jobs:
   build:
     name: Create Release
@@ -15,12 +20,12 @@ jobs:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     steps:
       - uses: actions/checkout@v2
-      - name: Install latest Rust nightly
+      - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2022-01-01
+          toolchain: ${{ env.RUST_VERSION }}
+          profile: minimal
           override: true
-          components: rustfmt, clippy
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -35,8 +40,6 @@ jobs:
           MATURIN_PASSWORD: ${{ secrets.PYPI_PASS }}
         run: |
           cd wonnx-py
-          rustup override set nightly-2022-01-01
-          export RUSTFLAGS='-C target-feature=+fxsr,+sse,+sse2,+sse3'
           maturin publish \
           --no-sdist \
           --skip-existing \
