@@ -208,31 +208,8 @@ async fn calculate_constant_node_outputs<'a>(
             Some(vec![output_tensor])
         }
         "Shape" => {
-            let input_shape: Vec<i64> = shapes[&node.input[0]]
-                .dims
-                .iter()
-                .map(|x| *x as i64)
-                .collect();
-            let mut start = node.get_attribute_value("start", Some(0)).unwrap();
-            let mut end = node
-                .get_attribute_value("start", Some(input_shape.len() as i64 - 1))
-                .unwrap();
-            if start < 0 {
-                start += input_shape.len() as i64;
-            }
-            if end < 0 {
-                end += input_shape.len() as i64;
-            }
-            if start > end {
-                return Err(ConstantFoldingError::InvalidNode(format!("end attribute value ({}) for Shape node should be higher than start attribute ({})", end, start)));
-            }
-
-            let output_shape: Vec<i64> = (input_shape[(start as usize)..=(end as usize)]).into();
-            if output_shape.is_empty() {
-                log::warn!("Shape operator results in an empty output shape which is probably an issue... start={start} end={end} input_shape={}", shapes[&node.input[0]]);
-            }
-
-            Some(vec![OutputTensor::I64(output_shape)])
+            let input_shape = &shapes[&node.input[0]];
+            Some(vec![calculate_shape_operator(node, input_shape)?])
         }
         _ => {
             // Try to run on GPU
@@ -348,4 +325,34 @@ fn input_to_value_info(shape: &Shape, name: &str) -> ValueInfoProto {
     vip.set_name(name.to_string());
     vip.set_field_type(ftp);
     vip
+}
+
+pub(crate) fn calculate_shape_operator(
+    node: &NodeProto,
+    input_shape: &Shape,
+) -> Result<OutputTensor, ConstantFoldingError> {
+    let input_dims: Vec<i64> = input_shape.dims.iter().map(|x| *x as i64).collect();
+    let mut start = node.get_attribute_value("start", Some(0)).unwrap();
+    let mut end = node
+        .get_attribute_value("start", Some(input_dims.len() as i64 - 1))
+        .unwrap();
+    if start < 0 {
+        start += input_dims.len() as i64;
+    }
+    if end < 0 {
+        end += input_dims.len() as i64;
+    }
+    if start > end {
+        return Err(ConstantFoldingError::InvalidNode(format!(
+            "end attribute value ({}) for Shape node should be higher than start attribute ({})",
+            end, start
+        )));
+    }
+
+    let output_shape: Vec<i64> = (input_dims[(start as usize)..=(end as usize)]).into();
+    if output_shape.is_empty() {
+        log::warn!("Shape operator results in an empty output shape which is probably an issue... start={start} end={end} input_shape={}", input_shape);
+    }
+
+    Ok(OutputTensor::I64(output_shape))
 }

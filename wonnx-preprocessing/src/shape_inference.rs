@@ -25,11 +25,6 @@ pub fn apply_dynamic_dimensions(graph: &mut GraphProto, dynamic_dims: &HashMap<S
     }
 }
 
-pub trait ShapeInference {
-    fn infer_shapes(&mut self) -> Result<(), ShapeInferenceError>;
-    fn replace_constant_ops_with_initializers(&mut self) -> Result<(), ShapeInferenceError>;
-}
-
 /// Divide a number by the indicated dividend, then round up to the next multiple of the dividend if there is a rest.
 fn div_ceil(num: i64, div: i64) -> i64 {
     num / div + (num % div != 0) as i64
@@ -197,174 +192,170 @@ pub enum ShapeInferenceError {
     UnsupportedDataType(DataTypeError),
 }
 
-impl ShapeInference for GraphProto {
-    fn replace_constant_ops_with_initializers(
-        self: &mut GraphProto,
-    ) -> Result<(), ShapeInferenceError> {
-        for node_index in (0..self.node.len()).rev() {
-            let is_constant = self.node[node_index].get_op_type() == "Constant";
+pub fn replace_constant_ops_with_initializers(
+    graph: &mut GraphProto,
+) -> Result<(), ShapeInferenceError> {
+    for node_index in (0..graph.node.len()).rev() {
+        let is_constant = graph.node[node_index].get_op_type() == "Constant";
 
-            if is_constant {
-                {
-                    let node = &self.node[node_index];
-                    if node.get_output().len() != 1 {
-                        return Err(ShapeInferenceError::InvalidNode(
-                            node.get_name().to_string(),
-                            format!(
-                                "Constant op must have one output, has {}",
-                                node.get_output().len()
-                            ),
-                        ));
-                    }
-
-                    // Create an initializer
-                    let mut initializer = TensorProto::new();
-
-                    // Get constant value
-                    if let Ok(values) = node.get_attribute_value::<Vec<f32>>("value_floats", None) {
-                        initializer.set_data_type(ScalarType::F32.to_datatype().value());
-                        initializer.set_dims(vec![values.len() as i64]);
-                        initializer.set_float_data(values);
-                    } else if let Ok(values) =
-                        node.get_attribute_value::<Vec<i64>>("value_ints", None)
-                    {
-                        initializer.set_data_type(ScalarType::I64.to_datatype().value());
-                        initializer.set_dims(vec![values.len() as i64]);
-                        initializer.set_int64_data(values);
-                    } else if let Ok(values) = node.get_attribute_value::<i64>("value_int", None) {
-                        initializer.set_int64_data(vec![values]);
-                        initializer.set_data_type(ScalarType::I64.to_datatype().value());
-                        initializer.set_dims(vec![1]);
-                    } else if let Ok(values) = node.get_attribute_value::<f32>("value_float", None)
-                    {
-                        initializer.set_float_data(vec![values]);
-                        initializer.set_data_type(ScalarType::F32.to_datatype().value());
-                        initializer.set_dims(vec![1]);
-                    } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
-                        initializer = tp;
-                        fix_raw_tensor(&mut initializer)?;
-                    } else {
-                        log::debug!("Constant node attributes: {:?}", node.attribute);
-                        return Err(ShapeInferenceError::Unsupported(
-                            "Constant node with data types other than float, int".to_string(),
-                        ));
-                    }
-
-                    log::info!(
-                        "Replacing Constant node '{}' with an initializer (name='{}', shape={:?})",
-                        node.get_name(),
-                        node.output[0].clone(),
-                        initializer.dims
-                    );
-
-                    initializer.set_name(node.output[0].clone()); // Needs to happen here because the name can be overwritten above when there is a tensor in the "value" attribute
-                    self.initializer.push(initializer);
-                }
-                self.node.remove(node_index);
-            }
-        }
-        Ok(())
-    }
-
-    fn infer_shapes(self: &mut GraphProto) -> Result<(), ShapeInferenceError> {
-        let mut shapes =
-            dimensions_infos(self).map_err(ShapeInferenceError::UnsupportedDataType)?;
-        log::debug!("known shapes before shape inference: {shapes:#?}");
-
-        // Needed for Reshape
-        let initializers: HashMap<String, &TensorProto> = HashMap::from_iter(
-            self.initializer
-                .iter()
-                .map(|x| (x.get_name().to_string(), x)),
-        );
-
-        for node in &mut self.node {
-            log::debug!(
-                "Node: {} {} inputs {} -> outputs {}",
-                node.get_op_type(),
-                node.get_name(),
-                node.get_input().join(", "),
-                node.get_output().join(", ")
-            );
-
-            // Do shape inference if this node has at least one output for which the shape is not yet known
-            if node
-                .get_output()
-                .iter()
-                .any(|output_name| !shapes.contains_key(output_name.as_str()))
+        if is_constant {
             {
-                log::debug!("node needs shape inference: {}", node.get_name());
+                let node = &graph.node[node_index];
+                if node.get_output().len() != 1 {
+                    return Err(ShapeInferenceError::InvalidNode(
+                        node.get_name().to_string(),
+                        format!(
+                            "Constant op must have one output, has {}",
+                            node.get_output().len()
+                        ),
+                    ));
+                }
 
-                let input_shapes: Vec<&Shape> = node
-                    .get_input()
-                    .iter()
-                    .map(|name| {
-                        shapes
-                            .get(name)
-                            .ok_or_else(|| ShapeInferenceError::MissingInputShape(name.clone()))
-                    })
-                    .collect::<Result<_, ShapeInferenceError>>()?;
+                // Create an initializer
+                let mut initializer = TensorProto::new();
 
-                let output_shapes = infer_output_shapes(node, &input_shapes, &initializers)?;
-
-                // Check inferred shapes
-                for (output_index, shape) in output_shapes.iter().enumerate() {
-                    if shape.rank() == 0 {
-                        log::warn!(
-                            "inferred shape for output {output_index} of node '{}' is empty: {shape}",
-                            node.get_name()
-                        );
-                    }
+                // Get constant value
+                if let Ok(values) = node.get_attribute_value::<Vec<f32>>("value_floats", None) {
+                    initializer.set_data_type(ScalarType::F32.to_datatype().value());
+                    initializer.set_dims(vec![values.len() as i64]);
+                    initializer.set_float_data(values);
+                } else if let Ok(values) = node.get_attribute_value::<Vec<i64>>("value_ints", None)
+                {
+                    initializer.set_data_type(ScalarType::I64.to_datatype().value());
+                    initializer.set_dims(vec![values.len() as i64]);
+                    initializer.set_int64_data(values);
+                } else if let Ok(values) = node.get_attribute_value::<i64>("value_int", None) {
+                    initializer.set_int64_data(vec![values]);
+                    initializer.set_data_type(ScalarType::I64.to_datatype().value());
+                    initializer.set_dims(vec![1]);
+                } else if let Ok(values) = node.get_attribute_value::<f32>("value_float", None) {
+                    initializer.set_float_data(vec![values]);
+                    initializer.set_data_type(ScalarType::F32.to_datatype().value());
+                    initializer.set_dims(vec![1]);
+                } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
+                    initializer = tp;
+                    fix_raw_tensor(&mut initializer)?;
+                } else {
+                    log::debug!("Constant node attributes: {:?}", node.attribute);
+                    return Err(ShapeInferenceError::Unsupported(
+                        "Constant node with data types other than float, int".to_string(),
+                    ));
                 }
 
                 log::info!(
-                    "node {} inferred output shapes: {}",
+                    "Replacing Constant node '{}' with an initializer (name='{}', shape={:?})",
                     node.get_name(),
-                    output_shapes
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, x)| format!("{}={x}", node.output[idx]))
-                        .collect::<Vec<String>>()
-                        .join(", ")
+                    node.output[0].clone(),
+                    initializer.dims
                 );
 
-                if output_shapes.len() != node.get_output().len() {
-                    panic!("number of outputs inferred does not match node output count");
-                }
+                initializer.set_name(node.output[0].clone()); // Needs to happen here because the name can be overwritten above when there is a tensor in the "value" attribute
+                graph.initializer.push(initializer);
+            }
+            graph.node.remove(node_index);
+        }
+    }
+    Ok(())
+}
 
-                // Cache the inferred shapes and write to model
-                for (output_idx, output_name) in node.get_output().iter().enumerate() {
-                    let output_shape = &output_shapes[output_idx];
-                    shapes.insert(output_name.clone(), output_shape.clone());
-                    let mut vip = ValueInfoProto::new();
-                    vip.set_name(output_name.clone());
+pub fn infer_shapes(graph: &mut GraphProto) -> Result<(), ShapeInferenceError> {
+    let mut shapes = dimensions_infos(graph).map_err(ShapeInferenceError::UnsupportedDataType)?;
+    log::debug!("known shapes before shape inference: {shapes:#?}");
 
-                    let mut tip = TypeProto::new();
-                    let mut ttp = TypeProto_Tensor::new();
-                    ttp.set_elem_type(output_shape.data_type.to_datatype().value());
+    // Needed for Reshape
+    let initializers: HashMap<String, &TensorProto> = HashMap::from_iter(
+        graph
+            .initializer
+            .iter()
+            .map(|x| (x.get_name().to_string(), x)),
+    );
 
-                    let mut tsp = TensorShapeProto::new();
-                    tsp.set_dim(
-                        output_shape
-                            .dims
-                            .iter()
-                            .map(|d| {
-                                let mut tspd = TensorShapeProto_Dimension::new();
-                                tspd.set_dim_value(*d as i64);
-                                tspd
-                            })
-                            .collect(),
+    for node in &mut graph.node {
+        log::debug!(
+            "node: {} {} inputs {} -> outputs {}",
+            node.get_op_type(),
+            node.get_name(),
+            node.get_input().join(", "),
+            node.get_output().join(", ")
+        );
+
+        // Do shape inference if this node has at least one output for which the shape is not yet known
+        if node
+            .get_output()
+            .iter()
+            .any(|output_name| !shapes.contains_key(output_name.as_str()))
+        {
+            log::debug!("node needs shape inference: {}", node.get_name());
+
+            let input_shapes: Vec<&Shape> = node
+                .get_input()
+                .iter()
+                .map(|name| {
+                    shapes
+                        .get(name)
+                        .ok_or_else(|| ShapeInferenceError::MissingInputShape(name.clone()))
+                })
+                .collect::<Result<_, ShapeInferenceError>>()?;
+
+            let output_shapes = infer_output_shapes(node, &input_shapes, &initializers)?;
+
+            // Check inferred shapes
+            for (output_index, shape) in output_shapes.iter().enumerate() {
+                if shape.rank() == 0 {
+                    log::warn!(
+                        "inferred shape for output {output_index} of node '{}' is empty: {shape}",
+                        node.get_name()
                     );
-                    ttp.set_shape(tsp);
-                    tip.set_tensor_type(ttp);
-                    vip.set_field_type(tip);
-                    self.value_info.push(vip);
                 }
             }
-        }
 
-        Ok(())
+            log::info!(
+                "node {} inferred output shapes: {}",
+                node.get_name(),
+                output_shapes
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, x)| format!("{}={x}", node.output[idx]))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            );
+
+            if output_shapes.len() != node.get_output().len() {
+                panic!("number of outputs inferred does not match node output count");
+            }
+
+            // Cache the inferred shapes and write to model
+            for (output_idx, output_name) in node.get_output().iter().enumerate() {
+                let output_shape = &output_shapes[output_idx];
+                shapes.insert(output_name.clone(), output_shape.clone());
+                let mut vip = ValueInfoProto::new();
+                vip.set_name(output_name.clone());
+
+                let mut tip = TypeProto::new();
+                let mut ttp = TypeProto_Tensor::new();
+                ttp.set_elem_type(output_shape.data_type.to_datatype().value());
+
+                let mut tsp = TensorShapeProto::new();
+                tsp.set_dim(
+                    output_shape
+                        .dims
+                        .iter()
+                        .map(|d| {
+                            let mut tspd = TensorShapeProto_Dimension::new();
+                            tspd.set_dim_value(*d as i64);
+                            tspd
+                        })
+                        .collect(),
+                );
+                ttp.set_shape(tsp);
+                tip.set_tensor_type(ttp);
+                vip.set_field_type(tip);
+                graph.value_info.push(vip);
+            }
+        }
     }
+
+    Ok(())
 }
 
 pub(crate) fn infer_output_shapes(
@@ -1125,7 +1116,9 @@ mod tests {
     use protobuf::Message;
     use wonnx::onnx::ModelProto;
 
-    use super::{dimensions_infos, ShapeInference};
+    use crate::shape_inference::infer_shapes;
+
+    use super::dimensions_infos;
 
     /// Load a model, strip (and stash) all shape info for intermediate values, then re-infer shapes and compare with stashed original
     fn test_shape_inference_for_model(path: &str) {
@@ -1136,7 +1129,7 @@ mod tests {
         let graph = model.mut_graph();
         let infos = dimensions_infos(graph).unwrap();
         graph.value_info.clear();
-        graph.infer_shapes().unwrap();
+        infer_shapes(graph).unwrap();
         let new_infos = dimensions_infos(graph).unwrap();
         assert_eq!(infos, new_infos);
     }

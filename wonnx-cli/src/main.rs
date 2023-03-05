@@ -9,7 +9,9 @@ use trace::trace_command;
 use wonnx::onnx::ModelProto;
 use wonnx::utils::{get_opset_version, OutputTensor, Shape};
 use wonnx_preprocessing::constant_folding::fold_constants;
-use wonnx_preprocessing::shape_inference::{apply_dynamic_dimensions, ShapeInference};
+use wonnx_preprocessing::shape_inference::{
+    apply_dynamic_dimensions, infer_shapes, replace_constant_ops_with_initializers,
+};
 use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
 
@@ -238,7 +240,7 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
     }
 
     if prepare_opt.fold_constants || prepare_opt.infer_shapes {
-        model.mut_graph().replace_constant_ops_with_initializers()?;
+        replace_constant_ops_with_initializers(model.mut_graph())?;
     }
 
     if prepare_opt.fold_constants {
@@ -250,7 +252,7 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
 
     // Shape inference
     if prepare_opt.infer_shapes {
-        model.mut_graph().infer_shapes()?;
+        infer_shapes(model.mut_graph())?;
     }
 
     // Save the model
