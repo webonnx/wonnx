@@ -1,9 +1,9 @@
+use ::wonnx::utils::OutputTensor;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::collections::HashMap;
-use wonnx::utils::OutputTensor;
 
-use wonnx::Session;
+use ::wonnx::Session;
 #[pyclass]
 #[repr(transparent)]
 pub struct PySession {
@@ -27,13 +27,13 @@ impl IntoPy<PyObject> for PyOutputTensor {
 impl PySession {
     #[staticmethod]
     pub fn from_bytes(bytes: &[u8]) -> PyResult<Self> {
-        let session = pollster::block_on(wonnx::Session::from_bytes(bytes)).unwrap();
+        let session = pollster::block_on(::wonnx::Session::from_bytes(bytes)).unwrap();
         Ok(PySession { session })
     }
 
     #[staticmethod]
     pub fn from_path(path: &str) -> PyResult<Self> {
-        let session = pollster::block_on(wonnx::Session::from_path(path)).unwrap();
+        let session = pollster::block_on(::wonnx::Session::from_path(path)).unwrap();
         Ok(PySession { session })
     }
 
