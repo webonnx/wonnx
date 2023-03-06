@@ -288,7 +288,7 @@ pub fn compile(
         // Map simple function
         "Abs" | "Acos" | "Asin" | "Atan" | "Ceil" | "Cos" | "Cosh" | "Exp" | "Floor" | "Log"
         | "Round" | "Sign" | "Sin" | "Sinh" | "Sqrt" | "Tan" | "Tanh" | "Reciprocal" | "Acosh"
-        | "Asinh" | "Atanh" => {
+        | "Asinh" | "Atanh" | "Neg" => {
             let (x_threads, workgroup_size_x) = workgroup_size(
                 ceil(output_lengths[0], 4),
                 MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,

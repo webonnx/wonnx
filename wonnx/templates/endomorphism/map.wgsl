@@ -13,6 +13,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		let one_scalar = {{scalar_type}}(1);
 		let one = Vec4(one_scalar, one_scalar, one_scalar, one_scalar);
 		output_0.data[gidx] = one / (input_0.data[gidx]);
+	{% elif op_type == "Neg" %}
+		let zero_scalar = {{scalar_type}}(0);
+		let zeroes = Vec4(zero_scalar, zero_scalar, zero_scalar, zero_scalar);
+		output_0.data[gidx] = zeroes - (input_0.data[gidx]);
 	{% elif op_type == "Tanh" %}
 		{# Tanh will produce NaNs when fed with inputs that are much larger than +10.0 or smaller than -10.0. As the output
 		for these inputs converges to 1.0 and -1.0 respectively, we clamp the inputs first. #}
