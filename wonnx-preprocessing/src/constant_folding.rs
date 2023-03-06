@@ -94,10 +94,71 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
 
             Some(vec![output_tensor])
         }
+
+        // Shape: produces an output containing the shape of the input tensor
         "Shape" => {
             let input_shape = &shapes[&node.input[0]];
             Some(vec![calculate_shape_operator(node, input_shape)?])
         }
+
+        // ConstantOfShape: produces an output of the shape specified by the input, filled with a constant value specified in an attribute
+        "ConstantOfShape" => {
+            if let InputTensor::I64(input_shape) = &inputs[0] {
+                let element_count = input_shape.iter().product::<i64>() as usize;
+                if let Ok(constant_value_tensor) =
+                    node.get_attribute_value::<TensorProto>("value", None)
+                {
+                    match ScalarType::from_i32(constant_value_tensor.get_data_type())
+                        .map_err(ConstantFoldingError::UnsupportedDataType)?
+                    {
+                        ScalarType::F32 => {
+                            let fd = constant_value_tensor.get_float_data();
+                            if fd.is_empty() {
+                                return Err(ConstantFoldingError::InvalidNode(
+                                    "value tensor for ConstantOfShape is empty".to_string(),
+                                ));
+                            }
+                            Some(vec![OutputTensor::F32(vec![fd[0]; element_count])])
+                        }
+                        ScalarType::I64 => {
+                            let fd = constant_value_tensor.get_int64_data();
+                            if fd.is_empty() {
+                                return Err(ConstantFoldingError::InvalidNode(
+                                    "value tensor for ConstantOfShape is empty".to_string(),
+                                ));
+                            }
+                            Some(vec![OutputTensor::I64(vec![fd[0]; element_count])])
+                        }
+                        ScalarType::I32 => {
+                            let fd = constant_value_tensor.get_int32_data();
+                            if fd.is_empty() {
+                                return Err(ConstantFoldingError::InvalidNode(
+                                    "value tensor for ConstantOfShape is empty".to_string(),
+                                ));
+                            }
+                            Some(vec![OutputTensor::I32(vec![fd[0]; element_count])])
+                        }
+                        ScalarType::U8 => {
+                            let fd = constant_value_tensor.get_raw_data();
+                            if fd.is_empty() {
+                                return Err(ConstantFoldingError::InvalidNode(
+                                    "value tensor for ConstantOfShape is empty".to_string(),
+                                ));
+                            }
+                            Some(vec![OutputTensor::U8(vec![fd[0]; element_count])])
+                        }
+                    }
+                } else {
+                    // The default value is a zero f32
+                    Some(vec![OutputTensor::F32(vec![0.0; element_count])])
+                }
+            } else {
+                return Err(ConstantFoldingError::InvalidNode(
+                    "ConstantOfShape node input tensor has invalid type, should be i64".to_string(),
+                ));
+            }
+        }
+
         _ => {
             // Try to run on GPU
             let mut graph = GraphProto::new();
