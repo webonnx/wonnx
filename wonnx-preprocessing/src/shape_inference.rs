@@ -506,6 +506,33 @@ pub(crate) fn infer_output_shapes(
             Ok(vec![output_shape])
         }
 
+        ("Flatten", 1, 1) => {
+            let axis: usize = {
+                let a = node.get_attribute_value("axis", Some(1)).unwrap();
+                if a < 0 {
+                    (a + input_shapes[0].rank() as i64) as usize
+                } else {
+                    a as usize
+                }
+            };
+            if axis > input_shapes[0].rank() {
+                return Err(ShapeInferenceError::InvalidNode(
+                    node.get_name().to_string(),
+                    format!("Flatten axis attribute ({axis}) should be less than or equal to rank of input ({})",input_shapes[0].rank()),
+                ));
+            }
+            let input_dims = &input_shapes[0].dims;
+            let outer_dim = if axis == 0 {
+                1
+            } else {
+                input_dims[0..=(axis - 1)].iter().product::<u64>() as i64
+            };
+            let inner_dim = input_dims[axis..].iter().product::<u64>() as i64;
+
+            let new_dims = vec![outer_dim, inner_dim];
+            Ok(vec![Shape::from(input_shapes[0].data_type, &new_dims)])
+        }
+
         ("GlobalAveragePool", 1, 1) => {
             let mut output_shape = input_shapes[0].clone();
             if output_shape.rank() < 2 {
