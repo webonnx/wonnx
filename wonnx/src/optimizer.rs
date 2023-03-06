@@ -301,10 +301,13 @@ impl<'model> Optimizer<'model> {
                         Ok(Arc::new(new_node))
                     }
 
-                    // The Clip, Split, Resize and Reshape operator each take optional inputs that influence the operation.
+                    // The Clip, Split, Resize, Reshape and Reduce* operators each take optional inputs that influence the operation.
                     // These are typically statically initialized tensors containing shapes. For more efficient execution we
                     // move these static values to attributes.
-                    op @ ("Clip" | "Pad" | "Split" | "Resize" | "Reshape" | "ReduceSum") => {
+                    op @ ("Clip" | "Pad" | "Split" | "Resize" | "Reshape" | "ReduceMean"
+                    | "ReduceSum" | "ReduceMin" | "ReduceMax" | "ReduceSumSquare"
+                    | "ReduceLogSumExp" | "ReduceLogSum" | "ReduceL2" | "ReduceL1"
+                    | "ReduceProd") => {
                         if new_inputs.is_empty() {
                             return Err(OptimizerError::NoInputs);
                         }
@@ -316,7 +319,16 @@ impl<'model> Optimizer<'model> {
                             "Reshape" => RESHAPE_INPUT_NAMES,
                             "Clip" => CLIP_INPUT_NAMES,
                             "Pad" => PAD_INPUT_NAMES,
-                            "ReduceSum" => REDUCESUM_INPUT_NAMES,
+                            "ReduceSum" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceL1" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceL2" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceLogSum" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceLogSumExp" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceMax" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceMean" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceMin" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceProd" => REDUCE_OPS_INPUT_NAMES,
+                            "ReduceSumSquare" => REDUCE_OPS_INPUT_NAMES,
                             _ => unreachable!(),
                         };
 
@@ -340,7 +352,13 @@ impl<'model> Optimizer<'model> {
                                         | ("Resize", "roi")
                                         | ("Resize", "sizes")
                                         | ("Reshape", "shape")
-                                        | ("ReduceSum", "axes")
+                                        | (
+                                            "ReduceMean" | "ReduceSum" | "ReduceMin" | "ReduceMax"
+                                            | "ReduceSumSquare" | "ReduceLogSumExp"
+                                            | "ReduceLogSum" | "ReduceL2" | "ReduceL1"
+                                            | "ReduceProd",
+                                            "axes",
+                                        )
                                         | ("Pad", "pads") => match data_type {
                                             ScalarType::I64 => {
                                                 log::info!(
@@ -532,5 +550,5 @@ static SPLIT_INPUT_NAMES: &[&str] = &["input", "split"];
 static RESIZE_INPUT_NAMES: &[&str] = &["X", "roi", "scales", "sizes"];
 static RESHAPE_INPUT_NAMES: &[&str] = &["data", "shape"];
 static CLIP_INPUT_NAMES: &[&str] = &["input", "min", "max"];
-static REDUCESUM_INPUT_NAMES: &[&str] = &["input", "axes"];
+static REDUCE_OPS_INPUT_NAMES: &[&str] = &["input", "axes"];
 static PAD_INPUT_NAMES: &[&str] = &["data", "pads", "constant_value"];
