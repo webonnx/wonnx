@@ -674,8 +674,14 @@ pub(crate) fn infer_output_shapes(
             Ok(vec![Shape::from(data_shape.data_type, &output_shape)])
         }
 
-        ("ReduceMean", 1, 1) => {
+        (
+            "ReduceMean" | "ReduceSum" | "ReduceMin" | "ReduceMax" | "ReduceSumSquare"
+            | "ReduceLogSumExp" | "ReduceLogSum" | "ReduceL2" | "ReduceL1" | "ReduceProd",
+            1,
+            1,
+        ) => {
             // https://github.com/onnx/onnx/blob/main/docs/Changelog.md#reducemean-18
+            // Note: up to version 13 these ops take 'axes' as an attribute; from version 18 they take axes as a second (optional) attribute
             let noop_with_empty_axes = node
                 .get_attribute_value("noop_with_empty_axes", Some(0))
                 .map_err(ShapeInferenceError::MissingAttribute)?;
@@ -1149,12 +1155,24 @@ pub(crate) fn infer_output_shapes(
         }
 
         (
+            "ReduceMean" | "ReduceSum" | "ReduceMin" | "ReduceMax" | "ReduceSumSquare"
+            | "ReduceLogSumExp" | "ReduceLogSum" | "ReduceL2" | "ReduceL1" | "ReduceProd",
+            2,
+            1,
+        ) => Err(ShapeInferenceError::Unsupported(format!(
+            "{} with two inputs (axes input not supported)",
+            node.get_op_type()
+        ))),
+
+        (
             "Sub" | "Pow" | "Add" | "Div" | "Mul" | "Identity" | "Sqrt" | "ReduceMean" | "Gather"
             | "Constant" | "Relu" | "LeakyRelu" | "MaxPool" | "Conv" | "AveragePool" | "Reshape"
             | "Concat" | "Unsqueeze" | "Cast" | "Squeeze" | "Shape" | "Slice" | "Range"
             | "ConstantOfShape" | "Transpose" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin" | "Asinh"
             | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil"
-            | "Reciprocal" | "Floor" | "Mod" | "Celu",
+            | "Reciprocal" | "Floor" | "Mod" | "Celu" | "ReduceSum" | "ReduceMin" | "ReduceMax"
+            | "ReduceSumSquare" | "ReduceLogSumExp" | "ReduceLogSum" | "ReduceL2" | "ReduceL1"
+            | "ReduceProd",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
