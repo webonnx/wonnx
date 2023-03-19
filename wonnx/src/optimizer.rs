@@ -62,12 +62,7 @@ impl<'model> Optimizer<'model> {
             let dynamic_inputs = head
                 .inputs
                 .iter()
-                .filter(|input| {
-                    matches!(
-                        input.source_node.definition,
-                        NodeDefinition::Operator(..) | NodeDefinition::Input(..)
-                    ) && input.output_index == 0
-                })
+                .filter(|input| input.source_node.is_dynamic() && input.output_index == 0)
                 .collect::<Vec<&Input>>();
 
             if dynamic_inputs.len() != 1 {
@@ -137,10 +132,8 @@ impl<'model> Optimizer<'model> {
                         .iter()
                         .map(|old_input| {
                             // Each node is guaranteed to have only one 'dynamic' input. This is the one we will replace
-                            let is_dynamic_source = matches!(
-                                old_input.source_node.definition,
-                                NodeDefinition::Operator(..) | NodeDefinition::Input(..)
-                            ) && old_input.output_index == 0;
+                            let is_dynamic_source =
+                                old_input.source_node.is_dynamic() && old_input.output_index == 0;
                             if is_dynamic_source {
                                 Input {
                                     source_node: producer.clone(),
@@ -182,6 +175,15 @@ impl<'model> Optimizer<'model> {
             node.identifier(),
             node.definition()
         );
+
+        if node.is_constant() {
+            log::warn!(
+                "node is constant: {:?} {:?}",
+                node.identifier(),
+                node.definition()
+            );
+        }
+
         match &node.definition {
             NodeDefinition::Operator(op_def) => {
                 match op_def.proto.get_op_type() {

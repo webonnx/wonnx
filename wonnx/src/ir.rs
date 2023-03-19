@@ -101,6 +101,17 @@ impl<'model> Node<'model> {
         }
     }
 
+    pub fn is_dynamic(&self) -> bool {
+        matches!(
+            self.definition,
+            NodeDefinition::Operator(..) | NodeDefinition::Input(..)
+        )
+    }
+
+    pub fn is_constant(&self) -> bool {
+        !self.is_dynamic() && !self.inputs.iter().any(|i| !i.source_node.is_constant())
+    }
+
     pub fn definition(&self) -> &NodeDefinition<'model> {
         &self.definition
     }
