@@ -1,10 +1,14 @@
 //! Optimizer that walks the DAG and transforms or coalesces ops for quicker execution
 use protobuf::RepeatedField;
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 use thiserror::Error;
 
 use crate::{
-    ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
+    ir::{Input, Node, NodeDefinition, OperatorDefinition},
     resource::padding,
     utils::{attribute, AttributeNotFoundError, DataTypeError, NodeAttributes, ScalarType},
 };
@@ -31,198 +35,153 @@ pub enum OptimizerError {
     AttributeNotFound(#[from] AttributeNotFoundError),
 }
 
-#[derive(Clone)]
-struct Sequence<'model> {
-    node: Arc<Node<'model>>,
-    skip: usize,
-}
-
 pub struct Optimizer<'model> {
     padded_tensors: HashMap<String, Arc<Node<'model>>>,
-    optimized: HashMap<NodeIdentifier<'model>, Sequence<'model>>,
 }
 
 impl<'model> Optimizer<'model> {
     pub fn new() -> Self {
         Self {
             padded_tensors: HashMap::new(),
-            optimized: HashMap::new(),
         }
     }
 
-    /// Optimize a graph
+    /// Optimize a branch of a graph. Takes a node an attempts to form a chain of nodes with single (dynamic) inputs by
+    /// traversing towards the inputs.
     pub fn optimize(
         &mut self,
         node: Arc<Node<'model>>,
     ) -> Result<Arc<Node<'model>>, OptimizerError> {
-        let mut path = vec![];
-        let seq = self.optimize_branch_cached(node, &mut path)?;
-        if seq.skip != 0 {
-            panic!("sequencing gone wrong");
-        }
-        Ok(seq.node)
-    }
+        // Try to form a chain of nodes that have one dynamic input
+        let prior;
+        let mut chain = VecDeque::new();
+        chain.push_back(node.clone());
 
-    fn optimize_branch_cached(
-        &mut self,
-        node: Arc<Node<'model>>,
-        chain: &mut Vec<(String, Arc<Node<'model>>)>,
-    ) -> Result<Sequence<'model>, OptimizerError> {
-        if let Some(optimized) = self.optimized.get(&node.identifier()) {
-            Ok(optimized.clone())
-        } else {
-            let identifier = node.identifier();
-            let optimized = self.optimize_branch(node, chain)?;
-            self.optimized.insert(identifier, optimized.clone());
-            Ok(optimized)
-        }
-    }
-
-    /// Optimize a branch of a graph. This function is recursively called on inputs. The 'chain' parameter is a list of
-    /// operations that follow the node on which optimize_branch is called, and that have exactly one 'dynamic' input
-    /// (either inference input or output of the previous operator). For instance, if the model is A->B->C, then the
-    /// following calls will happen:
-    ///
-    /// - C.optimize_branch(chain = [])
-    ///   - B.optimize_branch(chain = ["C"])
-    ///     - A.optimize_branch(chain = ["C", "B"])
-    ///
-    /// If the model were A -> B+X -> C instead, then the chain would be 'broken' as 'B' has more than one input. The
-    /// 'chain' information can be used to fuse multiple steps. When optimize_branch detects that a chain can be fused,
-    /// it will generate the fused operation and return a Sequence struct with 'skip' set to a positive number.
-    /// This number equals the number of operations that have been fused, and  which  should be omitted from the DAG.
-    /// In the above example, suppose B->C can be fused. This can be detected in the last call:
-    ///
-    /// - C.optimize_branch(chain = []) receives BC(skip=1) from B.optimize_branch, will omit C and return BC(skip=0)
-    ///   - B.optimize_branch(chain = ["C"]) receives BC(skip=2) from A.optimize_branch, will omit B and return BC(skip=1)
-    ///     - A.optimize_branch(chain = ["C", "B"]) detects B->C fusable, returns BC node with skip=2
-    fn optimize_branch(
-        &mut self,
-        node: Arc<Node<'model>>,
-        chain: &mut Vec<(String, Arc<Node<'model>>)>,
-    ) -> Result<Sequence<'model>, OptimizerError> {
-        log::debug!(
-            "Optimize {:?} chain length={:?}",
-            node.definition,
-            chain.len()
-        );
-
-        if let NodeDefinition::Operator(op_def) = &node.definition {
-            // Specific operators can be spliced out of the DAG
-            match op_def.proto.get_op_type() {
-                // Identity: we just remove these nodes and connect the input of the destination node to our input's output
-                // A -> Identity -> B => A -> B
-                "Identity" => {
-                    if node.inputs.len() != 1 {
-                        return Err(OptimizerError::NoInputs);
-                    }
-                    return self.optimize_branch_cached(node.inputs[0].source_node.clone(), chain);
-                }
-                // The Dropout operation does nothing when its training_mode is set to 0. We do not support training_mode=1
-                "Dropout" => {
-                    if node.inputs.is_empty() {
-                        return Err(OptimizerError::NoInputs);
-                    }
-                    let training_mode =
-                        op_def.proto.get_attribute_value("training_mode", Some(0))? == 1;
-
-                    if training_mode {
-                        return Err(OptimizerError::Unsupported(String::from(
-                            "Dropout with training_mode=1",
-                        )));
-                    }
-
-                    return self.optimize_branch_cached(node.inputs[0].source_node.clone(), chain);
-                }
-                _ => {}
-            }
-
-            // Optimize chains of operators. A chain can only be formed for operations that each have at most one 'dynamic'
-            // input (e.g. inference input or the input from another operation)
-            let dynamic_input_count = node
+        loop {
+            let head = chain.front().unwrap();
+            let dynamic_inputs = head
                 .inputs
                 .iter()
                 .filter(|input| {
                     matches!(
                         input.source_node.definition,
                         NodeDefinition::Operator(..) | NodeDefinition::Input(..)
-                    )
+                    ) && input.output_index == 0
                 })
-                .count();
+                .collect::<Vec<&Input>>();
 
-            if dynamic_input_count == 1 {
-                chain.push((op_def.proto.get_op_type().to_string(), node.clone()));
-
-                if let Some(seq) = self.optimize_chain(chain)? {
-                    log::info!(
-                        "chain optimization: fuse {} operators to {:?}",
-                        seq.skip,
-                        seq.node.definition
-                    );
-                    return Ok(seq);
-                }
-
-                // Continue optimizing inputs, making the chain longer for one input
-                let mut new_inputs = Vec::with_capacity(node.inputs.len());
-
-                for input in &node.inputs {
-                    let source_sequence =
-                        self.optimize_branch_cached(input.source_node.clone(), chain)?;
-
-                    if source_sequence.skip > 0 {
-                        log::info!("operator is optimized away: {:?}", node.definition);
-                        return Ok(Sequence {
-                            node: source_sequence.node,
-                            skip: source_sequence.skip - 1,
-                        });
-                    }
-
-                    new_inputs.push(Input {
-                        source_node: source_sequence.node,
-                        output_index: input.output_index,
-                    });
-                }
-
-                return Ok(Sequence {
-                    node: self.optimized_with(&node, new_inputs)?,
-                    skip: 0,
-                });
+            if dynamic_inputs.len() != 1 {
+                prior = chain.pop_front().unwrap();
+                break;
             }
+            chain.push_front(dynamic_inputs[0].source_node.clone());
         }
 
-        // This node has multiple inputs; optimize each input as a new chain
-        let new_inputs = node
-            .inputs
-            .iter()
-            .map(|input| {
-                let mut input_chain = vec![];
-                let source_sequence =
-                    self.optimize_branch_cached(input.source_node.clone(), &mut input_chain)?;
+        log::debug!(
+            "optimize: node={:?} def={:?} chain={}, next={:?}",
+            node.identifier(),
+            node.definition,
+            chain
+                .iter()
+                .map(|x| format!("[{:?}]", x.definition))
+                .collect::<Vec<String>>()
+                .join(" -> "),
+            prior.identifier()
+        );
 
-                assert!(
-                    source_sequence.skip == 0,
-                    "cannot skip items in a chain that has multiple inputs for a single op"
+        // Try to simplify this chain of nodes
+        if chain.len() > 1 {
+            let mut final_chain: Vec<Arc<Node>> = vec![];
+            while !chain.is_empty() {
+                log::debug!("optimize chain {}", chain.len());
+                while self.optimize_chain(&mut chain)? {
+                    log::debug!("optimize chain succeeded {}", chain.len());
+                }
+
+                if !chain.is_empty() {
+                    // Now pop off the first item and make it final
+                    let first = chain.pop_front().unwrap();
+                    final_chain.push(first);
+                }
+
+                log::debug!(
+                    "optimized chain: {}",
+                    final_chain
+                        .iter()
+                        .map(|x| format!("[{:?}]", x.definition))
+                        .collect::<Vec<String>>()
+                        .join(" -> ")
                 );
+            }
+            drop(chain);
 
-                Ok(Input {
-                    source_node: source_sequence.node,
-                    output_index: input.output_index,
+            // optimize next node
+            let optimized_next = self.optimize(prior)?;
+
+            if final_chain.is_empty() {
+                return Ok(optimized_next);
+            }
+
+            // Fix up the connections between these nodes
+            for node_index in 0..=(final_chain.len() - 1) {
+                let consumer = final_chain[node_index].clone();
+                let producer = if node_index == 0 {
+                    optimized_next.clone()
+                } else {
+                    final_chain[node_index - 1].clone()
+                };
+                final_chain[node_index] = self.locally_optimized_node_with(
+                    consumer.clone(),
+                    consumer
+                        .inputs
+                        .iter()
+                        .map(|old_input| {
+                            // Each node is guaranteed to have only one 'dynamic' input. This is the one we will replace
+                            let is_dynamic_source = matches!(
+                                old_input.source_node.definition,
+                                NodeDefinition::Operator(..) | NodeDefinition::Input(..)
+                            ) && old_input.output_index == 0;
+                            if is_dynamic_source {
+                                Input {
+                                    source_node: producer.clone(),
+                                    output_index: 0,
+                                }
+                            } else {
+                                old_input.clone()
+                            }
+                        })
+                        .collect(),
+                )?;
+            }
+
+            Ok(final_chain.last().unwrap().clone())
+        } else {
+            // Just optimize this nodes' inputs recursively
+            let new_inputs = node
+                .inputs
+                .iter()
+                .map(|input| -> Result<Input, OptimizerError> {
+                    Ok(Input {
+                        source_node: self.optimize(input.source_node.clone())?,
+                        output_index: input.output_index,
+                    })
                 })
-            })
-            .collect::<Result<Vec<Input>, OptimizerError>>()?;
-
-        Ok(Sequence {
-            node: self.optimized_with(&node, new_inputs)?,
-            skip: 0,
-        })
+                .collect::<Result<Vec<Input>, OptimizerError>>()?;
+            self.locally_optimized_node_with(node.clone(), new_inputs)
+        }
     }
 
     /// Create a new node from an existing definition, applying optimizations local to a single node
-    fn optimized_with(
+    fn locally_optimized_node_with(
         &mut self,
-        node: &Arc<Node<'model>>,
+        node: Arc<Node<'model>>,
         mut new_inputs: Vec<Input<'model>>,
     ) -> Result<Arc<Node<'model>>, OptimizerError> {
+        log::debug!(
+            "locally_optimized_node_with {:?} {:?}",
+            node.identifier(),
+            node.definition()
+        );
         match &node.definition {
             NodeDefinition::Operator(op_def) => {
                 match op_def.proto.get_op_type() {
@@ -468,14 +427,36 @@ impl<'model> Optimizer<'model> {
     /// Attempt to fuse several operators in a chain of operators with no other dynamic inputs.
     fn optimize_chain(
         &mut self,
-        chain: &[(String, Arc<Node<'model>>)],
-    ) -> Result<Option<Sequence<'model>>, OptimizerError> {
-        let path_slices: Vec<&str> = chain.iter().rev().map(|x| x.0.as_str()).collect();
-        match &path_slices[..] {
+        chain: &mut VecDeque<Arc<Node<'model>>>,
+    ) -> Result<bool, OptimizerError> {
+        let names: Vec<&str> = chain
+            .iter()
+            .map(|x| match &x.definition {
+                NodeDefinition::Operator(op_def) => op_def.proto.get_op_type(),
+                _ => "",
+            })
+            .collect();
+
+        log::debug!("optimize_chain {:?}", names);
+
+        match &names[..] {
+            // Identity: just cull
+            ["Identity", ..] => {
+                chain.pop_front();
+                Ok(true)
+            }
+
+            // Double Neg: just cull
+            ["Neg", "Neg", ..] => {
+                chain.pop_front();
+                chain.pop_front();
+                Ok(true)
+            }
+
             // Conv+Relu or Conv+LeakyRelu: combine into ConvRelu/ConvLeakyRelu
             ["Conv", "Relu", ..] | ["Conv", "LeakyRelu", ..] => {
-                let conv = chain[chain.len() - 1].1.clone();
-                let relu = chain[chain.len() - 2].1.clone();
+                let conv = chain[0].clone();
+                let relu = chain[1].clone();
 
                 if let (NodeDefinition::Operator(conv_def), NodeDefinition::Operator(relu_def)) =
                     (&conv.definition, &relu.definition)
@@ -502,7 +483,7 @@ impl<'model> Optimizer<'model> {
 
                     log::debug!(
                         "can fuse chain of Conv/[Leaky]Relu to Conv[Leaky]Relu: {:?}: {:?} + {:?} = {}",
-                        path_slices,
+                        names,
                         conv.definition(),
                         relu.definition(),
                         convrelu_proto.get_name()
@@ -510,31 +491,20 @@ impl<'model> Optimizer<'model> {
 
                     convrelu_def.proto = Cow::Owned(convrelu_proto);
 
-                    let new_inputs = conv
-                        .inputs
-                        .iter()
-                        .map(|input| -> Result<Input, OptimizerError> {
-                            Ok(Input {
-                                source_node: self.optimize(input.source_node.clone())?,
-                                output_index: input.output_index,
-                            })
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-
                     let node = Arc::new(Node {
                         inputs: conv.inputs.clone(),
                         definition: NodeDefinition::Operator(Box::new(convrelu_def)),
                     });
 
-                    Ok(Some(Sequence {
-                        node: self.optimized_with(&node, new_inputs)?,
-                        skip: 1,
-                    }))
+                    chain.remove(0);
+                    chain.remove(0);
+                    chain.insert(0, node);
+                    Ok(true)
                 } else {
                     unreachable!();
                 }
             }
-            _ => Ok(None),
+            _ => Ok(false),
         }
     }
 }
@@ -552,3 +522,245 @@ static RESHAPE_INPUT_NAMES: &[&str] = &["data", "shape"];
 static CLIP_INPUT_NAMES: &[&str] = &["input", "min", "max"];
 static REDUCE_OPS_INPUT_NAMES: &[&str] = &["input", "axes"];
 static PAD_INPUT_NAMES: &[&str] = &["data", "pads", "constant_value"];
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use crate::{
+        ir::{self, Node, NodeDefinition},
+        utils::{graph, model, node, tensor},
+    };
+
+    use super::Optimizer;
+
+    fn friendly_name(node: Arc<Node>) -> String {
+        match node.definition() {
+            NodeDefinition::Outputs { .. } => String::from("<outputs>"),
+            NodeDefinition::Missing => String::from("<missing>"),
+            NodeDefinition::Operator(op_def) => {
+                format!("{}_{}", op_def.proto.get_op_type(), op_def.proto.get_name())
+            }
+            d => format!("{}", d.get_name()),
+        }
+    }
+
+    fn traverse(node: Arc<Node>, pairs: &mut Vec<(String, String)>) {
+        let my_name = friendly_name(node.clone());
+        for input in &node.inputs {
+            let source_node_name = friendly_name(input.source_node.clone());
+            pairs.push((source_node_name, my_name.to_string()))
+        }
+
+        for input in &node.inputs {
+            traverse(input.source_node.clone(), pairs);
+        }
+    }
+
+    // Test: X -> [Identity] A -> [Identity] -> Y => X -> Y
+    #[test]
+    pub fn test_optimize_identity_identity() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let m = model(graph(
+            vec![tensor("X", &[1])],
+            vec![tensor("Y", &[1])],
+            vec![tensor("A", &[1])],
+            vec![],
+            vec![
+                node(vec!["X"], vec!["A"], "a", "Identity", vec![]),
+                node(vec!["A"], vec!["Y"], "b", "Identity", vec![]),
+            ],
+        ));
+
+        let root = ir::Node::from_model(&m, None).unwrap();
+        let mut opt = Optimizer::new();
+        let new_root = opt.optimize(root).unwrap();
+        let mut new_pairs = vec![];
+        traverse(new_root, &mut new_pairs);
+        assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string())]);
+    }
+
+    // Test: X -> [Neg] A -> [Neg] -> Y => X -> Y
+    #[test]
+    pub fn test_optimize_neg_neg() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let m = model(graph(
+            vec![tensor("X", &[1])],
+            vec![tensor("Y", &[1])],
+            vec![tensor("A", &[1])],
+            vec![],
+            vec![
+                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                node(vec!["A"], vec!["Y"], "b", "Neg", vec![]),
+            ],
+        ));
+
+        let root = ir::Node::from_model(&m, None).unwrap();
+        let mut opt = Optimizer::new();
+        let new_root = opt.optimize(root).unwrap();
+        let mut new_pairs = vec![];
+        traverse(new_root, &mut new_pairs);
+        assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string())]);
+    }
+
+    // Test: X -> [Neg] A -> [Neg] B -> [Neg] -> Y => X -> Identity -> Y
+    #[test]
+    pub fn test_optimize_3neg() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let m = model(graph(
+            vec![tensor("X", &[1])],
+            vec![tensor("Y", &[1])],
+            vec![tensor("A", &[1]), tensor("B", &[1])],
+            vec![],
+            vec![
+                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
+                node(vec!["B"], vec!["Y"], "c", "Neg", vec![]),
+            ],
+        ));
+
+        let root = ir::Node::from_model(&m, None).unwrap();
+        let mut opt = Optimizer::new();
+        let new_root = opt.optimize(root).unwrap();
+        let mut new_pairs = vec![];
+        traverse(new_root, &mut new_pairs);
+        assert_eq!(
+            new_pairs,
+            vec![
+                ("Neg_c".to_string(), "<outputs>".to_string()),
+                ("X".to_string(), "Neg_c".to_string())
+            ]
+        );
+    }
+
+    // Test: X -> [Neg] A -> [Neg] B -> [Neg] C -> [Neg] -> Y => X -> Identity -> Y
+    #[test]
+    pub fn test_optimize_4neg() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let m = model(graph(
+            vec![tensor("X", &[1])],
+            vec![tensor("Y", &[1])],
+            vec![tensor("A", &[1]), tensor("B", &[1]), tensor("C", &[1])],
+            vec![],
+            vec![
+                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
+                node(vec!["B"], vec!["C"], "c", "Neg", vec![]),
+                node(vec!["C"], vec!["Y"], "d", "Neg", vec![]),
+            ],
+        ));
+
+        let root = ir::Node::from_model(&m, None).unwrap();
+        let mut opt = Optimizer::new();
+        let new_root = opt.optimize(root).unwrap();
+        let mut new_pairs = vec![];
+        traverse(new_root, &mut new_pairs);
+        assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string()),]);
+    }
+
+    // Test: X -> [Neg] A -> [Neg] B -> [Neg] C -> [Neg] D -> [Neg] -> Y => X -> Neg -> Y
+    #[test]
+    pub fn test_optimize_5neg() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let m = model(graph(
+            vec![tensor("X", &[1])],
+            vec![tensor("Y", &[1])],
+            vec![
+                tensor("A", &[1]),
+                tensor("B", &[1]),
+                tensor("C", &[1]),
+                tensor("D", &[1]),
+            ],
+            vec![],
+            vec![
+                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
+                node(vec!["B"], vec!["C"], "c", "Neg", vec![]),
+                node(vec!["C"], vec!["D"], "d", "Neg", vec![]),
+                node(vec!["D"], vec!["Y"], "e", "Neg", vec![]),
+            ],
+        ));
+
+        let root = ir::Node::from_model(&m, None).unwrap();
+        let mut opt = Optimizer::new();
+        let new_root = opt.optimize(root).unwrap();
+        let mut new_pairs = vec![];
+        traverse(new_root, &mut new_pairs);
+        assert_eq!(
+            new_pairs,
+            vec![
+                ("Neg_e".to_string(), "<outputs>".to_string()),
+                ("X".to_string(), "Neg_e".to_string())
+            ]
+        );
+    }
+
+    // Test: X -> [Neg] A -> [Neg] -> A, Y => X -> A, Y
+    #[test]
+    pub fn test_optimize_neg_neg_branch() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let m = model(graph(
+            vec![tensor("X", &[1])],
+            vec![tensor("Y", &[1]), tensor("A", &[1])],
+            vec![tensor("A", &[1])],
+            vec![],
+            vec![
+                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                node(vec!["A"], vec!["Y"], "b", "Neg", vec![]),
+            ],
+        ));
+
+        let root = ir::Node::from_model(&m, None).unwrap();
+        let mut opt = Optimizer::new();
+        let new_root = opt.optimize(root).unwrap();
+        let mut new_pairs = vec![];
+        traverse(new_root, &mut new_pairs);
+        assert_eq!(
+            new_pairs,
+            vec![
+                ("X".to_string(), "<outputs>".to_string()),
+                ("Neg_a".to_string(), "<outputs>".to_string()),
+                ("X".to_string(), "Neg_a".to_string())
+            ]
+        );
+    }
+
+    // Test: X -> [Neg] A -> [Identity] Z -> [Identity] -> Y with Y and Z output => X -> Y, Z
+    #[test]
+    pub fn test_optimize_identity_identity_two_outputs() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let m = model(graph(
+            vec![tensor("X", &[1])],
+            vec![tensor("Y", &[1]), tensor("Z", &[1])],
+            vec![tensor("A", &[1])],
+            vec![],
+            vec![
+                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                node(vec!["A"], vec!["Z"], "b", "Identity", vec![]),
+                node(vec!["A"], vec!["Y"], "c", "Identity", vec![]),
+            ],
+        ));
+
+        let root = ir::Node::from_model(&m, None).unwrap();
+        let mut opt = Optimizer::new();
+        let new_root = opt.optimize(root).unwrap();
+        let mut new_pairs = vec![];
+        traverse(new_root, &mut new_pairs);
+        assert_eq!(
+            new_pairs,
+            vec![
+                ("Neg_a".to_string(), "<outputs>".to_string()),
+                ("Neg_a".to_string(), "<outputs>".to_string()),
+                ("X".to_string(), "Neg_a".to_string()),
+                ("X".to_string(), "Neg_a".to_string()),
+            ]
+        );
+    }
+}

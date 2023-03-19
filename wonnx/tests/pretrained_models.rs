@@ -64,6 +64,7 @@ fn test_mnist() {
 #[cfg(target_os = "macos")]
 #[test]
 fn test_squeeze() {
+    let _ = env_logger::builder().is_test(true).try_init();
     let mut input_data = HashMap::new();
     let image = load_squeezenet_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap().into());
@@ -76,7 +77,7 @@ fn test_squeeze() {
     let mut probabilities: Vec<(usize, f32)> = output_tensor.iter().cloned().enumerate().collect();
 
     probabilities.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-
+    log::info!("{probabilities:?}");
     assert_eq!(probabilities[0].0, 22);
 }
 
