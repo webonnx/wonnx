@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT OR Apache-2.0
 import onnx.backend.test
 
 pytest_plugins = ("onnx.backend.test.report",)
