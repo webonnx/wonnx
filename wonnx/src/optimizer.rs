@@ -1,4 +1,12 @@
 //! Optimizer that walks the DAG and transforms or coalesces ops for quicker execution
+use crate::{
+    gpu::GpuModel,
+    ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
+    onnx::TensorProto,
+    resource::{padding, request_device_queue},
+    utils::{attribute, AttributeNotFoundError, DataTypeError, NodeAttributes, ScalarType},
+    GpuError,
+};
 use async_recursion::async_recursion;
 use protobuf::RepeatedField;
 use std::{
@@ -7,12 +15,6 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
-
-use crate::{
-    ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
-    resource::padding,
-    utils::{attribute, AttributeNotFoundError, DataTypeError, NodeAttributes, ScalarType},
-};
 
 #[derive(Debug, Error)]
 pub enum OptimizerError {
@@ -34,18 +36,75 @@ pub enum OptimizerError {
 
     #[error("required attribute not found: {0}")]
     AttributeNotFound(#[from] AttributeNotFoundError),
+
+    #[error("error during constant folding: {0}")]
+    ConstantFoldingError(#[from] GpuError),
 }
 
 pub struct Optimizer<'model> {
     padded_tensors: HashMap<String, Arc<Node<'model>>>,
     optimized: HashMap<NodeIdentifier<'model>, Arc<Node<'model>>>,
+    onnx_opset_version: i64,
 }
 
 impl<'model> Optimizer<'model> {
-    pub fn new() -> Self {
+    pub fn new(onnx_opset_version: i64) -> Self {
         Self {
             padded_tensors: HashMap::new(),
             optimized: HashMap::new(),
+            onnx_opset_version,
+        }
+    }
+
+    async fn fold_constant_node(
+        &self,
+        node: Arc<Node<'model>>,
+    ) -> Result<Option<Arc<Node<'model>>>, OptimizerError> {
+        assert!(node.is_constant());
+
+        match node.definition() {
+            NodeDefinition::Operator(op_def) => {
+                // TODO: constant nodes with multiple outputs
+                if op_def.proto.output.len() != 1 {
+                    log::warn!(
+                        "node {:?} is constant, but has multiple outputs, which we can't fold yet",
+                        node.definition()
+                    );
+                    return Ok(None);
+                }
+
+                let output_name = op_def.proto.output.get(0).unwrap().to_owned();
+
+                let out_node = Arc::new(Node {
+                    definition: NodeDefinition::Outputs {
+                        names: vec!["output".to_string()],
+                    },
+                    inputs: vec![Input {
+                        source_node: node,
+                        output_index: 0,
+                    }],
+                });
+
+                let (device, queue) = request_device_queue().await;
+                let gm = GpuModel::from(out_node, device, queue, self.onnx_opset_version)
+                    .map_err(OptimizerError::ConstantFoldingError)?;
+
+                let mut outputs = gm.infer(&HashMap::new()).await?;
+                let (_, output_tensor) = outputs.drain().take(1).next().unwrap();
+                log::info!("folded {output_name} to {output_tensor:?}");
+                let mut output_tensor_proto = TensorProto::from(output_tensor);
+                output_tensor_proto.set_name(output_name);
+
+                let tensor_node = Node {
+                    definition: NodeDefinition::Tensor(Box::new(Cow::Owned(output_tensor_proto))),
+                    inputs: vec![],
+                };
+
+                Ok(Some(Arc::new(tensor_node)))
+            }
+            NodeDefinition::Tensor(_) => Ok(None), // already constantized
+            NodeDefinition::Input(_) | NodeDefinition::Missing => unreachable!(),
+            NodeDefinition::Outputs { .. } => Ok(None), // all the outputs themselves are already constant, so nothing to do
         }
     }
 
@@ -146,26 +205,28 @@ impl<'model> Optimizer<'model> {
                 } else {
                     final_chain[node_index - 1].clone()
                 };
-                final_chain[node_index] = self.locally_optimized_node_with(
-                    consumer.clone(),
-                    consumer
-                        .inputs
-                        .iter()
-                        .map(|old_input| {
-                            // Each node is guaranteed to have only one 'dynamic' input. This is the one we will replace
-                            let is_dynamic_source =
-                                old_input.source_node.is_dynamic() && old_input.output_index == 0;
-                            if is_dynamic_source {
-                                Input {
-                                    source_node: producer.clone(),
-                                    output_index: 0,
+                final_chain[node_index] = self
+                    .locally_optimized_node_with(
+                        consumer.clone(),
+                        consumer
+                            .inputs
+                            .iter()
+                            .map(|old_input| {
+                                // Each node is guaranteed to have only one 'dynamic' input. This is the one we will replace
+                                let is_dynamic_source = old_input.source_node.is_dynamic()
+                                    && old_input.output_index == 0;
+                                if is_dynamic_source {
+                                    Input {
+                                        source_node: producer.clone(),
+                                        output_index: 0,
+                                    }
+                                } else {
+                                    old_input.clone()
                                 }
-                            } else {
-                                old_input.clone()
-                            }
-                        })
-                        .collect(),
-                )?;
+                            })
+                            .collect(),
+                    )
+                    .await?;
             }
 
             Ok(final_chain.last().unwrap().clone())
@@ -179,11 +240,12 @@ impl<'model> Optimizer<'model> {
                 });
             }
             self.locally_optimized_node_with(node.clone(), new_inputs)
+                .await
         }
     }
 
     /// Create a new node from an existing definition, applying optimizations local to a single node
-    fn locally_optimized_node_with(
+    async fn locally_optimized_node_with(
         &mut self,
         node: Arc<Node<'model>>,
         mut new_inputs: Vec<Input<'model>>,
@@ -195,11 +257,14 @@ impl<'model> Optimizer<'model> {
         );
 
         if node.is_constant() {
-            log::warn!(
+            log::debug!(
                 "node is constant: {:?} {:?}",
                 node.identifier(),
                 node.definition()
             );
+            if let Some(const_node) = self.fold_constant_node(node.clone()).await? {
+                return Ok(const_node);
+            }
         }
 
         match &node.definition {
@@ -529,12 +594,6 @@ impl<'model> Optimizer<'model> {
     }
 }
 
-impl<'model> Default for Optimizer<'model> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 // Names associated with the inputs of the Split, Resize, Reshape and Clip operators (in positional order - see ONNX spec)
 static SPLIT_INPUT_NAMES: &[&str] = &["input", "split"];
 static RESIZE_INPUT_NAMES: &[&str] = &["X", "roi", "scales", "sizes"];
@@ -549,7 +608,7 @@ mod test {
 
     use crate::{
         ir::{self, Node, NodeDefinition},
-        utils::{graph, model, node, tensor},
+        utils::{graph, initializer, model, node, tensor},
     };
 
     use super::Optimizer;
@@ -594,7 +653,7 @@ mod test {
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
-            let mut opt = Optimizer::new();
+            let mut opt = Optimizer::new(13);
             let new_root = opt.optimize(root).await.unwrap();
             let mut new_pairs = vec![];
             traverse(new_root, &mut new_pairs);
@@ -619,7 +678,7 @@ mod test {
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
-            let mut opt = Optimizer::new();
+            let mut opt = Optimizer::new(13);
             let new_root = opt.optimize(root).await.unwrap();
             let mut new_pairs = vec![];
             traverse(new_root, &mut new_pairs);
@@ -646,7 +705,7 @@ mod test {
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
-            let mut opt = Optimizer::new();
+            let mut opt = Optimizer::new(13);
             let new_root = opt.optimize(root).await.unwrap();
             let mut new_pairs = vec![];
             traverse(new_root, &mut new_pairs);
@@ -679,7 +738,7 @@ mod test {
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
-            let mut opt = Optimizer::new();
+            let mut opt = Optimizer::new(13);
             let new_root = opt.optimize(root).await.unwrap();
             let mut new_pairs = vec![];
             traverse(new_root, &mut new_pairs);
@@ -712,7 +771,7 @@ mod test {
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
-            let mut opt = Optimizer::new();
+            let mut opt = Optimizer::new(13);
             let new_root = opt.optimize(root).await.unwrap();
             let mut new_pairs = vec![];
             traverse(new_root, &mut new_pairs);
@@ -743,7 +802,7 @@ mod test {
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
-            let mut opt = Optimizer::new();
+            let mut opt = Optimizer::new(13);
             let new_root = opt.optimize(root).await.unwrap();
             let mut new_pairs = vec![];
             traverse(new_root, &mut new_pairs);
@@ -777,7 +836,7 @@ mod test {
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
-            let mut opt = Optimizer::new();
+            let mut opt = Optimizer::new(13);
             let new_root = opt.optimize(root).await.unwrap();
             let mut new_pairs = vec![];
             traverse(new_root, &mut new_pairs);
@@ -790,6 +849,32 @@ mod test {
                     ("X".to_string(), "Neg_a".to_string()),
                 ]
             );
+        });
+    }
+
+    // Test: A, B -> [Add] -> C where A, B are initializers
+    #[test]
+    pub fn test_constant_folding() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![],
+                vec![tensor("C", &[1])],
+                vec![],
+                vec![
+                    initializer("A", vec![21.0], vec![1]),
+                    initializer("B", vec![7.0], vec![1]),
+                ],
+                vec![node(vec!["A", "B"], vec!["C"], "c", "Add", vec![])],
+            ));
+
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new(13);
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root, &mut new_pairs);
+            assert_eq!(new_pairs, vec![("C".to_string(), "<outputs>".to_string())]);
         });
     }
 }

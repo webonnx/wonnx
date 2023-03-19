@@ -153,7 +153,7 @@ impl Session {
             .map_err(SessionError::OpsetError)?
             .ok_or(SessionError::UnknownOnnxOpsetVersion)?;
 
-        let mut optimizer = Optimizer::new();
+        let mut optimizer = Optimizer::new(onnx_opset_version);
         let ir = optimizer
             .optimize(ir::Node::from_model(&model, config.outputs.as_deref())?)
             .await?;
