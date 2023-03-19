@@ -56,6 +56,7 @@ impl<'model> Optimizer<'model> {
         }
     }
 
+    // Calculates the output of a constant node, then returns a node that contains the result as initializer
     async fn fold_constant_node(
         &self,
         node: Arc<Node<'model>>,
@@ -73,6 +74,7 @@ impl<'model> Optimizer<'model> {
                     return Ok(None);
                 }
 
+                // Create an output node so we can perform inference for this node
                 let output_name = op_def.proto.output.get(0).unwrap().to_owned();
 
                 let out_node = Arc::new(Node {
@@ -85,11 +87,13 @@ impl<'model> Optimizer<'model> {
                     }],
                 });
 
+                // Perform inference
                 let (device, queue) = request_device_queue().await;
                 let gm = GpuModel::from(out_node, device, queue, self.onnx_opset_version)
                     .map_err(OptimizerError::ConstantFoldingError)?;
-
                 let mut outputs = gm.infer(&HashMap::new()).await?;
+
+                // Take the output tensor and make it into an initializer node
                 let (_, output_tensor) = outputs.drain().take(1).next().unwrap();
                 log::info!("folded {output_name} to {output_tensor:?}");
                 let mut output_tensor_proto = TensorProto::from(output_tensor);
@@ -509,11 +513,19 @@ impl<'model> Optimizer<'model> {
         }
     }
 
-    /// Attempt to fuse several operators in a chain of operators with no other dynamic inputs.
+    /// Attempt to fuse several operators in a chain of operators with no other dynamic inputs. The function receives a list
+    /// of nodes that are guaranteed to be operators that each have one input (exactly). It is free to remove or add nodes
+    /// to this list. The caller will fix up the input/output relationships between the nodes.
     fn optimize_chain(
         &mut self,
         chain: &mut VecDeque<Arc<Node<'model>>>,
     ) -> Result<bool, OptimizerError> {
+        // Start by throwing out all Identity nodes
+        chain.retain(|n| match &n.definition {
+            NodeDefinition::Operator(op_def) => op_def.proto.get_op_type() != "Identity",
+            _ => true,
+        });
+
         let names: Vec<&str> = chain
             .iter()
             .map(|x| match &x.definition {
@@ -525,12 +537,6 @@ impl<'model> Optimizer<'model> {
         log::debug!("optimize_chain {:?}", names);
 
         match &names[..] {
-            // Identity: just cull
-            ["Identity", ..] => {
-                chain.pop_front();
-                Ok(true)
-            }
-
             // Double Neg: just cull
             ["Neg", "Neg", ..] => {
                 chain.pop_front();
