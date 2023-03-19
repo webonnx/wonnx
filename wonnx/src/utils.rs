@@ -72,7 +72,7 @@ impl Shape {
     }
 
     /// Computes the shape to which all provided shapes can be broadcast (if it exists)
-    /// Inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L5
+    /// Inspired by <https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L5>
     pub fn multi_broadcast(shapes: &[Shape]) -> Option<Shape> {
         if shapes.is_empty() {
             return None;
@@ -183,7 +183,7 @@ pub enum OutputTensor {
 impl TryFrom<OutputTensor> for Vec<f32> {
     type Error = TensorConversionError;
 
-    /// Convert OutputTensor into a Vec<f32>, possibly converting integer tensors if the values fit
+    /// Convert OutputTensor into a `Vec<f32>`, possibly converting integer tensors if the values fit
     fn try_from(value: OutputTensor) -> Result<Self, Self::Error> {
         match value {
             OutputTensor::F32(floats) => Ok(floats),
@@ -830,7 +830,7 @@ mod tests {
         );
     }
 
-    // Test cases for Shape::multi_broadcast, some inspired by https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L31
+    // Test cases for Shape::multi_broadcast, some inspired by <https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L31>
     #[test]
     pub fn test_multi_broadcast() {
         fn shape(s: &[i64]) -> Shape {
