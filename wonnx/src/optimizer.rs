@@ -1,4 +1,5 @@
 //! Optimizer that walks the DAG and transforms or coalesces ops for quicker execution
+use async_recursion::async_recursion;
 use protobuf::RepeatedField;
 use std::{
     borrow::Cow,
@@ -8,7 +9,7 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    ir::{Input, Node, NodeDefinition, OperatorDefinition},
+    ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
     resource::padding,
     utils::{attribute, AttributeNotFoundError, DataTypeError, NodeAttributes, ScalarType},
 };
@@ -37,18 +38,38 @@ pub enum OptimizerError {
 
 pub struct Optimizer<'model> {
     padded_tensors: HashMap<String, Arc<Node<'model>>>,
+    optimized: HashMap<NodeIdentifier<'model>, Arc<Node<'model>>>,
 }
 
 impl<'model> Optimizer<'model> {
     pub fn new() -> Self {
         Self {
             padded_tensors: HashMap::new(),
+            optimized: HashMap::new(),
+        }
+    }
+
+    /// Optimize a branch of a graph (memoized)
+    #[async_recursion]
+    pub async fn optimize(
+        &mut self,
+        node: Arc<Node<'model>>,
+    ) -> Result<Arc<Node<'model>>, OptimizerError> {
+        let identifier = node.identifier();
+        match self.optimized.get(&identifier) {
+            Some(opt_node) => Ok(opt_node.clone()),
+            None => {
+                let opt_node = self.optimize_actual(node).await?;
+                self.optimized.insert(identifier, opt_node.clone());
+                Ok(opt_node)
+            }
         }
     }
 
     /// Optimize a branch of a graph. Takes a node an attempts to form a chain of nodes with single (dynamic) inputs by
     /// traversing towards the inputs.
-    pub fn optimize(
+    #[async_recursion]
+    async fn optimize_actual(
         &mut self,
         node: Arc<Node<'model>>,
     ) -> Result<Arc<Node<'model>>, OptimizerError> {
@@ -111,7 +132,7 @@ impl<'model> Optimizer<'model> {
             drop(chain);
 
             // optimize next node
-            let optimized_next = self.optimize(prior)?;
+            let optimized_next = self.optimize(prior).await?;
 
             if final_chain.is_empty() {
                 return Ok(optimized_next);
@@ -150,16 +171,13 @@ impl<'model> Optimizer<'model> {
             Ok(final_chain.last().unwrap().clone())
         } else {
             // Just optimize this nodes' inputs recursively
-            let new_inputs = node
-                .inputs
-                .iter()
-                .map(|input| -> Result<Input, OptimizerError> {
-                    Ok(Input {
-                        source_node: self.optimize(input.source_node.clone())?,
-                        output_index: input.output_index,
-                    })
-                })
-                .collect::<Result<Vec<Input>, OptimizerError>>()?;
+            let mut new_inputs = Vec::with_capacity(node.inputs.len());
+            for input in node.inputs.iter() {
+                new_inputs.push(Input {
+                    source_node: self.optimize(input.source_node.clone()).await?,
+                    output_index: input.output_index,
+                });
+            }
             self.locally_optimized_node_with(node.clone(), new_inputs)
         }
     }
@@ -563,174 +581,181 @@ mod test {
     #[test]
     pub fn test_optimize_identity_identity() {
         let _ = env_logger::builder().is_test(true).try_init();
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![tensor("X", &[1])],
+                vec![tensor("Y", &[1])],
+                vec![tensor("A", &[1])],
+                vec![],
+                vec![
+                    node(vec!["X"], vec!["A"], "a", "Identity", vec![]),
+                    node(vec!["A"], vec!["Y"], "b", "Identity", vec![]),
+                ],
+            ));
 
-        let m = model(graph(
-            vec![tensor("X", &[1])],
-            vec![tensor("Y", &[1])],
-            vec![tensor("A", &[1])],
-            vec![],
-            vec![
-                node(vec!["X"], vec!["A"], "a", "Identity", vec![]),
-                node(vec!["A"], vec!["Y"], "b", "Identity", vec![]),
-            ],
-        ));
-
-        let root = ir::Node::from_model(&m, None).unwrap();
-        let mut opt = Optimizer::new();
-        let new_root = opt.optimize(root).unwrap();
-        let mut new_pairs = vec![];
-        traverse(new_root, &mut new_pairs);
-        assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string())]);
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new();
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root, &mut new_pairs);
+            assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string())]);
+        })
     }
 
     // Test: X -> [Neg] A -> [Neg] -> Y => X -> Y
     #[test]
     pub fn test_optimize_neg_neg() {
         let _ = env_logger::builder().is_test(true).try_init();
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![tensor("X", &[1])],
+                vec![tensor("Y", &[1])],
+                vec![tensor("A", &[1])],
+                vec![],
+                vec![
+                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                    node(vec!["A"], vec!["Y"], "b", "Neg", vec![]),
+                ],
+            ));
 
-        let m = model(graph(
-            vec![tensor("X", &[1])],
-            vec![tensor("Y", &[1])],
-            vec![tensor("A", &[1])],
-            vec![],
-            vec![
-                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                node(vec!["A"], vec!["Y"], "b", "Neg", vec![]),
-            ],
-        ));
-
-        let root = ir::Node::from_model(&m, None).unwrap();
-        let mut opt = Optimizer::new();
-        let new_root = opt.optimize(root).unwrap();
-        let mut new_pairs = vec![];
-        traverse(new_root, &mut new_pairs);
-        assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string())]);
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new();
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root, &mut new_pairs);
+            assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string())]);
+        });
     }
 
     // Test: X -> [Neg] A -> [Neg] B -> [Neg] -> Y => X -> Identity -> Y
     #[test]
     pub fn test_optimize_3neg() {
-        let _ = env_logger::builder().is_test(true).try_init();
+        pollster::block_on(async {
+            let _ = env_logger::builder().is_test(true).try_init();
 
-        let m = model(graph(
-            vec![tensor("X", &[1])],
-            vec![tensor("Y", &[1])],
-            vec![tensor("A", &[1]), tensor("B", &[1])],
-            vec![],
-            vec![
-                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
-                node(vec!["B"], vec!["Y"], "c", "Neg", vec![]),
-            ],
-        ));
+            let m = model(graph(
+                vec![tensor("X", &[1])],
+                vec![tensor("Y", &[1])],
+                vec![tensor("A", &[1]), tensor("B", &[1])],
+                vec![],
+                vec![
+                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                    node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
+                    node(vec!["B"], vec!["Y"], "c", "Neg", vec![]),
+                ],
+            ));
 
-        let root = ir::Node::from_model(&m, None).unwrap();
-        let mut opt = Optimizer::new();
-        let new_root = opt.optimize(root).unwrap();
-        let mut new_pairs = vec![];
-        traverse(new_root, &mut new_pairs);
-        assert_eq!(
-            new_pairs,
-            vec![
-                ("Neg_c".to_string(), "<outputs>".to_string()),
-                ("X".to_string(), "Neg_c".to_string())
-            ]
-        );
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new();
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root, &mut new_pairs);
+            assert_eq!(
+                new_pairs,
+                vec![
+                    ("Neg_c".to_string(), "<outputs>".to_string()),
+                    ("X".to_string(), "Neg_c".to_string())
+                ]
+            );
+        });
     }
 
     // Test: X -> [Neg] A -> [Neg] B -> [Neg] C -> [Neg] -> Y => X -> Identity -> Y
     #[test]
     pub fn test_optimize_4neg() {
         let _ = env_logger::builder().is_test(true).try_init();
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![tensor("X", &[1])],
+                vec![tensor("Y", &[1])],
+                vec![tensor("A", &[1]), tensor("B", &[1]), tensor("C", &[1])],
+                vec![],
+                vec![
+                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                    node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
+                    node(vec!["B"], vec!["C"], "c", "Neg", vec![]),
+                    node(vec!["C"], vec!["Y"], "d", "Neg", vec![]),
+                ],
+            ));
 
-        let m = model(graph(
-            vec![tensor("X", &[1])],
-            vec![tensor("Y", &[1])],
-            vec![tensor("A", &[1]), tensor("B", &[1]), tensor("C", &[1])],
-            vec![],
-            vec![
-                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
-                node(vec!["B"], vec!["C"], "c", "Neg", vec![]),
-                node(vec!["C"], vec!["Y"], "d", "Neg", vec![]),
-            ],
-        ));
-
-        let root = ir::Node::from_model(&m, None).unwrap();
-        let mut opt = Optimizer::new();
-        let new_root = opt.optimize(root).unwrap();
-        let mut new_pairs = vec![];
-        traverse(new_root, &mut new_pairs);
-        assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string()),]);
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new();
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root, &mut new_pairs);
+            assert_eq!(new_pairs, vec![("X".to_string(), "<outputs>".to_string()),]);
+        });
     }
 
     // Test: X -> [Neg] A -> [Neg] B -> [Neg] C -> [Neg] D -> [Neg] -> Y => X -> Neg -> Y
     #[test]
     pub fn test_optimize_5neg() {
         let _ = env_logger::builder().is_test(true).try_init();
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![tensor("X", &[1])],
+                vec![tensor("Y", &[1])],
+                vec![
+                    tensor("A", &[1]),
+                    tensor("B", &[1]),
+                    tensor("C", &[1]),
+                    tensor("D", &[1]),
+                ],
+                vec![],
+                vec![
+                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                    node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
+                    node(vec!["B"], vec!["C"], "c", "Neg", vec![]),
+                    node(vec!["C"], vec!["D"], "d", "Neg", vec![]),
+                    node(vec!["D"], vec!["Y"], "e", "Neg", vec![]),
+                ],
+            ));
 
-        let m = model(graph(
-            vec![tensor("X", &[1])],
-            vec![tensor("Y", &[1])],
-            vec![
-                tensor("A", &[1]),
-                tensor("B", &[1]),
-                tensor("C", &[1]),
-                tensor("D", &[1]),
-            ],
-            vec![],
-            vec![
-                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
-                node(vec!["B"], vec!["C"], "c", "Neg", vec![]),
-                node(vec!["C"], vec!["D"], "d", "Neg", vec![]),
-                node(vec!["D"], vec!["Y"], "e", "Neg", vec![]),
-            ],
-        ));
-
-        let root = ir::Node::from_model(&m, None).unwrap();
-        let mut opt = Optimizer::new();
-        let new_root = opt.optimize(root).unwrap();
-        let mut new_pairs = vec![];
-        traverse(new_root, &mut new_pairs);
-        assert_eq!(
-            new_pairs,
-            vec![
-                ("Neg_e".to_string(), "<outputs>".to_string()),
-                ("X".to_string(), "Neg_e".to_string())
-            ]
-        );
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new();
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root, &mut new_pairs);
+            assert_eq!(
+                new_pairs,
+                vec![
+                    ("Neg_e".to_string(), "<outputs>".to_string()),
+                    ("X".to_string(), "Neg_e".to_string())
+                ]
+            );
+        });
     }
 
     // Test: X -> [Neg] A -> [Neg] -> A, Y => X -> A, Y
     #[test]
     pub fn test_optimize_neg_neg_branch() {
         let _ = env_logger::builder().is_test(true).try_init();
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![tensor("X", &[1])],
+                vec![tensor("Y", &[1]), tensor("A", &[1])],
+                vec![tensor("A", &[1])],
+                vec![],
+                vec![
+                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                    node(vec!["A"], vec!["Y"], "b", "Neg", vec![]),
+                ],
+            ));
 
-        let m = model(graph(
-            vec![tensor("X", &[1])],
-            vec![tensor("Y", &[1]), tensor("A", &[1])],
-            vec![tensor("A", &[1])],
-            vec![],
-            vec![
-                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                node(vec!["A"], vec!["Y"], "b", "Neg", vec![]),
-            ],
-        ));
-
-        let root = ir::Node::from_model(&m, None).unwrap();
-        let mut opt = Optimizer::new();
-        let new_root = opt.optimize(root).unwrap();
-        let mut new_pairs = vec![];
-        traverse(new_root, &mut new_pairs);
-        assert_eq!(
-            new_pairs,
-            vec![
-                ("X".to_string(), "<outputs>".to_string()),
-                ("Neg_a".to_string(), "<outputs>".to_string()),
-                ("X".to_string(), "Neg_a".to_string())
-            ]
-        );
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new();
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root, &mut new_pairs);
+            assert_eq!(
+                new_pairs,
+                vec![
+                    ("X".to_string(), "<outputs>".to_string()),
+                    ("Neg_a".to_string(), "<outputs>".to_string()),
+                    ("X".to_string(), "Neg_a".to_string())
+                ]
+            );
+        });
     }
 
     // Test: X -> [Neg] A -> [Identity] Z -> [Identity] -> Y with Y and Z output => X -> Y, Z
@@ -738,31 +763,33 @@ mod test {
     pub fn test_optimize_identity_identity_two_outputs() {
         let _ = env_logger::builder().is_test(true).try_init();
 
-        let m = model(graph(
-            vec![tensor("X", &[1])],
-            vec![tensor("Y", &[1]), tensor("Z", &[1])],
-            vec![tensor("A", &[1])],
-            vec![],
-            vec![
-                node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                node(vec!["A"], vec!["Z"], "b", "Identity", vec![]),
-                node(vec!["A"], vec!["Y"], "c", "Identity", vec![]),
-            ],
-        ));
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![tensor("X", &[1])],
+                vec![tensor("Y", &[1]), tensor("Z", &[1])],
+                vec![tensor("A", &[1])],
+                vec![],
+                vec![
+                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
+                    node(vec!["A"], vec!["Z"], "b", "Identity", vec![]),
+                    node(vec!["A"], vec!["Y"], "c", "Identity", vec![]),
+                ],
+            ));
 
-        let root = ir::Node::from_model(&m, None).unwrap();
-        let mut opt = Optimizer::new();
-        let new_root = opt.optimize(root).unwrap();
-        let mut new_pairs = vec![];
-        traverse(new_root, &mut new_pairs);
-        assert_eq!(
-            new_pairs,
-            vec![
-                ("Neg_a".to_string(), "<outputs>".to_string()),
-                ("Neg_a".to_string(), "<outputs>".to_string()),
-                ("X".to_string(), "Neg_a".to_string()),
-                ("X".to_string(), "Neg_a".to_string()),
-            ]
-        );
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new();
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root, &mut new_pairs);
+            assert_eq!(
+                new_pairs,
+                vec![
+                    ("Neg_a".to_string(), "<outputs>".to_string()),
+                    ("Neg_a".to_string(), "<outputs>".to_string()),
+                    ("X".to_string(), "Neg_a".to_string()),
+                    ("X".to_string(), "Neg_a".to_string()),
+                ]
+            );
+        });
     }
 }

@@ -154,7 +154,9 @@ impl Session {
             .ok_or(SessionError::UnknownOnnxOpsetVersion)?;
 
         let mut optimizer = Optimizer::new();
-        let ir = optimizer.optimize(ir::Node::from_model(&model, config.outputs.as_deref())?)?;
+        let ir = optimizer
+            .optimize(ir::Node::from_model(&model, config.outputs.as_deref())?)
+            .await?;
         let gpu_model = GpuModel::from(ir, device, queue, onnx_opset_version)?;
 
         Ok(Session { gpu_model })
