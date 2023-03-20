@@ -12,6 +12,7 @@ extern crate lazy_static;
 pub use compiler::CompileError;
 pub use gpu::GpuError;
 use ir::IrError;
+pub use optimizer::constant_of_shape_output;
 use optimizer::{Optimizer, OptimizerError};
 use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;

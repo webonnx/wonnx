@@ -2,9 +2,11 @@
 use crate::{
     gpu::GpuModel,
     ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
-    onnx::TensorProto,
+    onnx::{NodeProto, TensorProto},
     resource::{padding, request_device_queue},
-    utils::{attribute, AttributeNotFoundError, DataTypeError, NodeAttributes, ScalarType},
+    utils::{
+        attribute, AttributeNotFoundError, DataTypeError, NodeAttributes, OutputTensor, ScalarType,
+    },
     GpuError,
 };
 use async_recursion::async_recursion;
@@ -33,6 +35,9 @@ pub enum OptimizerError {
 
     #[error("error with data type: {0}")]
     InvalidDataType(#[from] DataTypeError),
+
+    #[error("node is invalid: {0}")]
+    InvalidNode(String),
 
     #[error("required attribute not found: {0}")]
     AttributeNotFound(#[from] AttributeNotFoundError),
@@ -74,41 +79,92 @@ impl<'model> Optimizer<'model> {
                     return Ok(None);
                 }
 
-                // Create an output node so we can perform inference for this node
-                let output_name = op_def.proto.output.get(0).unwrap().to_owned();
-
-                let out_node = Arc::new(Node {
-                    definition: NodeDefinition::Outputs {
-                        names: vec!["output".to_string()],
-                    },
-                    inputs: vec![Input {
-                        source_node: node,
-                        output_index: 0,
-                    }],
-                });
-
-                // Perform inference
-                let (device, queue) = request_device_queue().await;
-                let gm = GpuModel::from(out_node, device, queue, self.onnx_opset_version)
-                    .map_err(OptimizerError::ConstantFoldingError)?;
-                let mut outputs = gm.infer(&HashMap::new()).await?;
-
-                // Take the output tensor and make it into an initializer node
-                let (_, output_tensor) = outputs.drain().take(1).next().unwrap();
-                log::info!("folded {output_name} to {output_tensor:?}");
-                let mut output_tensor_proto = TensorProto::from(output_tensor);
-                output_tensor_proto.set_name(output_name);
-
-                let tensor_node = Node {
-                    definition: NodeDefinition::Tensor(Box::new(Cow::Owned(output_tensor_proto))),
-                    inputs: vec![],
-                };
-
-                Ok(Some(Arc::new(tensor_node)))
+                match op_def.proto.get_op_type() {
+                    "Constant" => Ok(Some(Arc::new(Node {
+                        definition: NodeDefinition::Tensor(Box::new(Cow::Owned(
+                            Self::constant_node_to_tensor(node)?,
+                        ))),
+                        inputs: vec![],
+                    }))),
+                    _ => self.infer_constant_node_to_tensor(node.clone()).await,
+                }
             }
             NodeDefinition::Tensor(_) => Ok(None), // already constantized
             NodeDefinition::Input(_) | NodeDefinition::Missing => unreachable!(),
             NodeDefinition::Outputs { .. } => Ok(None), // all the outputs themselves are already constant, so nothing to do
+        }
+    }
+
+    // Takes a node with operator type 'Constant' and returns its output as a tensor
+    fn constant_node_to_tensor(node: Arc<Node<'model>>) -> Result<TensorProto, OptimizerError> {
+        let NodeDefinition::Operator(op_def) = node.definition() else {
+            panic!("node must be a Constant node");
+        };
+        let proto = &op_def.proto;
+        let output_name = proto.output.get(0).unwrap().to_owned();
+
+        let mut tp: TensorProto =
+            if let Ok(values) = proto.get_attribute_value::<Vec<f32>>("value_floats", None) {
+                TensorProto::from(OutputTensor::F32(values))
+            } else if let Ok(values) = proto.get_attribute_value::<Vec<i64>>("value_ints", None) {
+                TensorProto::from(OutputTensor::I64(values))
+            } else if let Ok(value) = proto.get_attribute_value::<f32>("value_float", None) {
+                TensorProto::from(OutputTensor::F32(vec![value]))
+            } else if let Ok(value) = proto.get_attribute_value::<i64>("value_int", None) {
+                TensorProto::from(OutputTensor::I64(vec![value]))
+            } else if let Ok(tp) = proto.get_attribute_value::<TensorProto>("value", None) {
+                tp
+            } else {
+                return Err(OptimizerError::Unsupported(
+                    "Constant node with unknown value type".to_string(),
+                ));
+            };
+
+        tp.set_name(output_name);
+        Ok(tp)
+    }
+
+    // Infers the output for a constant node (must be a constant and operator node, or the function panics)
+    async fn infer_constant_node_to_tensor(
+        &self,
+        node: Arc<Node<'model>>,
+    ) -> Result<Option<Arc<Node<'model>>>, OptimizerError> {
+        assert!(node.is_constant());
+
+        // Create an output node so we can perform inference for this node
+        if let NodeDefinition::Operator(op_def) = node.definition() {
+            let output_name = op_def.proto.output.get(0).unwrap().to_owned();
+
+            let out_node = Arc::new(Node {
+                definition: NodeDefinition::Outputs {
+                    names: vec!["output".to_string()],
+                },
+                inputs: vec![Input {
+                    source_node: node,
+                    output_index: 0,
+                }],
+            });
+
+            // Perform inference
+            let (device, queue) = request_device_queue().await;
+            let gm = GpuModel::from(out_node, device, queue, self.onnx_opset_version)
+                .map_err(OptimizerError::ConstantFoldingError)?;
+            let mut outputs = gm.infer(&HashMap::new()).await?;
+
+            // Take the output tensor and make it into an initializer node
+            let (_, output_tensor) = outputs.drain().take(1).next().unwrap();
+            log::info!("folded {output_name} to {output_tensor:?}");
+            let mut output_tensor_proto = TensorProto::from(output_tensor);
+            output_tensor_proto.set_name(output_name);
+
+            let tensor_node = Node {
+                definition: NodeDefinition::Tensor(Box::new(Cow::Owned(output_tensor_proto))),
+                inputs: vec![],
+            };
+
+            Ok(Some(Arc::new(tensor_node)))
+        } else {
+            panic!("node to fold must be operator")
         }
     }
 
@@ -608,13 +664,68 @@ static CLIP_INPUT_NAMES: &[&str] = &["input", "min", "max"];
 static REDUCE_OPS_INPUT_NAMES: &[&str] = &["input", "axes"];
 static PAD_INPUT_NAMES: &[&str] = &["data", "pads", "constant_value"];
 
+/// Generate the output for a ConstantOfShape node
+pub fn constant_of_shape_output(
+    node: &NodeProto,
+    element_count: usize,
+) -> Result<OutputTensor, OptimizerError> {
+    if let Ok(constant_value_tensor) = node.get_attribute_value::<TensorProto>("value", None) {
+        match ScalarType::from_i32(constant_value_tensor.get_data_type()).map_err(|_| {
+            OptimizerError::Unsupported(format!(
+                "unsupported data type {}",
+                constant_value_tensor.get_data_type()
+            ))
+        })? {
+            ScalarType::F32 => {
+                let fd = constant_value_tensor.get_float_data();
+                if fd.is_empty() {
+                    return Err(OptimizerError::InvalidNode(
+                        "value tensor for ConstantOfShape is empty".to_string(),
+                    ));
+                }
+                Ok(OutputTensor::F32(vec![fd[0]; element_count]))
+            }
+            ScalarType::I64 => {
+                let fd = constant_value_tensor.get_int64_data();
+                if fd.is_empty() {
+                    return Err(OptimizerError::InvalidNode(
+                        "value tensor for ConstantOfShape is empty".to_string(),
+                    ));
+                }
+                Ok(OutputTensor::I64(vec![fd[0]; element_count]))
+            }
+            ScalarType::I32 => {
+                let fd = constant_value_tensor.get_int32_data();
+                if fd.is_empty() {
+                    return Err(OptimizerError::InvalidNode(
+                        "value tensor for ConstantOfShape is empty".to_string(),
+                    ));
+                }
+                Ok(OutputTensor::I32(vec![fd[0]; element_count]))
+            }
+            ScalarType::U8 => {
+                let fd = constant_value_tensor.get_raw_data();
+                if fd.is_empty() {
+                    return Err(OptimizerError::InvalidNode(
+                        "value tensor for ConstantOfShape is empty".to_string(),
+                    ));
+                }
+                Ok(OutputTensor::U8(vec![fd[0]; element_count]))
+            }
+        }
+    } else {
+        // The default value is a zero f32
+        Ok(OutputTensor::F32(vec![0.0; element_count]))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
 
     use crate::{
         ir::{self, Node, NodeDefinition},
-        utils::{graph, initializer, model, node, tensor},
+        utils::{attribute, graph, initializer, model, node, tensor},
     };
 
     use super::Optimizer;
@@ -881,6 +992,38 @@ mod test {
             let mut new_pairs = vec![];
             traverse(new_root, &mut new_pairs);
             assert_eq!(new_pairs, vec![("C".to_string(), "<outputs>".to_string())]);
+        });
+    }
+
+    // Test: [Constant] -> Y => [initializer] -> Y
+    #[test]
+    pub fn test_constant_node_to_tensor() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![],
+                vec![tensor("Y", &[1])],
+                vec![],
+                vec![],
+                vec![node(
+                    vec![],
+                    vec!["Y"],
+                    "y",
+                    "Constant",
+                    vec![attribute("value_float", 42.0)],
+                )],
+            ));
+
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new(13);
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root.clone(), &mut new_pairs);
+            assert_eq!(new_pairs, vec![("Y".to_string(), "<outputs>".to_string())]);
+
+            let y_node = new_root.inputs[0].source_node.clone();
+            assert!(matches!(y_node.definition(), NodeDefinition::Tensor(_)));
         });
     }
 }

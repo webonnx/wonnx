@@ -4,6 +4,7 @@ use protobuf::{ProtobufEnum, RepeatedField};
 use thiserror::Error;
 
 use wonnx::{
+    constant_of_shape_output,
     onnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, ValueInfoProto,
@@ -105,53 +106,10 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
         "ConstantOfShape" => {
             if let InputTensor::I64(input_shape) = &inputs[0] {
                 let element_count = input_shape.iter().product::<i64>() as usize;
-                if let Ok(constant_value_tensor) =
-                    node.get_attribute_value::<TensorProto>("value", None)
-                {
-                    match ScalarType::from_i32(constant_value_tensor.get_data_type())
-                        .map_err(ConstantFoldingError::UnsupportedDataType)?
-                    {
-                        ScalarType::F32 => {
-                            let fd = constant_value_tensor.get_float_data();
-                            if fd.is_empty() {
-                                return Err(ConstantFoldingError::InvalidNode(
-                                    "value tensor for ConstantOfShape is empty".to_string(),
-                                ));
-                            }
-                            Some(vec![OutputTensor::F32(vec![fd[0]; element_count])])
-                        }
-                        ScalarType::I64 => {
-                            let fd = constant_value_tensor.get_int64_data();
-                            if fd.is_empty() {
-                                return Err(ConstantFoldingError::InvalidNode(
-                                    "value tensor for ConstantOfShape is empty".to_string(),
-                                ));
-                            }
-                            Some(vec![OutputTensor::I64(vec![fd[0]; element_count])])
-                        }
-                        ScalarType::I32 => {
-                            let fd = constant_value_tensor.get_int32_data();
-                            if fd.is_empty() {
-                                return Err(ConstantFoldingError::InvalidNode(
-                                    "value tensor for ConstantOfShape is empty".to_string(),
-                                ));
-                            }
-                            Some(vec![OutputTensor::I32(vec![fd[0]; element_count])])
-                        }
-                        ScalarType::U8 => {
-                            let fd = constant_value_tensor.get_raw_data();
-                            if fd.is_empty() {
-                                return Err(ConstantFoldingError::InvalidNode(
-                                    "value tensor for ConstantOfShape is empty".to_string(),
-                                ));
-                            }
-                            Some(vec![OutputTensor::U8(vec![fd[0]; element_count])])
-                        }
-                    }
-                } else {
-                    // The default value is a zero f32
-                    Some(vec![OutputTensor::F32(vec![0.0; element_count])])
-                }
+                Some(vec![constant_of_shape_output(node, element_count)
+                    .map_err(|e| {
+                        ConstantFoldingError::InvalidNode(e.to_string())
+                    })?])
             } else {
                 return Err(ConstantFoldingError::InvalidNode(
                     "ConstantOfShape node input tensor has invalid type, should be i64".to_string(),
