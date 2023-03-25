@@ -239,8 +239,8 @@ fn calculate_shape_operator(
     if end < 0 {
         end += input_dims.len() as i64;
     }
-    start = start.min((input_dims.len()) as i64).max(0);
-    end = end.min((input_dims.len()) as i64).max(0);
+    start = start.clamp(0, input_dims.len() as i64);
+    end = end.clamp(0, input_dims.len() as i64);
 
     if start > end {
         return Err(ConstantFoldingError::InvalidNode(format!(

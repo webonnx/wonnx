@@ -143,8 +143,8 @@ impl<'model> Optimizer<'model> {
         if end < 0 {
             end += rank;
         }
-        start = start.min(rank).max(0);
-        end = end.min(rank).max(0);
+        start = start.clamp(0, rank);
+        end = end.clamp(0, rank);
 
         if start < 0 || start > rank {
             return Err(OptimizerError::InvalidNode(format!(
