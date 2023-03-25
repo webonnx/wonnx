@@ -84,11 +84,6 @@ lazy_static! {
         )
         .unwrap();
         tera.add_raw_template(
-            "matrix/lrn.wgsl",
-            include_str!("../templates/matrix/lrn.wgsl"),
-        )
-        .unwrap();
-        tera.add_raw_template(
             "pool/aggregate.wgsl",
             include_str!("../templates/pool/aggregate.wgsl"),
         )
@@ -1324,38 +1319,6 @@ pub fn compile(
                 scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "matrix/transpose.wgsl",
                 threads: (ceil(output_lengths[0], 256) as _, 1, 1),
-            }
-        }
-        "LRN" => {
-            // https://github.com/onnx/onnx/blob/main/docs/Operators.md#lrn
-            let alpha = node.get_attribute_value("alpha", Some(0.0001))?;
-            let beta = node.get_attribute_value("beta", Some(0.75))?;
-            let bias = node.get_attribute_value("bias", Some(1.0))?;
-            let size = node.get_attribute_value("size", Some(1))?;
-
-            context.insert("alpha", &alpha);
-            context.insert("beta", &beta);
-            context.insert("bias", &bias);
-            context.insert("size", &size);
-
-            let left_size = f64::floor((size - 1) as f64 / 2.0) as u32;
-            let right_size = f64::ceil((size - 1) as f64 / 2.0) as u32;
-
-            context.insert("left_size", &left_size);
-            context.insert("right_size", &right_size);
-
-            let (x_threads, workgroup_size_x) = workgroup_size(
-                output_lengths[0],
-                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
-                MAX_WORKGROUP_SIZE_X,
-            )?;
-            context.insert("workgroup_size_x", &workgroup_size_x);
-            context.insert("i_chunks", &input_chunks);
-
-            NodeTemplate {
-                scalar_type: agreed_type(input_shapes, output_shapes)?,
-                template: "matrix/lrn.wgsl",
-                threads: (x_threads, 1, 1),
             }
         }
         op => return Err(CompileError::UnimplementedOp(op.to_string())),

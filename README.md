@@ -434,3 +434,27 @@ supported in the following cases:
 Constant folding is performed as part of shape inference, unless disabled (from the CLI pass `--no-fold-constants` to disable). This
 is done in order to support models that dynamically calculate shapes using operators such as `Shape`/`Squeeze`/`Unsqueeze` depending
 on dynamically set dimension parameters (e.g. batch size).
+
+## License
+
+Licensed under either of
+ * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+at your option.
+
+Except for the following files:
+
+* `data/models`: 
+  * `mobilenetv2-7.onnx`: [source](https://github.com/onnx/models/blob/main/vision/classification/mobilenet/model/mobilenetv2-7.onnx), Apache-2.0 license only.
+  * `squeezenet-labels.txt`: [source](https://github.com/onnx/models/blob/main/vision/classification/synset.txt), Apache-2.0 license only.
+
+* `data/images`:
+  * `pelican.jpeg`: [source](https://en.wikipedia.org/wiki/Pelican#/media/File:Pelikan_Walvis_Bay.jpg), (C) Rui Ornelas, [CC-BY 2.0](https://creativecommons.org/licenses/by/2.0/).
+  * `bald_eagle.jpeg`: [source](https://en.wikipedia.org/wiki/Bald_eagle#/media/File:Bald-Eagle-9114-cropped.jpg), (C) David R. Tribble, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you shall be dual licensed as above, without any
+additional terms or conditions.
