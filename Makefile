@@ -1,4 +1,4 @@
-.PHONY = all clean wasm-test python-test python-test-op python-test-backend
+.PHONY = all clean wasm-test python-test python-test-op python-test-backend test wonnx-test
 .DEFAULT_GOAL := wonnx
 PYTHON = python3
 OP_TESTED = reduce_sum
@@ -8,6 +8,8 @@ all: wonnx wasm python
 clean:
 	rm -rf target
 	rm -rf wonnx-py/.venv
+
+test: wonnx-test python-test
 
 wasm:
 	RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --target web -d `pwd`/target/pkg --out-name wonnx --scope webonnx ./wonnx-wasm
@@ -29,6 +31,9 @@ wonnx: target/release/nnx
 
 wonnx-debug: target/debug/nnx
 
+wonnx-test:
+	cargo test
+	
 venv = wonnx-py/.venv
 	
 $(venv):
