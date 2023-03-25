@@ -5,11 +5,10 @@ idna==3.3
 iniconfig==1.1.1
 maturin==0.12.16
 numpy==1.22.3
-onnx==1.11.0
+onnx==1.13.1
 packaging==21.3
 Pillow==9.3.0
 pluggy==1.0.0
-protobuf==3.20.1
 py==1.11.0
 pyparsing==3.0.9
 pytest==7.1.2
@@ -20,3 +19,4 @@ torch==1.11.0
 torchvision==0.12.0
 typing_extensions==4.2.0
 urllib3==1.26.9
+opencv-python==4.7.0.72
