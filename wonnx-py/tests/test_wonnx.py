@@ -1,9 +1,8 @@
 import onnx
 import wonnx
 from onnx import helper
-from onnx import AttributeProto, TensorProto, GraphProto
+from onnx import TensorProto
 from torchvision import transforms
-
 import numpy as np
 import cv2
 
@@ -18,6 +17,7 @@ def test_parse_model():
     )
     X = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 2])
     Y = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 2])
+
     # Create the graph (GraphProto)
     graph_def = helper.make_graph(
         [node_def],
@@ -36,7 +36,6 @@ def test_parse_model():
 
 
 def test_from_path():
-
     # Create the model (ModelProto)
     session = wonnx.Session.from_path(
         os.path.join(basedir, "../../data/models/single_relu.onnx")
@@ -46,13 +45,12 @@ def test_from_path():
 
 
 def test_mnist():
-
     image = cv2.imread(os.path.join(basedir, "../../data/images/7.jpg"))
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, (28, 28)).astype(np.float32) / 255
     input = np.reshape(gray, (1, 1, 28, 28))
-    # Create the model (ModelProto)
 
+    # Create the model (ModelProto)
     session = wonnx.Session.from_path(
         os.path.join(basedir, "../../data/models/opt-mnist.onnx")
     )
@@ -65,6 +63,7 @@ def test_mnist():
 def test_squeezenet():
     image = cv2.imread(os.path.join(basedir, "../../data/images/pelican.jpeg"))
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
     # apply transforms to the input image
     transform = transforms.Compose(
         [
@@ -78,8 +77,8 @@ def test_squeezenet():
         ]
     )
     input_tensor = transform(rgb_image)
-    # Create the model (ModelProto)
 
+    # Create the model (ModelProto)
     session = wonnx.Session.from_path(
         os.path.join(basedir, "../../data/models/opt-squeeze.onnx")
     )

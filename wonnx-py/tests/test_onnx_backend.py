@@ -1,18 +1,14 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 
-import itertools
-import os
-import platform
 import unittest
 import onnx.backend.base
 import onnx.backend.test
 
-from onnx.backend.base import BackendRep, Device, DeviceType, namedtupledict
-from onnx.backend.test.runner import BackendIsNotSupposedToImplementIt
+from onnx.backend.base import BackendRep, Device, DeviceType
 import onnx.shape_inference
 import onnx.version_converter
-from typing import NamedTuple, Optional, Text, Any, Tuple, Sequence
-from onnx import NodeProto, ModelProto, TensorProto
+from typing import Optional, Text, Any
+from onnx import ModelProto, TensorProto
 import numpy as np
 import wonnx
 
@@ -84,17 +80,6 @@ class DummyBackend(onnx.backend.base.Backend):
             outputs_shape[output.name] = [
                 shape.dim_value for shape in output.type.tensor_type.shape.dim
             ]
-
-        if do_enforce_test_coverage_safelist(model):
-            for node in model.graph.node:
-                for i, output in enumerate(node.output):
-                    if node.op_type == "Dropout" and i != 0:
-                        continue
-                    assert output in value_infos
-                    tt = value_infos[output].type.tensor_type
-                    assert tt.elem_type != TensorProto.UNDEFINED
-                    for dim in tt.shape.dim:
-                        assert dim.WhichOneof("value") == "dim_value"
 
         return DummyRep(
             inputs=inputs,
