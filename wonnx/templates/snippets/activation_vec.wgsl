@@ -27,7 +27,7 @@
 			input_vec
 		) + min(
 			Vec4(Scalar(), Scalar(), Scalar(), Scalar()), 
-			{{ alpha }} * (exp(input_vec / {{ alpha }}) - Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)))
+			{{scalar_type}}({{ alpha }}) * (exp(input_vec / {{ scalar_type }}({{ alpha }})) - Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)))
 		);
 
 {%- elif activation_type == "Elu" -%}
@@ -37,7 +37,7 @@
 			input_vec
 		) + min(
 			Vec4(Scalar(), Scalar(), Scalar(), Scalar()), 
-			{{ alpha }} * (exp(input_vec) - Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)))
+			{{scalar_type}}({{ alpha }}) * (exp(input_vec) - Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)))
 		);
 
 {%- elif activation_type == "Mish" -%}

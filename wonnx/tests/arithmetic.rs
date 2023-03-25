@@ -73,7 +73,7 @@ fn test_integer() {
     let shape = vec![n as i64];
     input_data.insert("X".to_string(), InputTensor::I32(data.as_slice().into()));
 
-    // Model: X -> Cos -> Y
+    // Model: X -> Add -> Y
     let model = model(graph(
         vec![tensor_of_type("X", &shape, TensorProto_DataType::INT32)],
         vec![tensor_of_type("Y", &shape, TensorProto_DataType::INT32)],

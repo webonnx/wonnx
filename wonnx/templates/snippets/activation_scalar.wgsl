@@ -28,7 +28,7 @@
 			input_vec
 		) + min(
 			Scalar(), 
-			{{ alpha }} * (exp(input_vec / {{ alpha }}) - {{ scalar_type }}(1))
+			{{ scalar_type }}({{ alpha }}) * (exp(input_vec / {{ scalar_type }}({{ alpha }})) - {{ scalar_type }}(1))
 		);
 
 {%- elif activation_type == "Elu" -%}
@@ -38,7 +38,7 @@
 			input_vec
 		) + min(
 			Scalar(), 
-			{{ alpha }} * (exp(input_vec) - {{ scalar_type }}(1))
+			{{ scalar_type }}({{ alpha }}) * (exp(input_vec) - {{ scalar_type }}(1))
 		);
 
 {%- elif activation_output != activation_input -%}

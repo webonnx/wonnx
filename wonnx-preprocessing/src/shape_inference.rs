@@ -590,8 +590,14 @@ pub(crate) fn infer_output_shapes(
 
         ("Shape", 1, 1) => {
             let rank = input_shapes[0].rank() as i64;
-            let start: i64 = node.get_attribute_value("start", Some(0)).unwrap();
-            let end: i64 = node.get_attribute_value("end", Some(rank)).unwrap();
+            let mut start: i64 = node.get_attribute_value("start", Some(0)).unwrap();
+            let mut end: i64 = node.get_attribute_value("end", Some(rank)).unwrap();
+            if start < 0 {
+                start += rank;
+            }
+            if end < 0 {
+                end += rank;
+            }
 
             Ok(vec![Shape::from(
                 ScalarType::I64,

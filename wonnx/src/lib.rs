@@ -12,6 +12,7 @@ extern crate lazy_static;
 pub use compiler::CompileError;
 pub use gpu::GpuError;
 use ir::IrError;
+pub use optimizer::constant_of_shape_output;
 use optimizer::{Optimizer, OptimizerError};
 use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
@@ -153,8 +154,10 @@ impl Session {
             .map_err(SessionError::OpsetError)?
             .ok_or(SessionError::UnknownOnnxOpsetVersion)?;
 
-        let mut optimizer = Optimizer::new();
-        let ir = optimizer.optimize(ir::Node::from_model(&model, config.outputs.as_deref())?)?;
+        let mut optimizer = Optimizer::new(onnx_opset_version);
+        let ir = optimizer
+            .optimize(ir::Node::from_model(&model, config.outputs.as_deref())?)
+            .await?;
         let gpu_model = GpuModel::from(ir, device, queue, onnx_opset_version)?;
 
         Ok(Session { gpu_model })

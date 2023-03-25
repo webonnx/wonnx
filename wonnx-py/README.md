@@ -8,11 +8,14 @@ To build the Python module for development:
 
 ````bash
 cd wonnx-py
-python3 -m venv .env
-source .env/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install maturin
 maturin develop
 ````
+
+You can also use `make python` from the project root. If you want to specify a specific version of python, use:
+`make python PYTHON=python3.10` (e.g. if you used `brew install python@3.10` to install Python 3.10 on macOS). 
 
 ## Testing
 
