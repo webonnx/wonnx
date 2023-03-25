@@ -229,8 +229,8 @@ impl<'a> From<&InputTensor<'a>> for OutputTensor {
     }
 }
 
-impl From<OutputTensor> for TensorProto {
-    fn from(value: OutputTensor) -> Self {
+impl TensorProto {
+    pub fn from(value: OutputTensor, dims: Vec<i64>) -> Self {
         let mut tensor = TensorProto::new();
         match value {
             OutputTensor::F32(v) => {
@@ -250,6 +250,7 @@ impl From<OutputTensor> for TensorProto {
                 tensor.set_raw_data(v);
             }
         }
+        tensor.set_dims(dims);
         tensor
     }
 }

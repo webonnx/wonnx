@@ -414,7 +414,10 @@ pub async fn infer_shapes(
                         let output_tensor = constant_output.remove(output_index);
 
                         let output_shape = &output_shapes[output_index];
-                        let mut initializer: TensorProto = output_tensor.into();
+                        let mut initializer: TensorProto = TensorProto::from(
+                            output_tensor,
+                            output_shape.dims.iter().map(|x| *x as i64).collect(),
+                        );
                         initializer.set_name(output_name.clone());
                         initializer.set_dims(output_shape.dims.iter().map(|x| *x as i64).collect());
                         initializers.insert(output_name.clone(), Cow::Owned(initializer));

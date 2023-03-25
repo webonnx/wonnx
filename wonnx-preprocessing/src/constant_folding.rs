@@ -231,7 +231,7 @@ fn calculate_shape_operator(
     let input_dims: Vec<i64> = input_shape.dims.iter().map(|x| *x as i64).collect();
     let mut start = node.get_attribute_value("start", Some(0)).unwrap();
     let mut end = node
-        .get_attribute_value("start", Some(input_dims.len() as i64 - 1))
+        .get_attribute_value("end", Some(input_dims.len() as i64))
         .unwrap();
     if start < 0 {
         start += input_dims.len() as i64;
@@ -239,6 +239,9 @@ fn calculate_shape_operator(
     if end < 0 {
         end += input_dims.len() as i64;
     }
+    start = start.min((input_dims.len()) as i64).max(0);
+    end = end.min((input_dims.len()) as i64).max(0);
+
     if start > end {
         return Err(ConstantFoldingError::InvalidNode(format!(
             "end attribute value ({}) for Shape node should be higher than start attribute ({})",
@@ -246,10 +249,49 @@ fn calculate_shape_operator(
         )));
     }
 
-    let output_shape: Vec<i64> = (input_dims[(start as usize)..=(end as usize)]).into();
+    let output_shape: Vec<i64> = (input_dims[(start as usize)..=((end - 1) as usize)]).into();
     if output_shape.is_empty() {
         log::warn!("Shape operator results in an empty output shape which is probably an issue... start={start} end={end} input_shape={}", input_shape);
     }
 
     Ok(OutputTensor::I64(output_shape))
+}
+
+#[cfg(test)]
+mod test {
+    use wonnx::utils::{attribute, node, OutputTensor, Shape};
+
+    use super::calculate_shape_operator;
+
+    pub fn test_shape_shape_inference_slice(
+        dims: &[i64],
+        start: Option<i64>,
+        end: Option<i64>,
+        out_dims: &[i64],
+    ) {
+        let mut attrs = vec![];
+        if let Some(start) = start {
+            attrs.push(attribute("start", start));
+        }
+        if let Some(end) = end {
+            attrs.push(attribute("end", end));
+        }
+        let node = node(vec!["X"], vec!["Y"], "s", "Shape", attrs);
+        let shape = Shape::from(wonnx::utils::ScalarType::F32, dims);
+        assert_eq!(
+            calculate_shape_operator(&node, &shape).unwrap(),
+            OutputTensor::I64(out_dims.to_vec())
+        );
+    }
+
+    #[test]
+    pub fn test_shape_shape_inference() {
+        test_shape_shape_inference_slice(&[3, 4, 5], None, None, &[3, 4, 5]);
+        test_shape_shape_inference_slice(&[3, 4, 5], Some(1), None, &[4, 5]);
+        test_shape_shape_inference_slice(&[3, 4, 5], Some(10), None, &[]);
+        test_shape_shape_inference_slice(&[3, 4, 5], Some(10), Some(11), &[]);
+
+        test_shape_shape_inference_slice(&[3, 4, 5], Some(-1), None, &[5]);
+        test_shape_shape_inference_slice(&[3, 4, 5], Some(-3), Some(-2), &[3]);
+    }
 }

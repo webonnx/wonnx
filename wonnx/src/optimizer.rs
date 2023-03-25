@@ -136,34 +136,34 @@ impl<'model> Optimizer<'model> {
         };
         let rank = in_shape.rank() as i64;
         let mut start: i64 = op_def.proto.get_attribute_value("start", Some(0)).unwrap();
-        let mut end: i64 = op_def
-            .proto
-            .get_attribute_value("end", Some(rank - 1))
-            .unwrap();
+        let mut end: i64 = op_def.proto.get_attribute_value("end", Some(rank)).unwrap();
         if start < 0 {
             start += rank;
         }
         if end < 0 {
             end += rank;
         }
+        start = start.min(rank).max(0);
+        end = end.min(rank).max(0);
 
-        if start < 0 || start >= rank {
+        if start < 0 || start > rank {
             return Err(OptimizerError::InvalidNode(format!(
                 "start index of Shape node cannot be below zero, found {start}"
             )));
         }
 
-        if end < 0 || end >= rank || end < start {
+        if end < 0 || end > rank || end < start {
             return Err(OptimizerError::InvalidNode(format!(
                 "end index of Shape node cannot be below zero or higher than {rank} or below start {start}, found {end}"
             )));
         }
 
-        let values = in_shape.dims[(start as usize)..=(end as usize)]
+        let values: Vec<i64> = in_shape.dims[(start as usize)..=((end - 1) as usize)]
             .iter()
             .map(|x| *x as i64)
             .collect();
-        Ok(TensorProto::from(OutputTensor::I64(values)))
+        let dims = vec![values.len() as i64];
+        Ok(TensorProto::from(OutputTensor::I64(values), dims))
     }
 
     // Takes a node with operator type 'Constant' and returns its output as a tensor
@@ -177,13 +177,15 @@ impl<'model> Optimizer<'model> {
 
         let mut tp: TensorProto =
             if let Ok(values) = proto.get_attribute_value::<Vec<f32>>("value_floats", None) {
-                TensorProto::from(OutputTensor::F32(values))
+                let dims = vec![values.len() as i64];
+                TensorProto::from(OutputTensor::F32(values), dims)
             } else if let Ok(values) = proto.get_attribute_value::<Vec<i64>>("value_ints", None) {
-                TensorProto::from(OutputTensor::I64(values))
+                let dims = vec![values.len() as i64];
+                TensorProto::from(OutputTensor::I64(values), dims)
             } else if let Ok(value) = proto.get_attribute_value::<f32>("value_float", None) {
-                TensorProto::from(OutputTensor::F32(vec![value]))
+                TensorProto::from(OutputTensor::F32(vec![value]), vec![1])
             } else if let Ok(value) = proto.get_attribute_value::<i64>("value_int", None) {
-                TensorProto::from(OutputTensor::I64(vec![value]))
+                TensorProto::from(OutputTensor::I64(vec![value]), vec![1])
             } else if let Ok(tp) = proto.get_attribute_value::<TensorProto>("value", None) {
                 tp
             } else {
@@ -212,7 +214,7 @@ impl<'model> Optimizer<'model> {
                     names: vec!["output".to_string()],
                 },
                 inputs: vec![Input {
-                    source_node: node,
+                    source_node: node.clone(),
                     output_index: 0,
                 }],
             });
@@ -226,7 +228,14 @@ impl<'model> Optimizer<'model> {
             // Take the output tensor and make it into an initializer node
             let (_, output_tensor) = outputs.drain().take(1).next().unwrap();
             log::info!("folded {output_name} to {output_tensor:?}");
-            let mut output_tensor_proto = TensorProto::from(output_tensor);
+            let mut output_tensor_proto = TensorProto::from(
+                output_tensor,
+                op_def.output_shapes[0]
+                    .dims
+                    .iter()
+                    .map(|x| *x as i64)
+                    .collect(),
+            );
             output_tensor_proto.set_name(output_name);
 
             let tensor_node = Node {
@@ -810,6 +819,7 @@ mod test {
 
     use crate::{
         ir::{self, Node, NodeDefinition},
+        onnx::AttributeProto,
         utils::{attribute, graph, initializer, model, node, tensor},
     };
 
@@ -1115,21 +1125,38 @@ mod test {
     // Test: Input X -> [Shape] -> Y => [initializer] -> Y with initializer containing the correct shape of input X
     #[test]
     pub fn test_shape_operator() {
+        test_shape_operator_with(
+            &[1, 2, 3],
+            vec![attribute("start", -3), attribute("end", -2)],
+            &[1],
+        );
+        test_shape_operator_with(&[1, 2, 3], vec![], &[1, 2, 3]);
+        test_shape_operator_with(&[3, 4, 5], vec![attribute("start", 0)], &[3, 4, 5]);
+        test_shape_operator_with(&[3, 4, 5], vec![attribute("start", 1)], &[4, 5]);
+        test_shape_operator_with(&[3, 4, 5], vec![attribute("start", -1)], &[5]);
+        test_shape_operator_with(&[3, 4, 5], vec![attribute("end", 10)], &[3, 4, 5]);
+        test_shape_operator_with(&[3, 4, 5], vec![attribute("end", 1)], &[3]);
+        test_shape_operator_with(
+            &[3, 4, 5],
+            vec![attribute("start", 10), attribute("end", 10)],
+            &[],
+        );
+    }
+
+    pub fn test_shape_operator_with(
+        input_shape: &[i64],
+        attrs: Vec<AttributeProto>,
+        expected: &[i64],
+    ) {
         let _ = env_logger::builder().is_test(true).try_init();
 
         pollster::block_on(async {
             let m = model(graph(
-                vec![tensor("X", &[1, 2, 3])],
-                vec![tensor("Y", &[3])],
+                vec![tensor("X", input_shape)],
+                vec![tensor("Y", &[expected.len() as i64])],
                 vec![],
                 vec![],
-                vec![node(
-                    vec!["X"],
-                    vec!["Y"],
-                    "y",
-                    "Shape",
-                    vec![attribute("start", -3), attribute("end", -2)],
-                )],
+                vec![node(vec!["X"], vec!["Y"], "y", "Shape", attrs)],
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
@@ -1143,7 +1170,7 @@ mod test {
             let NodeDefinition::Tensor(t) = y_node.definition() else {
                 panic!("should be folded to an initializer");
             };
-            assert_eq!(t.get_int64_data(), &[1, 2]);
+            assert_eq!(t.get_int64_data(), expected);
         });
     }
 }

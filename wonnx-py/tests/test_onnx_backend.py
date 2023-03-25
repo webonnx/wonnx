@@ -57,7 +57,8 @@ class DummyRep(BackendRep):
         for item in results.items():
             tmp_v = np.array(item[1])
             tmp_v = np.reshape(tmp_v, self.outputs_shape[item[0]])
-            tmp_v = tmp_v.astype("float32")
+            if tmp_v.dtype == "float64":
+                tmp_v = tmp_v.astype("float32")
             outputs.append(tmp_v)
         return outputs
 
@@ -156,12 +157,14 @@ backend_test.include(f"test_pow_bcast_[a-z,_]*")
 backend_test.include(f"test_transpose[a-z,_]*")
 backend_test.include(f"test_neg_[a-z,_]*")
 backend_test.include(f"test_reciprocal_[a-z,_]*")
+backend_test.include(f"test_shape_[a-z,_]*")
 
 # For these we only test the default version, as we don't support the bool type
 backend_test.include(f"test_prelu_broadcast_cpu$")
 backend_test.include(f"test_elu_cpu$")
 backend_test.include(f"test_relu_cpu$")
 backend_test.include(f"test_leakyrelu_default_cpu$")
+
 
 # Fails due to tolerance issues?
 # backend_test.include(f"test_celu_cpu$")
