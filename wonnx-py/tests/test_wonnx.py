@@ -7,6 +7,8 @@ from torchvision import transforms
 import numpy as np
 import cv2
 
+import os
+basedir = os.path.dirname(os.path.realpath(__file__))
 
 def test_parse_model():
     node_def = helper.make_node(
@@ -37,7 +39,7 @@ def test_from_path():
 
     # Create the model (ModelProto)
     session = wonnx.Session.from_path(
-        "../examples/data/models/single_relu.onnx"
+        os.path.join(basedir, "../../data/models/single_relu.onnx")
     )
     inputs = {"x": [-1.0, 2.0]}
     assert session.run(inputs) == {"y": [0.0, 2.0]}, "Single Relu does not work"
@@ -45,14 +47,14 @@ def test_from_path():
 
 def test_mnist():
 
-    image = cv2.imread("../examples/data/images/7.jpg")
+    image = cv2.imread(os.path.join(basedir, "../../data/images/7.jpg"))
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, (28, 28)).astype(np.float32) / 255
     input = np.reshape(gray, (1, 1, 28, 28))
     # Create the model (ModelProto)
 
     session = wonnx.Session.from_path(
-        "../examples/data/models/opt-mnist.onnx"
+        os.path.join(basedir, "../../data/models/opt-mnist.onnx")
     )
     inputs = {"Input3": input.flatten().tolist()}
     assert (
@@ -61,8 +63,7 @@ def test_mnist():
 
 
 def test_squeezenet():
-
-    image = cv2.imread("../examples/data/images/bald_eagle.jpeg")
+    image = cv2.imread(os.path.join(basedir, "../../data/images/pelican.jpeg"))
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     # apply transforms to the input image
     transform = transforms.Compose(
@@ -80,9 +81,13 @@ def test_squeezenet():
     # Create the model (ModelProto)
 
     session = wonnx.Session.from_path(
-        "../examples/data/models/opt-squeeze.onnx"
+        os.path.join(basedir, "../../data/models/opt-squeeze.onnx")
     )
     inputs = {"data": input_tensor.flatten().tolist()}
+    result = session.run(inputs)["squeezenet0_flatten0_reshape0"]
+
+    print(f"result 144={result[144]} argmax={np.argmax(result)} score_max={np.max(result)}")
+
     assert (
-        np.argmax(session.run(inputs)["squeezenet0_flatten0_reshape0"]) == 22
+        np.argmax(result) == 144
     ), "Squeezenet does not work"
