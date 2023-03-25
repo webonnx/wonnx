@@ -76,7 +76,7 @@ def test_squeezenet():
             ),
         ]
     )
-    input_tensor = transform(image)
+    input_tensor = transform(rgb_image)
     # Create the model (ModelProto)
 
     session = wonnx.Session.from_path(
