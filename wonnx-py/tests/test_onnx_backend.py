@@ -144,16 +144,13 @@ backend_test.include(f"test_neg_[a-z,_]*")
 backend_test.include(f"test_reciprocal_[a-z,_]*")
 backend_test.include(f"test_shape_[a-z,_]*")
 backend_test.include(f"test_size_[a-z,_]*")
+backend_test.include(f"test_celu_[a-z,_]*")
 
 # For these we only test the default version, as we don't support the bool type
 backend_test.include(f"test_prelu_broadcast_cpu$")
 backend_test.include(f"test_elu_cpu$")
 backend_test.include(f"test_relu_cpu$")
 backend_test.include(f"test_leakyrelu_default_cpu$")
-
-
-# Fails due to tolerance issues?
-# backend_test.include(f"test_celu_cpu$")
 
 # Don't support 'bool' type
 # backend_test.include(f"test_and_bcast[a-z0-9,_]*")
