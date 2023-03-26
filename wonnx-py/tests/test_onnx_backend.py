@@ -143,6 +143,7 @@ backend_test.include(f"test_transpose[a-z,_]*")
 backend_test.include(f"test_neg_[a-z,_]*")
 backend_test.include(f"test_reciprocal_[a-z,_]*")
 backend_test.include(f"test_shape_[a-z,_]*")
+backend_test.include(f"test_size_[a-z,_]*")
 
 # For these we only test the default version, as we don't support the bool type
 backend_test.include(f"test_prelu_broadcast_cpu$")

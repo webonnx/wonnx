@@ -96,7 +96,7 @@ impl<'model> Optimizer<'model> {
         }
     }
 
-    // Takes a node with operator type 'Constant' and returns its output as a tensor
+    // Takes a node with operator type 'Shape' and returns its output as a tensor
     fn shape_node_to_tensor(node: Arc<Node<'model>>) -> Result<TensorProto, OptimizerError> {
         let NodeDefinition::Operator(op_def) = node.definition() else {
             panic!("node must be a Shape node");
@@ -196,6 +196,47 @@ impl<'model> Optimizer<'model> {
 
         tp.set_name(output_name);
         Ok(tp)
+    }
+
+    // Takes a node with operator type 'Size' and returns its output as a tensor
+    fn size_node_to_tensor(node: Arc<Node<'model>>) -> Result<TensorProto, OptimizerError> {
+        let NodeDefinition::Operator(op_def) = node.definition() else {
+            panic!("node must be a Size node");
+        };
+        assert_eq!(op_def.proto.get_op_type(), "Size");
+
+        if node.inputs.len() != 1 {
+            return Err(OptimizerError::InvalidNode(format!(
+                "Size node should only have one input, has {}",
+                node.inputs.len()
+            )));
+        }
+
+        // Determine the shape of the input
+        let input = &node.inputs[0];
+        let in_node = &input.source_node.definition;
+        let in_element_count: i64 = match in_node {
+            NodeDefinition::Input(input) => input.get_shape()?.element_count() as i64,
+            NodeDefinition::Operator(input_op_def) => {
+                input_op_def.output_shapes[input.output_index].element_count() as i64
+            }
+            NodeDefinition::Tensor(input_tensor) => input_tensor.get_dims().iter().product(),
+            NodeDefinition::Outputs { .. } => {
+                return Err(OptimizerError::Unsupported(
+                    "output node cannot be used as an input to Shape node".to_string(),
+                ))
+            }
+            NodeDefinition::Missing => {
+                return Err(OptimizerError::InvalidNode(
+                    "Shape node has missing input".to_string(),
+                ))
+            }
+        };
+
+        Ok(TensorProto::from(
+            OutputTensor::I64(vec![in_element_count]),
+            vec![1],
+        ))
     }
 
     // Infers the output for a constant node (must be a constant and operator node, or the function panics)
@@ -397,15 +438,26 @@ impl<'model> Optimizer<'model> {
             node.definition()
         );
 
-        // Fold Shape node (not considered constant but we can still fold it)
+        // Fold Shape/Size nodes (not considered constant but we can still fold it)
         if let NodeDefinition::Operator(op_def) = &node.definition {
-            if op_def.proto.get_op_type() == "Shape" {
-                return Ok(Arc::new(Node {
-                    definition: NodeDefinition::Tensor(Box::new(Cow::Owned(
-                        Self::shape_node_to_tensor(node)?,
-                    ))),
-                    inputs: vec![],
-                }));
+            match op_def.proto.get_op_type() {
+                "Shape" => {
+                    return Ok(Arc::new(Node {
+                        definition: NodeDefinition::Tensor(Box::new(Cow::Owned(
+                            Self::shape_node_to_tensor(node)?,
+                        ))),
+                        inputs: vec![],
+                    }))
+                }
+                "Size" => {
+                    return Ok(Arc::new(Node {
+                        definition: NodeDefinition::Tensor(Box::new(Cow::Owned(
+                            Self::size_node_to_tensor(node)?,
+                        ))),
+                        inputs: vec![],
+                    }))
+                }
+                _ => {}
             }
         }
 
@@ -1157,6 +1209,41 @@ mod test {
                 vec![],
                 vec![],
                 vec![node(vec!["X"], vec!["Y"], "y", "Shape", attrs)],
+            ));
+
+            let root = ir::Node::from_model(&m, None).unwrap();
+            let mut opt = Optimizer::new(13);
+            let new_root = opt.optimize(root).await.unwrap();
+            let mut new_pairs = vec![];
+            traverse(new_root.clone(), &mut new_pairs);
+            assert_eq!(new_pairs, vec![("".to_string(), "<outputs>".to_string())]);
+
+            let y_node = new_root.inputs[0].source_node.clone();
+            let NodeDefinition::Tensor(t) = y_node.definition() else {
+                panic!("should be folded to an initializer");
+            };
+            assert_eq!(t.get_int64_data(), expected);
+        });
+    }
+
+    // Test: Input X -> [Size] -> Y => [initializer] -> Y with initializer containing the correct shape of input X
+    #[test]
+    pub fn test_size_operator() {
+        test_size_operator_with(&[1, 2, 3], &[6]);
+        test_size_operator_with(&[1], &[1]);
+        test_size_operator_with(&[], &[1]);
+    }
+
+    pub fn test_size_operator_with(input_shape: &[i64], expected: &[i64]) {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        pollster::block_on(async {
+            let m = model(graph(
+                vec![tensor("X", input_shape)],
+                vec![tensor("Y", &[expected.len() as i64])],
+                vec![],
+                vec![],
+                vec![node(vec!["X"], vec!["Y"], "y", "Size", vec![])],
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
