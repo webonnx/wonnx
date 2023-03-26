@@ -484,7 +484,7 @@ pub(crate) fn infer_output_shapes(
         | (
             "Identity" | "Sqrt" | "Relu" | "LeakyRelu" | "Abs" | "Acos" | "Acosh" | "Asin" | "Sin"
             | "Asinh" | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg"
-            | "Ceil" | "Floor" | "Reciprocal" | "Celu",
+            | "Ceil" | "Floor" | "Reciprocal" | "Celu" | "Sign",
             1,
             1,
         ) => Ok(vec![input_shapes[0].clone()]),
@@ -1210,7 +1210,7 @@ pub(crate) fn infer_output_shapes(
             | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil"
             | "Reciprocal" | "Floor" | "Mod" | "Celu" | "ReduceSum" | "ReduceMin" | "ReduceMax"
             | "ReduceSumSquare" | "ReduceLogSumExp" | "ReduceLogSum" | "ReduceL2" | "ReduceL1"
-            | "ReduceProd" | "Size",
+            | "ReduceProd" | "Size" | "Sign",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
