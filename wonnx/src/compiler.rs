@@ -1326,7 +1326,7 @@ pub fn compile(
                 threads: (ceil(output_lengths[0], 256) as _, 1, 1),
             }
         }
-        "LocalResponseNormalization" => {
+        "LRN" => {
             // https://github.com/onnx/onnx/blob/main/docs/Operators.md#lrn
             let alpha = get_attribute("alpha", Some(0.0001), node)?;
             let beta = get_attribute("beta", Some(0.75), node)?;
