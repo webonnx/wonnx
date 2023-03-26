@@ -249,3 +249,44 @@ fn test_prelu() {
         &[-0.5, -0.5, -2.0, -2.0],
     );
 }
+
+#[test]
+fn test_sign() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let n: usize = 7;
+    let mut input_data = HashMap::new();
+
+    let data: Vec<f32> = (0..=(n - 1))
+        .map(|x| ((x as i64) - (n / 2) as i64) as f32)
+        .collect();
+    let shape = vec![n as i64];
+    input_data.insert("X".to_string(), data.as_slice().into());
+
+    // Model: X -> Cos -> Y
+    let model = model(graph(
+        vec![tensor("X", &shape)],
+        vec![tensor("Y", &shape)],
+        vec![],
+        vec![],
+        vec![node(vec!["X"], vec!["Y"], "sign", "Sign", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    let expected: Vec<f32> = data
+        .iter()
+        .map(|x| {
+            if *x == 0.0 {
+                0.0
+            } else if *x < 0.0 {
+                -1.0
+            } else {
+                1.0
+            }
+        })
+        .collect();
+
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    assert_eq!(result["Y"], OutputTensor::F32(expected));
+}
