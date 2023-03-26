@@ -53,8 +53,14 @@ impl Shape {
         self.dims.iter().product()
     }
 
-    pub fn buffer_bytes(&self) -> usize {
-        (self.element_count() as usize) * self.data_type.stride()
+    pub fn buffer_bytes_aligned(&self) -> usize {
+        // Round buffer sizes to 16 bytes. If not, things go wrong (i.e. our shaders use vec4<f32> - if a buffer only
+        // has 7 elements, the last vec4 cannot be fully written to the buffer, and the buffer ends up containing zeroes.
+        fn round_to_next_multiple_of_16(n: usize) -> usize {
+            (n + 15) / 16 * 16
+        }
+
+        round_to_next_multiple_of_16((self.element_count() as usize) * self.data_type.stride())
     }
 
     pub fn dim(&self, idx: usize) -> u64 {

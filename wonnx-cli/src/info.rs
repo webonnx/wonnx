@@ -88,23 +88,32 @@ pub fn print_graph(model: &ModelProto) {
 pub fn sizes_table(model: &ModelProto) -> Result<Table, WonnxError> {
     let mut input_size: usize = 0;
     for input in model.get_graph().get_input() {
-        input_size += input.get_shape().map(|x| x.buffer_bytes()).unwrap_or(0);
+        input_size += input
+            .get_shape()
+            .map(|x| x.buffer_bytes_aligned())
+            .unwrap_or(0);
     }
 
     let mut output_size: usize = 0;
     for output in model.get_graph().get_output() {
-        output_size += output.get_shape().map(|x| x.buffer_bytes()).unwrap_or(0);
+        output_size += output
+            .get_shape()
+            .map(|x| x.buffer_bytes_aligned())
+            .unwrap_or(0);
     }
 
     let mut intermediate_size: usize = 0;
     for output in model.get_graph().get_value_info() {
-        intermediate_size += output.get_shape().map(|x| x.buffer_bytes()).unwrap_or(0);
+        intermediate_size += output
+            .get_shape()
+            .map(|x| x.buffer_bytes_aligned())
+            .unwrap_or(0);
     }
 
     let mut initializer_size: usize = 0;
     for info in model.get_graph().get_initializer() {
         let shape = Shape::from(ScalarType::from_i32(info.get_data_type())?, info.get_dims());
-        initializer_size += shape.buffer_bytes();
+        initializer_size += shape.buffer_bytes_aligned();
     }
 
     Ok(table![

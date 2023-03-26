@@ -438,7 +438,7 @@ impl GpuModel {
                     buffer_manager.lease(
                         ultimate_input.source_node.identifier(),
                         ultimate_input.output_index,
-                        output_shape.buffer_bytes(),
+                        output_shape.buffer_bytes_aligned(),
                     );
                 }
 
@@ -466,7 +466,7 @@ impl GpuModel {
                         buffer_manager.release(
                             node_identifier.clone(),
                             output_index,
-                            output_shape.buffer_bytes(),
+                            output_shape.buffer_bytes_aligned(),
                         );
                     }
                 }
@@ -593,15 +593,16 @@ impl GpuModel {
                     }
 
                     let input_shape = input_def.get_shape()?;
+                    let buffer_size_aligned = input_shape.buffer_bytes_aligned();
                     log::debug!(
                         "creating input buffer for {} shape {} size {}",
                         input_def.get_name(),
                         input_shape,
-                        input_shape.buffer_bytes()
+                        buffer_size_aligned
                     );
                     let input_buffer = Arc::new(resource::buffer(
                         &self.device,
-                        input_shape.buffer_bytes(),
+                        input_shape.buffer_bytes_aligned(),
                         input_def.get_name(),
                         // Usage is not COPY_SRC/MAP_READ even when outputs_readable is true; we'll deal with the special
                         // case of reading back inputs as outputs separately.
@@ -828,7 +829,7 @@ impl<'model> OperatorDefinition<'model> {
 
                         Arc::new(resource::buffer(
                             device,
-                            value_shape.buffer_bytes(),
+                            value_shape.buffer_bytes_aligned(),
                             output_name.as_str(),
                             buffer_usage,
                         ))
