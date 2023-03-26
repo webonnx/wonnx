@@ -608,6 +608,8 @@ pub(crate) fn infer_output_shapes(
             )])
         }
 
+        ("Size", 1, 1) => Ok(vec![Shape::from(ScalarType::I64, &[1])]),
+
         ("Slice", num_inputs @ 3..=5, 1) => {
             let data_shape = input_shapes[0];
 
@@ -1208,7 +1210,7 @@ pub(crate) fn infer_output_shapes(
             | "Atan" | "Atanh" | "Cos" | "Cosh" | "Elu" | "Erf" | "Exp" | "Log" | "Neg" | "Ceil"
             | "Reciprocal" | "Floor" | "Mod" | "Celu" | "ReduceSum" | "ReduceMin" | "ReduceMax"
             | "ReduceSumSquare" | "ReduceLogSumExp" | "ReduceLogSum" | "ReduceL2" | "ReduceL1"
-            | "ReduceProd",
+            | "ReduceProd" | "Size",
             _,
             _,
         ) => Err(ShapeInferenceError::InvalidNode(
