@@ -25,6 +25,19 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		let boundary = one * {{ scalar_type }}(10);
 		let intermediate = max(-boundary, min(boundary, input_0.data[gidx]));
 		output_0.data[gidx] = tanh(intermediate);
+	{% elif op_type == "Sign" %}
+		{# sign(input_0.data[gidx]) should work but for some reason fails on Windows. Therefore we implement it here the slow way... #}
+		{% for i in range(end = 4) %}
+			if input_0.data[gidx][{{i}}] < {{ scalar_type }}(0) {
+				output_0.data[gidx][{{i}}] = {{ scalar_type }}(-1);
+			}
+			else if input_0.data[gidx][{{i}}] > {{ scalar_type }}(0) {
+				output_0.data[gidx][{{i}}] = {{ scalar_type }}(1);
+			}
+			else {
+				output_0.data[gidx][{{i}}] = {{ scalar_type }}(0);
+			}
+		{% endfor %}
 	{% else %}
 		output_0.data[gidx] = {{ op_type | lower }}(input_0.data[gidx]);
 
