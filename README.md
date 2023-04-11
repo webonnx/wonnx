@@ -235,7 +235,7 @@ fn test_matmul_square_matrix() {
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#ConcatFromSequence">ConcatFromSequence</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#ConcatFromSequence-11">11</a>|
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#Constant">Constant</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Constant-13">13</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Constant-12">12</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Constant-11">11</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Constant-9">9</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Constant-1">1</a>|✅|✅|
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#ConstantOfShape">ConstantOfShape</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#ConstantOfShape-9">9</a>|✅|✅|
-|<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#Conv">Conv</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Conv-11">11</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Conv-1">1</a>|✅|
+|<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#Conv">Conv</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Conv-11">11</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Conv-1">1</a>|✅*|
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#ConvInteger">ConvInteger</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#ConvInteger-10">10</a>|
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#ConvTranspose">ConvTranspose</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#ConvTranspose-11">11</a>, <a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#ConvTranspose-1">1</a>|
 |<a href="https://github.com/onnx/onnx/blob/main/docs/Operators.md#Cos">Cos</a>|<a href="https://github.com/onnx/onnx/blob/main/docs/Changelog.md#Cos-7">7</a>|✅|✅|
@@ -397,6 +397,8 @@ fn test_matmul_square_matrix() {
 
 * For `MatMul` and `Gemm`, the matrix dimensions must be divisible by 2, or the output matrix must be of size (1, N). Matrix 
   multiplication only supports floats, not integers (this is a WebGPU/WGSL limitation).
+
+* `Conv` is implemented partially (simple and basic grouped convolutions are supported)
 
 ### Shape inference
 
