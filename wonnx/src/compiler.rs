@@ -805,6 +805,7 @@ pub fn compile(
             let strides = node.get_attribute_value("strides", Some(vec![1, 1]))?;
             let pads = node.get_attribute_value("pads", Some(vec![0, 0, 0, 0]))?;
             let count_include_pad = node.get_attribute_value("count_include_pad", Some(0))?;
+            let group = node.get_attribute_value("group", Some(1))? as u64;
 
             let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
@@ -835,16 +836,51 @@ pub fn compile(
             assert!(kernel_shape.len() >= 2);
             assert!(kernel_shape[0] >= 0 && kernel_shape[1] >= 0);
 
+            let channels_per_group = input_shape.dim(1) / group;
+            if channels_per_group * group != input_shape.dim(1) {
+                // Input channel count must be divisible by the group count.
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 0,
+                    input_shape: (*input_shape).clone(),
+                });
+            }
+
+            if output_shape.dim(0) != input_shape.dim(0) {
+                // Output batch size != Input batch size.
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 0,
+                    input_shape: (*input_shape).clone(),
+                });
+            }
+
+            if input_shapes.len() >= 2 && output_shape.dim(1) != input_shapes[1].dim(0) {
+                // Output feature map count != Filter count.
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 1,
+                    input_shape: (*input_shapes[1]).clone(),
+                });
+            }
+
+            if input_shapes.len() >= 3 && input_shapes[2].dim(0) != input_shapes[1].dim(0) {
+                // Bias count != Filter count.
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 2,
+                    input_shape: (*input_shapes[2]).clone(),
+                });
+            }
+
             context.insert("original_width", &input_shape.dim(3));
             context.insert("width", &output_shape.dim(3));
             context.insert("original_height", &input_shape.dim(2));
             context.insert("channel", &input_shape.dim(1));
+            context.insert("groups", &group);
+            context.insert("channels_per_group", &channels_per_group);
             context.insert("stride", &strides);
             context.insert("kernel_shape", &kernel_shape);
-            context.insert("kernel_len", &(kernel_shape[0] * kernel_shape[1]));
+            context.insert("kernel_length", &(kernel_shape[0] * kernel_shape[1]));
             context.insert(
                 "kernel_channel_len",
-                &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * input_shape.dim(1)),
+                &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * channels_per_group),
             );
             context.insert("pad", &pads);
             context.insert("count_include_pad", &count_include_pad);
@@ -853,7 +889,7 @@ pub fn compile(
             // GLSL shader for convolution computation
             match op {
                 "MaxPool" | "AveragePool" | "GlobalAveragePool" => {
-                    if input_shape.dim(1) % 4 == 0 {
+                    if channels_per_group % 4 == 0 {
                         NodeTemplate {
                             scalar_type: agreed_type(input_shapes, &output_shapes[0..1])?,
                             template: "pool/aggregate.wgsl",
@@ -880,9 +916,10 @@ pub fn compile(
                     if (strides == [1, 1])
                         && (kernel_shape == [1, 1])
                         && (dilations == [1, 1] && (pads == [0, 0, 0, 0]))
-                        && (input_shape.dim(1) % 16 == 0)
+                        && (channels_per_group % 16 == 0)
                         && (output_shape.dim(1) % 4 == 0)
                         && scalar_type.is_float()
+                        && group == 1
                     {
                         NodeTemplate {
                             scalar_type: agreed_type(input_shapes, output_shapes)?,
@@ -894,6 +931,7 @@ pub fn compile(
                         && (dilations == [1, 1])
                         && (output_shape.dim(1) % 4 == 0)
                         && scalar_type.is_float()
+                        && group == 1
                     {
                         NodeTemplate {
                             scalar_type,

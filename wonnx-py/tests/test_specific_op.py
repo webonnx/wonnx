@@ -10,7 +10,9 @@ from test_onnx_backend import DummyBackend
 OP_TESTED = os.environ["OP_TESTED"]
 
 backend_test = onnx.backend.test.BackendTest(DummyBackend, __name__)
-backend_test.include(f"test_{OP_TESTED}_[a-z,_]*")
+
+backend_test.include(f"test_{OP_TESTED}[a-z,_]*")
+
 globals().update(backend_test.enable_report().test_cases)
 
 if __name__ == "__main__":

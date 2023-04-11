@@ -84,7 +84,34 @@ fn conv_without_pad() {
     common::assert_eq_vector(
         (&result["Y"]).try_into().unwrap(),
         &[54., 63., 72., 99., 108., 117., 144., 153., 162.],
-    )
+    );
+}
+
+#[test]
+fn conv_group_simple() {
+    let mut input_data = HashMap::new();
+
+    let shape = vec![1, 2, 1, 1];
+    input_data.insert("X".to_string(), [1.0, 2.0][..].into());
+
+    let conv_model = model(graph(
+        vec![tensor("X", &shape)],
+        vec![tensor("Y", &shape)],
+        vec![],
+        vec![initializer("W", vec![0.5, 2.0], vec![2, 1, 1, 1])],
+        vec![node(
+            vec!["X", "W"],
+            vec!["Y"],
+            "conv",
+            "Conv",
+            vec![attribute("kernel_shape", vec![1, 1]), attribute("group", 2)],
+        )],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(conv_model)).expect("Session did not create");
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    common::assert_eq_vector((&result["Y"]).try_into().unwrap(), &[0.5, 4.0]);
 }
 
 #[test]

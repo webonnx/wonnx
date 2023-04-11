@@ -28,18 +28,21 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
 		let m = rest / {{ o_chunks[0][1] }}u;
 		rest = rest % {{ o_chunks[0][1] }}u;
-		
+
 		let y = rest / {{ o_chunks[0][2] }}u;
 		let x = rest % {{ o_chunks[0][2] }}u;
-		
+
+		let M = {{ o_shape[0][1] }}u;
+		let current_group: u32 = m * {{ groups }}u / M;
+
 		var result: Scalar = Scalar();
 
 		let root_index = batch * {{ i_chunks[0][0] }}u;
 		let root_kernel_index = m * {{ kernel_channel_len }}u;
 
-		for(var c: u32 = 0u; c < {{ channel }}u; c = c + 1u) {
+		for(var c: u32 = current_group * {{ channels_per_group }}u; c < (current_group + 1u) * {{ channels_per_group }}u; c = c + 1u) {
 			let base_index = root_index + c * {{ i_chunks[0][1] }}u;
-			let base_kernel_index = root_kernel_index + c * {{ kernel_len }}u;
+			let base_kernel_index = root_kernel_index + c % {{ channels_per_group }}u * {{ kernel_length }}u;
 
 			for(var i: u32 = 0u; i < {{ kernel_shape[0] }}u; i = i + 1u) {
 				let tmp_y = y * {{ stride[0] }}u + i * {{ dilation[0] }}u - {{ pad[0] }}u; 
@@ -58,13 +61,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 			}
 		}
 
-		{%- if i_lens | length == 3 -%}
+		{% if i_lens | length == 3 -%}
 			result = result + input_2.data[m];
 		{%- endif -%}
 
-		{% set activation_input = "result" %}
-		{% set activation_output = "output_0.data[gidx]" %}
-		{% set activation_type = op_type | replace(from="Conv", to="") %}
-		{%- include "snippets/activation_scalar.wgsl" -%}
+		{% set activation_input = "result" -%}
+		{% set activation_output = "output_0.data[gidx]" -%}
+		{% set activation_type = op_type | replace(from="Conv", to="") -%}
+		{% include "snippets/activation_scalar.wgsl" %}
 	}
 }

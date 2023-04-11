@@ -77,7 +77,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 			{% if count_include_pad == 0 %}
 			result = result / counter;
 			{% else %}
-			result = result / {{ kernel_len }}.;
+			result = result / {{ kernel_length }}.;
 			{% endif %}
 		{%- endif %}
 
@@ -141,7 +141,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 			{% if count_include_pad == 0 %}
 			result = result / counter;
 			{% else %}
-			result = result / {{ kernel_len }}.;
+			result = result / {{ kernel_length }}.;
 			{% endif %}
 		{%- endif %}
 
