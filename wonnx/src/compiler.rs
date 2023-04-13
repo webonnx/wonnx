@@ -748,8 +748,9 @@ pub fn compile(
             context.insert("alpha", &alpha);
 
             if op == "Clip" {
-                let min: Vec<f32> = node.get_attribute_value("min", None)?;
-                let max: Vec<f32> = node.get_attribute_value("max", None)?;
+                let min: Vec<f32> =
+                    node.get_attribute_value("min", Some(vec![f32::NEG_INFINITY]))?;
+                let max: Vec<f32> = node.get_attribute_value("max", Some(vec![f32::INFINITY]))?;
                 if min.len() != 1 {
                     return Err(CompileError::InvalidAttributeValue {
                         attribute: "min".into(),
