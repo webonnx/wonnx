@@ -597,7 +597,6 @@ impl<'model> Optimizer<'model> {
                                         ScalarType::from_i32(tensor_proto.get_data_type())?;
 
                                     match (op, attr_name) {
-                                        // Inputs that need to be converted to an i64 attribute
                                         ("Split", "split")
                                         | ("Resize", "roi")
                                         | ("Resize", "sizes")
@@ -609,39 +608,33 @@ impl<'model> Optimizer<'model> {
                                             | "ReduceProd",
                                             "axes",
                                         )
-                                        | ("Pad", "pads") => match data_type {
-                                            ScalarType::I64 => {
+                                        | ("Pad", "pads")
+                                        | ("Resize", "scales")
+                                        | ("Clip", "min" | "max") => match data_type {
+                                            ScalarType::F32 => {
+                                                let value: Vec<f32> =
+                                                    tensor_proto.get_float_data().to_vec();
                                                 log::info!(
-                                                        "transferring input {} for op {} to i64 attribute (initializer data type: {:?})",
-                                                        attr_name,
-                                                        op,
-                                                        data_type
-                                                    );
-                                                let value = tensor_proto.get_int64_data().to_vec();
+                                                    "transferring input {} for op {} to f32 attribute (initializer data type: {:?}): {:?}",
+                                                    attr_name,
+                                                    op,
+                                                    data_type,
+                                                    value,
+                                                );
                                                 attributes.push(attribute(
                                                     attr_names[input_index],
                                                     value,
                                                 ));
                                             }
-                                            _ => {
-                                                return Err(OptimizerError::InvalidInputDataType {
-                                                    data_type,
-                                                    input: attr_name.to_string(),
-                                                    op: op.to_string(),
-                                                })
-                                            }
-                                        },
-                                        // Inputs that need to be converted to an f32 attribute
-                                        ("Resize", "scales") => match data_type {
-                                            ScalarType::F32 => {
+                                            ScalarType::I64 => {
+                                                let value = tensor_proto.get_int64_data().to_vec();
                                                 log::info!(
-                                                        "transferring input {} for op {} to f32 attribute (initializer data type: {:?})",
-                                                        attr_name,
-                                                        op,
-                                                        data_type
-                                                    );
-                                                let value: Vec<f32> =
-                                                    tensor_proto.get_float_data().to_vec();
+                                                    "transferring input {} for op {} to i64 attribute (initializer data type: {:?}): {:?}",
+                                                    attr_name,
+                                                    op,
+                                                    data_type,
+                                                    value,
+                                                );
                                                 attributes.push(attribute(
                                                     attr_names[input_index],
                                                     value,

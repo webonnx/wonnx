@@ -747,6 +747,27 @@ pub fn compile(
             };
             context.insert("alpha", &alpha);
 
+            if op == "Clip" {
+                let min: Vec<f32> = node.get_attribute_value("min", None)?;
+                let max: Vec<f32> = node.get_attribute_value("max", None)?;
+                if min.len() != 1 {
+                    return Err(CompileError::InvalidAttributeValue {
+                        attribute: "min".into(),
+                        value: format!("{min:?}"),
+                        opset_version,
+                    });
+                }
+                if max.len() != 1 {
+                    return Err(CompileError::InvalidAttributeValue {
+                        attribute: "max".into(),
+                        value: format!("{max:?}"),
+                        opset_version,
+                    });
+                }
+                context.insert("min", &format!("{:.1}", min[0]));
+                context.insert("max", &format!("{:.1}", max[0]));
+            }
+
             let (x_threads, workgroup_size_x) = workgroup_size(
                 ceil(output_lengths[0], 4),
                 MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,

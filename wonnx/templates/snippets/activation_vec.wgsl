@@ -12,12 +12,10 @@
 	{{ activation_output }} = log(Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)) + exp({{ activation_input }}));
 
 {%- elif activation_type == "Clip" -%}
-	let min_clip = input_1.data[0u];
-	let max_clip = input_2.data[0u];
 	{{ activation_output }} = clamp(
-		{{ activation_input }}, 
-		Vec4(min_clip, min_clip, min_clip, min_clip),
-		Vec4(max_clip, max_clip, max_clip, max_clip),
+		{{ activation_input }},
+		Vec4({{ min }}, {{ min }}, {{ min }}, {{ min }}),
+		Vec4({{ max }}, {{ max }}, {{ max }}, {{ max }}),
 	);
 
 {%- elif activation_type == "Celu" -%}

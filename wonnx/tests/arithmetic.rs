@@ -3,7 +3,8 @@ use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::TensorProto_DataType,
     utils::{
-        graph, initializer_int64, model, node, tensor, tensor_of_type, InputTensor, OutputTensor,
+        graph, initializer, initializer_int64, model, node, tensor, tensor_of_type, InputTensor,
+        OutputTensor,
     },
 };
 
@@ -289,4 +290,37 @@ fn test_sign() {
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     assert_eq!(result["Y"], OutputTensor::F32(expected));
+}
+
+#[test]
+fn test_clip() {
+    // Model: X -> Clip -> Y
+    let shape = vec![1, 1, 2, 2];
+    let model = model(graph(
+        vec![tensor("X", &shape)],
+        vec![tensor("Y", &shape)],
+        vec![],
+        vec![
+            initializer("min", vec![0.0], vec![]),
+            initializer("max", vec![1.0], vec![]),
+        ],
+        vec![node(
+            vec!["X", "min", "max"],
+            vec!["Y"],
+            "clip",
+            "Clip",
+            vec![],
+        )],
+    ));
+    let mut input_data = HashMap::new();
+    input_data.insert(
+        "X".to_string(),
+        InputTensor::F32([-1.0, 0.0, 1.0, 2.0].as_slice().into()),
+    );
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    assert_eq!(result["Y"], OutputTensor::F32(vec![0.0, 0.0, 1.0, 1.0]));
 }
