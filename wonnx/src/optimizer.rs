@@ -11,6 +11,7 @@ use crate::{
     GpuError,
 };
 use async_recursion::async_recursion;
+use bytemuck::pod_collect_to_vec;
 use protobuf::RepeatedField;
 use std::{
     borrow::Cow,
@@ -613,8 +614,14 @@ impl<'model> Optimizer<'model> {
                                         | ("Resize", "scales")
                                         | ("Clip", "min" | "max") => match data_type {
                                             ScalarType::F32 => {
-                                                let value: Vec<f32> =
-                                                    tensor_proto.get_float_data().to_vec();
+                                                let value: Vec<f32> = if tensor_proto
+                                                    .get_float_data()
+                                                    .is_empty()
+                                                {
+                                                    pod_collect_to_vec(tensor_proto.get_raw_data())
+                                                } else {
+                                                    tensor_proto.get_float_data().to_vec()
+                                                };
                                                 log::info!(
                                                     "transferring input {} for op {} to f32 attribute (initializer data type: {:?}): {:?}",
                                                     attr_name,
@@ -628,7 +635,14 @@ impl<'model> Optimizer<'model> {
                                                 ));
                                             }
                                             ScalarType::I64 => {
-                                                let value = tensor_proto.get_int64_data().to_vec();
+                                                let value = if tensor_proto
+                                                    .get_int64_data()
+                                                    .is_empty()
+                                                {
+                                                    pod_collect_to_vec(tensor_proto.get_raw_data())
+                                                } else {
+                                                    tensor_proto.get_int64_data().to_vec()
+                                                };
                                                 log::info!(
                                                     "transferring input {} for op {} to i64 attribute (initializer data type: {:?}): {:?}",
                                                     attr_name,

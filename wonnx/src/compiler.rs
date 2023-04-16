@@ -164,7 +164,7 @@ pub enum CompileError {
     #[error("the opset version {0} is not supported")]
     UnsupportedOpsetVersion(i64),
 
-    #[error("the value '{attribute}' is invalid for attribute '{value}' (opset version {opset_version})")]
+    #[error("the value '{value}' is invalid for attribute '{attribute}' (opset version {opset_version})")]
     InvalidAttributeValue {
         attribute: String,
         value: String,
