@@ -496,6 +496,7 @@ impl<'model> Optimizer<'model> {
                                 .proto
                                 .get_attribute_value("strides", Some(vec![1, 1]))?
                                 == [1, 1]
+                            && op_def.proto.get_attribute_value("group", Some(1))? == 1
                             && op_def.output_shapes[0].dim(1) % 4 == 0
                         {
                             if let NodeDefinition::Tensor(tensor) =
