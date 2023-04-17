@@ -20,7 +20,7 @@ exclude = [
 
 [dependencies]
 wgpu = "0.14.0"
-bytemuck = "1.9.1"
+bytemuck = { version = "1.9.1", features = ["extern_crate_alloc"] }
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
 log = "0.4.17"
 tera = { version = "1.15.0", default-features = false }
