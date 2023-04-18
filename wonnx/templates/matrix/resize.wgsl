@@ -29,7 +29,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 					+ 
 				{%- endif -%}
 				u32(floor(
-					({{ scalar_type }}(d_{{ loop.index0 }}) + {{ scalar_type }}(0.5)) / {{ scale }} - {{ scalar_type }}(0.5) 
+					(f32(d_{{ loop.index0 }}) + 0.5) / {{ scale }}
 				)) * {{ chunks  }}u 
 			{%- endfor -%}
 		;
