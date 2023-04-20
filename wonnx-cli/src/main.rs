@@ -27,7 +27,12 @@ async fn run() -> Result<(), NNXError> {
 
     match opt.cmd {
         Command::Devices => {
-            let instance = wgpu::Instance::new(wgpu::Backends::all());
+            let backends = wgpu::util::backend_bits_from_env().unwrap_or(wgpu::Backends::PRIMARY);
+            let instance_descriptor = wgpu::InstanceDescriptor {
+                backends,
+                dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+            };
+            let instance = wgpu::Instance::new(instance_descriptor);
             let adapters = instance.enumerate_adapters(wgpu::Backends::all());
             let mut adapters_table = Table::new();
             adapters_table.add_row(row![b->"Adapter", b->"Vendor", b->"Backend"]);
