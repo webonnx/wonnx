@@ -19,7 +19,7 @@ exclude = [
 ]
 
 [dependencies]
-wgpu = "0.14.0"
+wgpu = "0.16.0"
 bytemuck = { version = "1.9.1", features = ["extern_crate_alloc"] }
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
 log = "0.4.17"
@@ -41,5 +41,5 @@ parking_lot = { version = "0.11.1", features = ["wasm-bindgen"]}
 image = "0.24.2"
 ndarray = "0.15.4"
 approx = "0.5.1"
-pollster = "0.2.5"
-env_logger = "0.9.0"
+pollster = "0.3.0"
+env_logger = "0.10.0"

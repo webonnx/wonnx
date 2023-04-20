@@ -574,7 +574,7 @@ pub(crate) fn infer_output_shapes(
                 axis += r;
             }
             let out_rank = q + r - 1;
-            return Ok(vec![Shape::from(
+            Ok(vec![Shape::from(
                 input_shapes[0].data_type,
                 (0..out_rank)
                     .map(|idx| {
@@ -588,7 +588,7 @@ pub(crate) fn infer_output_shapes(
                     })
                     .collect::<Vec<i64>>()
                     .as_ref(),
-            )]);
+            )])
         }
 
         ("Shape", 1, 1) => {

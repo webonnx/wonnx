@@ -19,19 +19,19 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1.53"
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 log = "0.4.17"
 ndarray = "0.15.4"
 prettytable-rs = "^0.10.0"
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
 structopt = { version = "0.3.26", features = [ "paw" ] }
 thiserror = "1.0.31"
-tract-onnx = { version = "0.16.7", optional = true }
-wgpu = "0.14.0"
+tract-onnx = { version = "0.19.12", optional = true }
+wgpu = "0.16.0"
 wonnx = { version = "^0.4.0" }
 wonnx-preprocessing = { version = "^0.4.0" }
-human_bytes = "0.3.1"
-pollster = "0.2.5"
+human_bytes = "0.4.1"
+pollster = "0.3.0"
 
 [dev-dependencies]
 assert_cmd = "2.0.4"

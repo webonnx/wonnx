@@ -1,6 +1,6 @@
-type Scalar = {{ scalar_type }};
-type GemmVec = vec{{ kernel_size }}<{{ scalar_type }}>;
-type GemmMat = mat{{ kernel_size }}x{{ kernel_size }}<{{ scalar_type }}>;
+alias Scalar = {{ scalar_type }};
+alias GemmVec = vec{{ kernel_size }}<{{ scalar_type }}>;
+alias GemmMat = mat{{ kernel_size }}x{{ kernel_size }}<{{ scalar_type }}>;
 
 struct GemmArrayVector {
 	data: array<GemmVec>

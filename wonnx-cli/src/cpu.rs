@@ -95,9 +95,9 @@ impl Inferer for CPUInferer {
             cpu_inputs.insert(input_index.0, input_tensor.to_tract_tensor(&dims)?);
         }
 
-        let mut cpu_inputs_ordered = TVec::new();
+        let mut cpu_inputs_ordered = TVec::<TValue>::new();
         for i in 0..inputs.len() {
-            cpu_inputs_ordered.push(cpu_inputs.get(&i).unwrap().clone());
+            cpu_inputs_ordered.push(TValue::Const(Arc::new(cpu_inputs.get(&i).unwrap().clone())));
         }
 
         let result = self.model.run(cpu_inputs_ordered)?;

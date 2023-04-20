@@ -3,7 +3,11 @@ use wgpu::{util::DeviceExt, BufferUsages};
 // Get a device and a queue, honoring WGPU_ADAPTER_NAME and WGPU_BACKEND environment variables
 pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
     let backends = wgpu::util::backend_bits_from_env().unwrap_or(wgpu::Backends::PRIMARY);
-    let instance = wgpu::Instance::new(backends);
+    let instance_descriptor = wgpu::InstanceDescriptor {
+        backends,
+        dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+    };
+    let instance = wgpu::Instance::new(instance_descriptor);
     let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, backends, None)
         .await
         .expect("No GPU found given preference");
