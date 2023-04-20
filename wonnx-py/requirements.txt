@@ -3,7 +3,7 @@ certifi==2021.10.8
 charset-normalizer==2.0.12
 idna==3.3
 iniconfig==1.1.1
-maturin==0.12.16
+maturin==0.14.17
 numpy==1.22.3
 onnx==1.13.1
 packaging==21.3
