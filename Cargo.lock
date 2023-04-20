@@ -1803,9 +1803,9 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "matrixmultiply"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "add85d4dd35074e6fedc608f8c8f513a3548619a9024b751949ef0e8e45a4d84"
+checksum = "bb99c395ae250e1bf9133673f03ca9f97b7e71b705436bf8f089453445d1e9fe"
 dependencies = [
  "rawpointer",
 ]
@@ -4202,7 +4202,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "approx",
  "async-recursion",
@@ -4226,7 +4226,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx-cli"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -4247,7 +4247,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx-preprocessing"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytemuck",
  "env_logger",
@@ -4266,7 +4266,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx-py"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "env_logger",
  "pollster",
@@ -4277,7 +4277,7 @@ dependencies = [
 
 [[package]]
 name = "wonnx-wasm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "console_error_panic_hook",
  "console_log",
