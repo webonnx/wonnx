@@ -1,7 +1,7 @@
 //! Compiles individual ONNX ops to a WebGPU shader using WGSL templates
 use crate::{
     ir::{AttributeNotFoundError, OperatorDefinition},
-    utils::{ceil, DataTypeError, MultiType, ScalarType, Shape},
+    tensor::{ceil, DataTypeError, MultiType, ScalarType, Shape},
 };
 use num::integer::gcd;
 use tera::{Context, Tera};

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor, TensorData};
+use wonnx::tensor::{attribute, graph, initializer, model, node, tensor, TensorData};
 use wonnx::*;
 mod common;
 

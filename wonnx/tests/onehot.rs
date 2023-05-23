@@ -1,7 +1,7 @@
 use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::AttributeProto,
-    utils::{attribute, graph, model, node, tensor, TensorData},
+    tensor::{attribute, graph, model, node, tensor, TensorData},
 };
 mod common;
 

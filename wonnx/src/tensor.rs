@@ -814,7 +814,7 @@ pub(crate) fn to_tensor<'model>(
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{
+    use crate::tensor::{
         attribute, graph, initializer, model, node, tensor, ScalarType, Shape, TensorData,
     };
 

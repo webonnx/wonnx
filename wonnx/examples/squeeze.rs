@@ -9,7 +9,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use wonnx::utils::TensorData;
+use wonnx::tensor::TensorData;
 use wonnx::WonnxError;
 
 // Args Management

@@ -2,7 +2,7 @@ use ndarray::{Array, ArrayBase};
 use std::collections::HashMap;
 use std::path::Path;
 use wonnx::onnx::{ModelProto, TensorShapeProto, ValueInfoProto};
-use wonnx::utils::{DataTypeError, ScalarType, Shape};
+use wonnx::tensor::{DataTypeError, ScalarType, Shape};
 use wonnx::WonnxError;
 use wonnx_preprocessing::image::{load_bw_image, load_rgb_image};
 use wonnx_preprocessing::text::{EncodedText, TextTokenizer};

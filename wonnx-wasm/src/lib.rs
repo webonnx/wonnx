@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
-use wonnx::utils::TensorData;
+use wonnx::tensor::TensorData;
 
 #[wasm_bindgen(start)]
 pub fn main() {

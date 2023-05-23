@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use thiserror::Error;
 use tokenizers::{EncodeInput, Encoding, InputSequence, Tokenizer};
-use wonnx::utils::Shape;
+use wonnx::tensor::Shape;
 
 use crate::Tensor;
 

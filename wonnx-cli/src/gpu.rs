@@ -4,7 +4,7 @@ use wonnx::onnx::ModelProto;
 use wonnx::SessionConfig;
 
 use async_trait::async_trait;
-use wonnx::utils::TensorData;
+use wonnx::tensor::TensorData;
 
 use crate::types::Inferer;
 use crate::types::NNXError;

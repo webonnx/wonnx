@@ -3,7 +3,7 @@ use ndarray::s;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::Path;
-use wonnx::utils::TensorData;
+use wonnx::tensor::TensorData;
 mod common;
 
 #[test]

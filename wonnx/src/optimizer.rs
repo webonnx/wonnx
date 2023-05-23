@@ -7,7 +7,7 @@ use crate::{
     },
     onnx::TensorProto,
     resource::{padding, request_device_queue},
-    utils::{to_tensor, DataTypeError, ScalarType, TensorData},
+    tensor::{to_tensor, DataTypeError, ScalarType, TensorData},
     GpuError,
 };
 use async_recursion::async_recursion;
@@ -884,7 +884,7 @@ mod test {
     use crate::{
         ir::{self, Node, NodeDefinition},
         onnx::AttributeProto,
-        utils::{attribute, graph, initializer, model, node, tensor, TensorData},
+        tensor::{attribute, graph, initializer, model, node, tensor, TensorData},
     };
 
     use super::Optimizer;

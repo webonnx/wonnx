@@ -1,4 +1,4 @@
-use ::wonnx::utils::TensorData;
+use ::wonnx::tensor::TensorData;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::borrow::Cow;

@@ -1,5 +1,5 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::utils::{attribute, graph, model_with_opset, node, tensor};
+use wonnx::tensor::{attribute, graph, model_with_opset, node, tensor};
 mod common;
 
 fn softmax_with_axis(x: &[f32], x_dims: &[i64], axis: i64, expected_y: &[f32], opset_version: i64) {

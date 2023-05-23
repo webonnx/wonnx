@@ -5,7 +5,7 @@ pub mod ir;
 pub mod onnx;
 mod optimizer;
 mod resource;
-pub mod utils;
+pub mod tensor;
 
 #[macro_use]
 extern crate lazy_static;
@@ -19,7 +19,7 @@ use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::path::Path;
 use std::result::Result;
-use utils::{get_opset_version, DataTypeError, OpsetError, TensorData};
+use tensor::{get_opset_version, DataTypeError, OpsetError, TensorData};
 
 use crate::gpu::GpuModel;
 use thiserror::Error;

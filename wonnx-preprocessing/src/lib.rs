@@ -1,5 +1,5 @@
 use ndarray::ArrayBase;
-use wonnx::utils::TensorData;
+use wonnx::tensor::TensorData;
 
 pub mod constant_folding;
 pub mod image;

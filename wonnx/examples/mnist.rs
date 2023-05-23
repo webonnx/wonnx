@@ -4,7 +4,7 @@ use std::convert::TryInto;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use std::path::Path;
 use std::time::Instant;
-use wonnx::utils::TensorData;
+use wonnx::tensor::TensorData;
 
 // Args Management
 async fn run() {

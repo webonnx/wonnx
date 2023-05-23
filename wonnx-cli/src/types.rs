@@ -4,7 +4,7 @@ use structopt::StructOpt;
 use thiserror::Error;
 use wonnx::{
     onnx::ModelProto,
-    utils::{OpsetError, Shape, TensorConversionError, TensorData},
+    tensor::{OpsetError, Shape, TensorConversionError, TensorData},
     SessionError, WonnxError,
 };
 use wonnx_preprocessing::{

@@ -17,7 +17,7 @@ use crate::{
     compiler::{compile, CompileError, CompiledNode},
     ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition, Tensor},
     resource::{self, resize},
-    utils::{ceil, DataTypeError, ScalarType, Shape, TensorData, MINIMUM_BUFFER_SIZE_BYTES},
+    tensor::{ceil, DataTypeError, ScalarType, Shape, TensorData, MINIMUM_BUFFER_SIZE_BYTES},
 };
 
 /// The maximum number of bindings in a binding group (defined by wgpu)

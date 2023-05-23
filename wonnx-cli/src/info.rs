@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use prettytable::{row, table, Table};
 use wonnx::{
     onnx::{GraphProto, ModelProto, NodeProto, ValueInfoProto},
-    utils::{ScalarType, Shape},
+    tensor::{ScalarType, Shape},
     WonnxError,
 };
 

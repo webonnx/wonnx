@@ -10,7 +10,7 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, ValueInfoProto,
     },
-    utils::{model_with_opset, DataTypeError, ScalarType, Shape, TensorData},
+    tensor::{model_with_opset, DataTypeError, ScalarType, Shape, TensorData},
     CompileError, GpuError, Session, SessionError,
 };
 
@@ -262,7 +262,7 @@ fn calculate_shape_operator<'a>(
 
 #[cfg(test)]
 mod test {
-    use wonnx::utils::{attribute, node, Shape, TensorData};
+    use wonnx::tensor::{attribute, node, Shape, TensorData};
 
     use super::calculate_shape_operator;
 
@@ -281,7 +281,7 @@ mod test {
         }
         let node = node(vec!["X"], vec!["Y"], "Shape", attrs);
         let shape = Shape::from(
-            wonnx::utils::ScalarType::F32,
+            wonnx::tensor::ScalarType::F32,
             &dims.iter().map(|x| *x as usize).collect::<Vec<usize>>(),
         );
         assert_eq!(

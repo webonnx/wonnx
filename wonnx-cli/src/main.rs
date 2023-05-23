@@ -8,7 +8,7 @@ use std::fs::File;
 use structopt::StructOpt;
 use trace::trace_command;
 use wonnx::onnx::ModelProto;
-use wonnx::utils::{get_opset_version, Shape, TensorData};
+use wonnx::tensor::{get_opset_version, Shape, TensorData};
 use wonnx_preprocessing::shape_inference::{apply_dynamic_dimensions, infer_shapes};
 use wonnx_preprocessing::text::{get_lines, EncodedText};
 use wonnx_preprocessing::Tensor;
@@ -165,7 +165,7 @@ fn print_output(
 
             // Just print the output tensor values, one a line
             match output {
-                wonnx::utils::TensorData::F32(fs) => {
+                wonnx::tensor::TensorData::F32(fs) => {
                     for i in fs.iter() {
                         if print_newlines {
                             println!("{:.3}", i);
@@ -174,7 +174,7 @@ fn print_output(
                         }
                     }
                 }
-                wonnx::utils::TensorData::I32(ints) => {
+                wonnx::tensor::TensorData::I32(ints) => {
                     for i in ints.iter() {
                         if print_newlines {
                             println!("{}", i);
@@ -183,7 +183,7 @@ fn print_output(
                         }
                     }
                 }
-                wonnx::utils::TensorData::I64(ints) => {
+                wonnx::tensor::TensorData::I64(ints) => {
                     for i in ints.iter() {
                         if print_newlines {
                             println!("{}", i);
@@ -192,7 +192,7 @@ fn print_output(
                         }
                     }
                 }
-                wonnx::utils::TensorData::U8(ints) => {
+                wonnx::tensor::TensorData::U8(ints) => {
                     for i in ints.iter() {
                         if print_newlines {
                             println!("{}", i);

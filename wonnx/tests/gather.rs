@@ -1,5 +1,5 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::utils::{attribute, graph, model, node, tensor};
+use wonnx::tensor::{attribute, graph, model, node, tensor};
 mod common;
 
 fn assert_gather(

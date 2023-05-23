@@ -7,7 +7,7 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, TypeProto_oneof_value, ValueInfoProto,
     },
-    utils::{DataTypeError, ScalarType, Shape, TensorData},
+    tensor::{DataTypeError, ScalarType, Shape, TensorData},
 };
 
 use crate::{

@@ -1,5 +1,5 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::utils::{attribute, graph, initializer, initializer_int64, model, node, tensor};
+use wonnx::tensor::{attribute, graph, initializer, initializer_int64, model, node, tensor};
 mod common;
 
 #[test]

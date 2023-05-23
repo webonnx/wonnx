@@ -6,7 +6,7 @@ use crate::{
 };
 use std::sync::Arc;
 
-pub use crate::utils::{ScalarType, Shape, TensorData};
+pub use crate::tensor::{ScalarType, Shape, TensorData};
 pub use crate::{SessionError, WonnxError};
 
 #[derive(Clone)]
@@ -166,7 +166,7 @@ pub async fn session_for_outputs<'model, S: ToString>(
 mod tests {
     use crate::{
         builder::{session_for_outputs, tensor},
-        utils::TensorData,
+        tensor::TensorData,
     };
     use std::collections::HashMap;
 

@@ -1,6 +1,6 @@
-//! DAG representation of ONNX ops allowing for transformations and optimizations before compilation
+//! DAG representation of ops allowing for transformations and optimizations before compilation
 use crate::onnx::{self, GraphProto, ModelProto, NodeProto};
-use crate::utils::{to_tensor, DataTypeError, Shape, TensorData};
+use crate::tensor::{to_tensor, DataTypeError, Shape, TensorData};
 use std::borrow::{Borrow, Cow};
 use std::fmt::Debug;
 use std::hash::Hash;

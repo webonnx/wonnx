@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use tract_onnx::prelude::*;
 use wonnx::{
     onnx::ModelProto,
-    utils::{Shape, TensorData},
+    tensor::{Shape, TensorData},
 };
 
 type RunnableOnnxModel =

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use protobuf::ProtobufEnum;
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{attribute, graph, model, node, tensor, tensor_of_type, TensorData},
+    tensor::{attribute, graph, model, node, tensor, tensor_of_type, TensorData},
 };
 
 #[test]

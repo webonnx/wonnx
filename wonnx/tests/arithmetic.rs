@@ -2,7 +2,7 @@ use approx::assert_abs_diff_eq;
 use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{
+    tensor::{
         graph, initializer, initializer_int64, model, node, tensor, tensor_of_type, TensorData,
     },
 };
