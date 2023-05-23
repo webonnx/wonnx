@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 use std::collections::HashMap;
 
 use protobuf::ProtobufEnum;
@@ -25,7 +27,6 @@ fn test_cast() {
         vec![node(
             vec!["X"],
             vec!["Y"],
-            "a",
             "Cast",
             vec![attribute("to", TensorProto_DataType::INT32.value() as i64)],
         )],

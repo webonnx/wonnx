@@ -16,7 +16,6 @@ fn softmax_with_axis(x: &[f32], x_dims: &[i64], axis: i64, expected_y: &[f32], o
             vec![node(
                 vec!["X"],
                 vec!["Y"],
-                "a",
                 "Softmax",
                 vec![attribute("axis", axis)],
             )],

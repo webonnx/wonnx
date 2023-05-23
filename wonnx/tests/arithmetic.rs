@@ -25,7 +25,7 @@ fn test_cos() {
         vec![tensor("Y", &shape)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "cos", "Cos", vec![])],
+        vec![node(vec!["X"], vec!["Y"], "Cos", vec![])],
     ));
 
     let session =
@@ -51,7 +51,7 @@ fn test_reciprocal() {
         vec![tensor("Y", &shape)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "rec", "Reciprocal", vec![])],
+        vec![node(vec!["X"], vec!["Y"], "Reciprocal", vec![])],
     ));
 
     let session =
@@ -80,7 +80,7 @@ fn test_integer() {
         vec![tensor_of_type("Y", &shape, TensorProto_DataType::INT32)],
         vec![],
         vec![],
-        vec![node(vec!["X", "X"], vec!["Y"], "add_ints", "Add", vec![])],
+        vec![node(vec!["X", "X"], vec!["Y"], "Add", vec![])],
     ));
 
     let session =
@@ -104,7 +104,7 @@ fn test_int64_initializers() {
         vec![tensor_of_type("Z", &dims, TensorProto_DataType::INT64)],
         vec![],
         vec![initializer_int64("Y", right, dims.clone())],
-        vec![node(vec!["X", "Y"], vec!["Z"], "adder", "Add", vec![])],
+        vec![node(vec!["X", "Y"], vec!["Z"], "Add", vec![])],
     ));
 
     let session =
@@ -143,7 +143,7 @@ fn test_pow() {
         vec![tensor("Z", &shape)],
         vec![],
         vec![],
-        vec![node(vec!["X", "Y"], vec!["Z"], "pow", "Pow", vec![])],
+        vec![node(vec!["X", "Y"], vec!["Z"], "Pow", vec![])],
     ));
 
     let session =
@@ -178,7 +178,7 @@ fn test_mul_broadcast() {
         vec![tensor("Z", &shape_z)],
         vec![],
         vec![],
-        vec![node(vec!["X", "Y"], vec!["Z"], "mul", "Mul", vec![])],
+        vec![node(vec!["X", "Y"], vec!["Z"], "Mul", vec![])],
     ));
 
     let session =
@@ -208,7 +208,7 @@ fn test_prelu() {
             vec![tensor("Z", data_shape)],
             vec![],
             vec![],
-            vec![node(vec!["X", "Y"], vec!["Z"], "prelu", "PRelu", vec![])],
+            vec![node(vec!["X", "Y"], vec!["Z"], "PRelu", vec![])],
         ));
 
         let session =
@@ -269,7 +269,7 @@ fn test_sign() {
         vec![tensor("Y", &shape)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "sign", "Sign", vec![])],
+        vec![node(vec!["X"], vec!["Y"], "Sign", vec![])],
     ));
 
     let session =
@@ -304,13 +304,7 @@ fn test_clip() {
             initializer("min", vec![0.0], vec![]),
             initializer("max", vec![1.0], vec![]),
         ],
-        vec![node(
-            vec!["X", "min", "max"],
-            vec!["Y"],
-            "clip",
-            "Clip",
-            vec![],
-        )],
+        vec![node(vec!["X", "min", "max"], vec!["Y"], "Clip", vec![])],
     ));
     let mut input_data = HashMap::new();
     input_data.insert(

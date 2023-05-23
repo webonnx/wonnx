@@ -1,6 +1,7 @@
+pub mod builder;
 mod compiler;
 mod gpu;
-mod ir;
+pub mod ir;
 pub mod onnx;
 mod optimizer;
 mod resource;

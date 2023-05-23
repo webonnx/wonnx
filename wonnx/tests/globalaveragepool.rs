@@ -28,13 +28,7 @@ fn global_average_pool() {
         vec![tensor("Y", &output_shape)],
         vec![],
         vec![],
-        vec![node(
-            vec!["X"],
-            vec!["Y"],
-            "gap",
-            "GlobalAveragePool",
-            vec![],
-        )],
+        vec![node(vec!["X"], vec!["Y"], "GlobalAveragePool", vec![])],
     ));
 
     let session =

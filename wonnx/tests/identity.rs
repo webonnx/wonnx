@@ -17,7 +17,7 @@ fn test_identity() {
         vec![tensor("Y", &dims)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "a", "Identity", vec![])],
+        vec![node(vec!["X"], vec!["Y"], "Identity", vec![])],
     ));
 
     let session =
@@ -43,8 +43,8 @@ fn test_double_identity() {
         vec![tensor("Y", &dims)],
         vec![],
         vec![
-            node(vec!["X"], vec!["Y"], "a", "Identity", vec![]),
-            node(vec!["Y"], vec!["Z"], "b", "Identity", vec![]),
+            node(vec!["X"], vec!["Y"], "Identity", vec![]),
+            node(vec!["Y"], vec!["Z"], "Identity", vec![]),
         ],
     ));
 
@@ -72,9 +72,9 @@ fn test_buffer_readability() {
         vec![tensor("Y", &shape), tensor("Z", &shape)],
         vec![],
         vec![
-            node(vec!["X"], vec!["Y"], "cos", "Cos", vec![]),
-            node(vec!["Y"], vec!["Z"], "rs", "Reshape", vec![]),
-            node(vec!["Z"], vec!["W"], "rs", "Reshape", vec![]),
+            node(vec!["X"], vec!["Y"], "Cos", vec![]),
+            node(vec!["Y"], vec!["Z"], "Reshape", vec![]),
+            node(vec!["Z"], vec!["W"], "Reshape", vec![]),
         ],
     ));
 

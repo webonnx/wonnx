@@ -43,7 +43,6 @@ fn batch_normalization() {
         vec![node(
             vec!["X", "scale", "B", "input_mean", "input_var"],
             vec!["Y"],
-            "bn",
             "BatchNormalization",
             vec![attribute("epsilon", 0.1)],
         )],

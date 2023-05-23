@@ -427,50 +427,6 @@ impl Display for Shape {
     }
 }
 
-#[derive(Error, Debug)]
-#[error("did not find attribute '{attribute}' for node '{node_name}'")]
-pub struct AttributeNotFoundError {
-    attribute: String,
-    node_name: String,
-}
-
-pub trait NodeAttributes {
-    fn has_attribute(&self, attribute_name: &str) -> bool;
-    fn get_attribute_value<T: std::convert::From<onnx::AttributeProto>>(
-        &self,
-        attribute: &str,
-        default: Option<T>,
-    ) -> Result<T, AttributeNotFoundError>;
-}
-
-impl NodeAttributes for onnx::NodeProto {
-    fn has_attribute(&self, attribute_name: &str) -> bool {
-        self.get_attribute()
-            .iter()
-            .any(|attr| attr.get_name() == attribute_name)
-    }
-
-    fn get_attribute_value<T: std::convert::From<onnx::AttributeProto>>(
-        &self,
-        attribute: &str,
-        default: Option<T>,
-    ) -> Result<T, AttributeNotFoundError> {
-        match (
-            self.get_attribute()
-                .iter()
-                .find(|attr| attr.get_name() == attribute),
-            default,
-        ) {
-            (Some(attr), _) => Ok(attr.clone().into()),
-            (None, Some(default_attr)) => Ok(default_attr),
-            (None, None) => Err(AttributeNotFoundError {
-                attribute: attribute.to_string(),
-                node_name: self.get_name().to_string(),
-            }),
-        }
-    }
-}
-
 /// Divide a number by the indicated dividend, then round up to the next multiple of the dividend if there is a rest.
 pub(crate) fn ceil(num: u64, div: u64) -> u64 {
     num / div + (num % div != 0) as u64
@@ -592,17 +548,17 @@ pub fn attribute(name: &str, inputs: impl Into<onnx::AttributeProto>) -> onnx::A
     attributes
 }
 
+/// Create a node - the node name will be set to the name of the first output
 pub fn node(
     inputs: Vec<&str>,
     outputs: Vec<&str>,
-    name: &str,
     op_type: &str,
     attributes: Vec<onnx::AttributeProto>,
 ) -> onnx::NodeProto {
     let mut node = crate::onnx::NodeProto::new();
 
     node.set_op_type(op_type.to_string());
-    node.set_name(name.to_string());
+    node.set_name(outputs[0].to_string());
     node.set_input(protobuf::RepeatedField::from(
         inputs
             .iter()
@@ -818,7 +774,6 @@ mod tests {
             vec![node(
                 vec!["X", "W"],
                 vec!["Y"],
-                "conv",
                 "Conv",
                 vec![attribute("kernel_shape", vec![3, 3])],
             )],

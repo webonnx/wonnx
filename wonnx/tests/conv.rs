@@ -24,7 +24,6 @@ fn conv_pad() {
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
-            "conv",
             "Conv",
             vec![
                 attribute("kernel_shape", vec![3, 3]),
@@ -72,7 +71,6 @@ fn conv_without_pad() {
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
-            "conv",
             "Conv",
             vec![attribute("kernel_shape", vec![3, 3])],
         )],
@@ -102,7 +100,6 @@ fn conv_group_simple() {
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
-            "conv",
             "Conv",
             vec![attribute("kernel_shape", vec![1, 1]), attribute("group", 2)],
         )],
@@ -140,7 +137,6 @@ fn conv_stride() {
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
-            "conv",
             "Conv",
             vec![
                 attribute("strides", vec![2, 2]),
@@ -185,7 +181,6 @@ fn conv_asymetric_stride() {
         vec![node(
             vec!["X", "W"],
             vec!["Y"],
-            "conv",
             "Conv",
             vec![
                 attribute("strides", vec![2, 2]),

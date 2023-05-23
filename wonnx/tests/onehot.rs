@@ -39,7 +39,6 @@ fn test_onehot(
         vec![node(
             vec!["I", "D", "V"],
             vec!["Y"],
-            "oneHot",
             "OneHot",
             attributes,
         )],

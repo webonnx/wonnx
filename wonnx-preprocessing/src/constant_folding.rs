@@ -5,16 +5,16 @@ use thiserror::Error;
 
 use wonnx::{
     constant_of_shape_output,
+    ir::{IrError, OperatorDefinition},
     onnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, ValueInfoProto,
     },
-    utils::{
-        model_with_opset, DataTypeError, InputTensor, NodeAttributes, OutputTensor, ScalarType,
-        Shape,
-    },
+    utils::{model_with_opset, DataTypeError, InputTensor, OutputTensor, ScalarType, Shape},
     CompileError, GpuError, Session, SessionError,
 };
+
+use crate::utils::NodeAttributes;
 
 #[derive(Error, Debug)]
 pub enum ConstantFoldingError {
@@ -28,6 +28,10 @@ pub enum ConstantFoldingError {
     #[error("error calculating constant value: {0}")]
     #[from(SessionError)]
     CalculationError(SessionError),
+
+    #[error("error in IR: {0}")]
+    #[from(IrError)]
+    IrError(IrError),
 }
 
 pub(crate) async fn calculate_constant_node_outputs<'a>(
@@ -106,7 +110,8 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
         "ConstantOfShape" => {
             if let InputTensor::I64(input_shape) = &inputs[0] {
                 let element_count = input_shape.iter().product::<i64>() as usize;
-                Some(vec![constant_of_shape_output(node, element_count)
+                let op_def = OperatorDefinition::from(node, output_shapes.to_vec());
+                Some(vec![constant_of_shape_output(&op_def, element_count)
                     .map_err(|e| {
                         ConstantFoldingError::InvalidNode(e.to_string())
                     })?])
@@ -276,7 +281,7 @@ mod test {
         if let Some(end) = end {
             attrs.push(attribute("end", end));
         }
-        let node = node(vec!["X"], vec!["Y"], "s", "Shape", attrs);
+        let node = node(vec!["X"], vec!["Y"], "Shape", attrs);
         let shape = Shape::from(wonnx::utils::ScalarType::F32, dims);
         assert_eq!(
             calculate_shape_operator(&node, &shape).unwrap(),

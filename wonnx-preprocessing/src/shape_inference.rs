@@ -7,12 +7,13 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, TypeProto_oneof_value, ValueInfoProto,
     },
-    utils::{
-        AttributeNotFoundError, DataTypeError, InputTensor, NodeAttributes, ScalarType, Shape,
-    },
+    utils::{DataTypeError, InputTensor, ScalarType, Shape},
 };
 
-use crate::constant_folding::{calculate_constant_node_outputs, ConstantFoldingError};
+use crate::{
+    constant_folding::{calculate_constant_node_outputs, ConstantFoldingError},
+    utils::{AttributeNotFoundError, NodeAttributes},
+};
 
 pub fn apply_dynamic_dimensions(graph: &mut GraphProto, dynamic_dims: &HashMap<String, i64>) {
     // Apply to values

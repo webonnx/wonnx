@@ -358,11 +358,11 @@ impl GpuModel {
                         NodeDefinition::Input(proto) => {
                             InferenceOutput::InferenceInput(proto.get_name().to_string())
                         }
+                        NodeDefinition::Missing => {
+                            unimplemented!("missing input as output");
+                        }
                         NodeDefinition::Outputs { .. } => {
                             unimplemented!("output after output node")
-                        }
-                        NodeDefinition::Missing => {
-                            unimplemented!("optional input after output node")
                         }
                     },
                 );
@@ -426,7 +426,7 @@ impl GpuModel {
                     while let NodeDefinition::Operator(ultimate_input_op_def) =
                         ultimate_input.source_node.definition()
                     {
-                        if op_forwards_input(ultimate_input_op_def.proto.get_op_type()) {
+                        if op_forwards_input(ultimate_input_op_def.get_op_type()) {
                             assert_eq!(ultimate_input.source_node.inputs.len(), 1);
                             ultimate_input = ultimate_input.source_node.inputs[0].clone();
                         } else {
@@ -434,7 +434,7 @@ impl GpuModel {
                         }
                     }
 
-                    let output_shape = &source_node_def.output_shapes[node_input.output_index];
+                    let output_shape = &source_node_def.output_shapes()[node_input.output_index];
                     buffer_manager.lease(
                         ultimate_input.source_node.identifier(),
                         ultimate_input.output_index,
@@ -452,7 +452,7 @@ impl GpuModel {
                 if outputs_readable {
                     if let NodeDefinition::Operator(op_def) = &node.definition {
                         // For these ops we just forward the buffer (so we should also forward readability)
-                        if op_forwards_input(op_def.proto.get_op_type()) {
+                        if op_forwards_input(op_def.get_op_type()) {
                             nodes_readable.insert(source_node_identifier.clone());
                         }
                     }
@@ -461,8 +461,8 @@ impl GpuModel {
 
             // Tell the buffer manager we are producing an intermediate value; nodes that run 'before' us may reuse this buffer
             if let NodeDefinition::Operator(op_def) = &node.definition {
-                if !op_forwards_input(op_def.proto.get_op_type()) {
-                    for (output_index, output_shape) in op_def.output_shapes.iter().enumerate() {
+                if !op_forwards_input(op_def.get_op_type()) {
+                    for (output_index, output_shape) in op_def.output_shapes().iter().enumerate() {
                         buffer_manager.release(
                             node_identifier.clone(),
                             output_index,
@@ -537,7 +537,7 @@ impl GpuModel {
                 NodeDefinition::Operator(op_def) => {
                     // Can we use shared buffers for outputs of this node?
                     let shared_buffers: Vec<Option<Arc<RefCell<LeaseableBuffer>>>> =
-                        (0..op_def.output_shapes.len())
+                        (0..op_def.output_shapes().len())
                             .map(|output_index| {
                                 let identifier = node.identifier();
                                 buffer_manager
@@ -616,7 +616,7 @@ impl GpuModel {
 
                     GpuStep::Input(input_def.get_name().to_string(), input_buffer)
                 }
-                NodeDefinition::Missing | NodeDefinition::Outputs { .. } => {
+                NodeDefinition::Outputs { .. } | NodeDefinition::Missing => {
                     // Nothing to sequence
                     GpuStep::None
                 }
@@ -775,7 +775,7 @@ fn op_forwards_input(op_type: &str) -> bool {
     )
 }
 
-impl<'model> OperatorDefinition<'model> {
+impl OperatorDefinition {
     fn gpu_op(
         &self,
         device: &wgpu::Device,
@@ -784,12 +784,10 @@ impl<'model> OperatorDefinition<'model> {
         input_tensors: &[GpuTensor],
         shared_buffers: &[Option<Arc<RefCell<LeaseableBuffer>>>],
     ) -> Result<GpuStep, GpuError> {
-        let proto = &self.proto;
-
         // Some nodes have specific GPU implementations, match these here
-        if op_forwards_input(proto.get_op_type()) {
+        if op_forwards_input(self.get_op_type()) {
             // Some ops do nothing but forward their input
-            let value_shape = &self.output_shapes[0];
+            let value_shape = &self.output_shapes()[0];
             let output_tensor = GpuTensor {
                 buffer: input_tensors[0].buffer.clone(),
                 shape: value_shape.clone(),
@@ -797,16 +795,15 @@ impl<'model> OperatorDefinition<'model> {
             return Ok(GpuStep::Forward(output_tensor));
         }
 
-        let label = Some(proto.get_name());
+        let label = Some(self.get_display_name());
 
         // Create output buffers for this op node
-        let output_tensors: Vec<GpuTensor> = proto
-            .get_output()
+        let output_tensors: Vec<GpuTensor> = self
+            .output_shapes()
             .iter()
             .enumerate()
-            .map(|(output_index, output_name)| {
-                let value_shape = &self.output_shapes[output_index];
-
+            .map(|(output_index, value_shape)| {
+                let output_name = format!("{}_{}", self.get_display_name(), output_index);
                 let buffer = match shared_buffers.get(output_index) {
                     Some(Some(shared_buffer)) if !outputs_readable => {
                         let mut shared_buffer = shared_buffer.borrow_mut();
@@ -817,7 +814,7 @@ impl<'model> OperatorDefinition<'model> {
                             "creating non-shared buffer for output #{} ({}) of {} shaped {}",
                             output_index,
                             output_name,
-                            proto.get_name(),
+                            self.get_display_name(),
                             value_shape
                         );
 
@@ -844,17 +841,13 @@ impl<'model> OperatorDefinition<'model> {
             .collect();
 
         let input_shapes: Vec<&Shape> = input_tensors.iter().map(|input| &input.shape).collect();
-        let output_shapes: Vec<&Shape> = self.output_shapes.iter().collect();
+        let output_shapes: Vec<&Shape> = self.output_shapes().iter().collect();
 
         // Compile shader for node
         let CompiledNode { shader, threads } =
-            compile(proto, &input_shapes, &output_shapes, opset_version).map_err(|ce| {
+            compile(self, &input_shapes, &output_shapes, opset_version).map_err(|ce| {
                 GpuError::CompileError {
-                    node: if proto.has_name() {
-                        proto.get_name().to_string()
-                    } else {
-                        proto.get_op_type().to_string()
-                    },
+                    node: self.get_display_name().to_string(),
                     error: ce,
                 }
             })?;

@@ -31,7 +31,7 @@ fn test_matmul_square_matrix() {
         vec![tensor("C", &[n, n])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -63,13 +63,11 @@ fn test_transpose_4d_perm(transpose_first: &[i64], transpose_second: &[i64]) {
                 vec!["X"],
                 vec!["Y"],
                 "Transpose",
-                "Transpose",
                 vec![attribute("perm", transpose_first.to_vec())],
             ),
             node(
                 vec!["Y"],
                 vec!["Z"],
-                "Transpose",
                 "Transpose",
                 vec![attribute("perm", transpose_second.to_vec())],
             ),
@@ -123,7 +121,6 @@ fn test_transposes_4d_0312() {
             vec!["X"],
             vec!["Y"],
             "Transpose",
-            "Transpose",
             vec![attribute("perm", vec![0, 3, 1, 2])],
         )],
     ));
@@ -155,8 +152,8 @@ fn test_two_transposes_default_4d() {
         vec![tensor("Y", &[4, 3, 2])],
         vec![],
         vec![
-            node(vec!["X"], vec!["Y"], "Transpose", "Transpose", vec![]),
-            node(vec!["Y"], vec!["Z"], "Transpose", "Transpose", vec![]),
+            node(vec!["X"], vec!["Y"], "Transpose", vec![]),
+            node(vec!["Y"], vec!["Z"], "Transpose", vec![]),
         ],
     ));
 
@@ -184,13 +181,11 @@ fn test_two_transposes() {
                 vec!["X"],
                 vec!["Y"],
                 "Transpose",
-                "Transpose",
                 vec![attribute("perm", vec![2, 1, 0])],
             ),
             node(
                 vec!["Y"],
                 vec!["Z"],
-                "Transpose",
                 "Transpose",
                 vec![attribute("perm", vec![2, 1, 0])],
             ),
@@ -219,7 +214,6 @@ fn test_split() {
         vec![node(
             vec!["X"],
             vec!["Y", "W"],
-            "Split",
             "Split",
             vec![attribute("axis", -1)],
         )],
@@ -251,7 +245,7 @@ fn test_pad_example() {
         vec![tensor("Y", &[3, 4])],
         vec![],
         vec![initializer_int64("pads", vec![0, 2, 0, 0], vec![4])],
-        vec![node(vec!["X", "pads"], vec!["Y"], "Pad", "Pad", vec![])],
+        vec![node(vec!["X", "pads"], vec!["Y"], "Pad", vec![])],
     ));
 
     let session =
@@ -284,7 +278,6 @@ fn test_pad_complex() {
         vec![node(
             vec!["X"],
             vec!["Y"],
-            "Pad",
             "Pad",
             vec![
                 attribute(
@@ -354,7 +347,6 @@ fn test_resize() {
             vec!["X", "" /* roi */, "scales"],
             vec!["Y"],
             "Resize",
-            "Resize",
             vec![attribute("nearest_mode", "floor")],
         )],
     ));
@@ -378,7 +370,6 @@ fn test_resize() {
         vec![node(
             vec!["X", "" /* roi */, "scales"],
             vec!["Y"],
-            "Resize",
             "Resize",
             vec![attribute("nearest_mode", "floor")],
         )],
@@ -420,7 +411,7 @@ fn test_matmul_square_matrix_small() {
         vec![tensor("C", &[n, n])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -450,7 +441,7 @@ fn test_matmul_nonsquare_matrix_small() {
         vec![tensor("C", &[4, 2])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -480,7 +471,7 @@ fn test_matmul_stacks_4d() {
         vec![tensor("C", &[1, 4, 2, 2])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -515,7 +506,7 @@ fn test_matmul_stacks() {
         vec![tensor("C", &[4, 2, 2])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -551,7 +542,7 @@ fn test_matmul_1d() {
         vec![tensor("C", &[1, 2])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", "MatMul", vec![])],
+        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -589,7 +580,7 @@ fn test_gemm_matrix_bias() {
         vec![tensor("D", &[4, 4])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
     ));
 
     let session =
@@ -630,7 +621,7 @@ fn test_gemm_broadcasting_bias() {
         vec![tensor("D", &[4, 4])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
     ));
 
     let session =
@@ -670,7 +661,7 @@ fn test_gemm_broadcasting_second_bias() {
         vec![tensor("D", &[4, 4])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
     ));
 
     let session =
@@ -710,7 +701,7 @@ fn test_gemm_scalar_bias() {
         vec![tensor("D", &[4, 4])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", "Gemm", vec![])],
+        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
     ));
 
     let session =

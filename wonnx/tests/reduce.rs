@@ -31,7 +31,7 @@ fn test_reduce(
         vec![tensor("Y", output_shape)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "myReduce", op_name, attributes)],
+        vec![node(vec!["X"], vec!["Y"], op_name, attributes)],
     ));
 
     let session =
@@ -263,13 +263,7 @@ fn test_reduce_sum_with_axes_as_input() {
         vec![tensor("Y", &[3, 2])],
         vec![],
         vec![initializer_int64("A", vec![-2], vec![1])],
-        vec![node(
-            vec!["X", "A"],
-            vec!["Y"],
-            "myReduce",
-            "ReduceSum",
-            attributes,
-        )],
+        vec![node(vec!["X", "A"], vec!["Y"], "ReduceSum", attributes)],
     ));
 
     let session =

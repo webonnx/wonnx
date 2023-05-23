@@ -1,18 +1,14 @@
 //! Optimizer that walks the DAG and transforms or coalesces ops for quicker execution
 use crate::{
     gpu::GpuModel,
-    ir::{Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
-    onnx::{NodeProto, TensorProto},
+    ir::{AttributeNotFoundError, Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
+    onnx::TensorProto,
     resource::{padding, request_device_queue},
-    utils::{
-        attribute, AttributeNotFoundError, DataTypeError, NodeAttributes, OutputTensor, ScalarType,
-        Shape,
-    },
+    utils::{DataTypeError, OutputTensor, ScalarType, Shape},
     GpuError,
 };
 use async_recursion::async_recursion;
 use bytemuck::pod_collect_to_vec;
-use protobuf::RepeatedField;
 use std::{
     borrow::Cow,
     collections::{HashMap, VecDeque},
@@ -73,7 +69,7 @@ impl<'model> Optimizer<'model> {
         match node.definition() {
             NodeDefinition::Operator(op_def) => {
                 // TODO: constant nodes with multiple outputs
-                if op_def.proto.output.len() != 1 {
+                if op_def.output_shapes().len() != 1 {
                     log::warn!(
                         "node {:?} is constant, but has multiple outputs, which we can't fold yet",
                         node.definition()
@@ -81,7 +77,7 @@ impl<'model> Optimizer<'model> {
                     return Ok(None);
                 }
 
-                match op_def.proto.get_op_type() {
+                match op_def.get_op_type() {
                     "Constant" => Ok(Some(Arc::new(Node {
                         definition: NodeDefinition::Tensor(Box::new(Cow::Owned(
                             Self::constant_node_to_tensor(node)?,
@@ -102,7 +98,7 @@ impl<'model> Optimizer<'model> {
         let NodeDefinition::Operator(op_def) = node.definition() else {
             panic!("node must be a Shape node");
         };
-        assert_eq!(op_def.proto.get_op_type(), "Shape");
+        assert_eq!(op_def.get_op_type(), "Shape");
 
         if node.inputs.len() != 1 {
             return Err(OptimizerError::InvalidNode(format!(
@@ -117,7 +113,7 @@ impl<'model> Optimizer<'model> {
         let in_shape = match in_node {
             NodeDefinition::Input(input) => input.get_shape()?,
             NodeDefinition::Operator(input_op_def) => {
-                input_op_def.output_shapes[input.output_index].clone()
+                input_op_def.output_shapes()[input.output_index].clone()
             }
             NodeDefinition::Tensor(input_tensor) => Shape::from(
                 ScalarType::from_i32(input_tensor.get_data_type())
@@ -136,8 +132,8 @@ impl<'model> Optimizer<'model> {
             }
         };
         let rank = in_shape.rank() as i64;
-        let mut start: i64 = op_def.proto.get_attribute_value("start", Some(0)).unwrap();
-        let mut end: i64 = op_def.proto.get_attribute_value("end", Some(rank)).unwrap();
+        let mut start: i64 = op_def.get_attribute_value("start", Some(0)).unwrap();
+        let mut end: i64 = op_def.get_attribute_value("end", Some(rank)).unwrap();
         if start < 0 {
             start += rank;
         }
@@ -172,30 +168,27 @@ impl<'model> Optimizer<'model> {
         let NodeDefinition::Operator(op_def) = node.definition() else {
             panic!("node must be a Constant node");
         };
-        assert_eq!(op_def.proto.get_op_type(), "Constant");
-        let proto = &op_def.proto;
-        let output_name = proto.output.get(0).unwrap().to_owned();
+        assert_eq!(op_def.get_op_type(), "Constant");
 
         let mut tp: TensorProto =
-            if let Ok(values) = proto.get_attribute_value::<Vec<f32>>("value_floats", None) {
+            if let Ok(values) = op_def.get_attribute_value::<Vec<f32>>("value_floats", None) {
                 let dims = vec![values.len() as i64];
                 TensorProto::from(OutputTensor::F32(values), dims)
-            } else if let Ok(values) = proto.get_attribute_value::<Vec<i64>>("value_ints", None) {
+            } else if let Ok(values) = op_def.get_attribute_value::<Vec<i64>>("value_ints", None) {
                 let dims = vec![values.len() as i64];
                 TensorProto::from(OutputTensor::I64(values), dims)
-            } else if let Ok(value) = proto.get_attribute_value::<f32>("value_float", None) {
+            } else if let Ok(value) = op_def.get_attribute_value::<f32>("value_float", None) {
                 TensorProto::from(OutputTensor::F32(vec![value]), vec![1])
-            } else if let Ok(value) = proto.get_attribute_value::<i64>("value_int", None) {
+            } else if let Ok(value) = op_def.get_attribute_value::<i64>("value_int", None) {
                 TensorProto::from(OutputTensor::I64(vec![value]), vec![1])
-            } else if let Ok(tp) = proto.get_attribute_value::<TensorProto>("value", None) {
+            } else if let Ok(tp) = op_def.get_attribute_value::<TensorProto>("value", None) {
                 tp
             } else {
                 return Err(OptimizerError::Unsupported(
                     "Constant node with unknown value type".to_string(),
                 ));
             };
-
-        tp.set_name(output_name);
+        tp.set_name(op_def.get_display_name().to_string());
         Ok(tp)
     }
 
@@ -204,7 +197,7 @@ impl<'model> Optimizer<'model> {
         let NodeDefinition::Operator(op_def) = node.definition() else {
             panic!("node must be a Size node");
         };
-        assert_eq!(op_def.proto.get_op_type(), "Size");
+        assert_eq!(op_def.get_op_type(), "Size");
 
         if node.inputs.len() != 1 {
             return Err(OptimizerError::InvalidNode(format!(
@@ -219,7 +212,7 @@ impl<'model> Optimizer<'model> {
         let in_element_count: i64 = match in_node {
             NodeDefinition::Input(input) => input.get_shape()?.element_count() as i64,
             NodeDefinition::Operator(input_op_def) => {
-                input_op_def.output_shapes[input.output_index].element_count() as i64
+                input_op_def.output_shapes()[input.output_index].element_count() as i64
             }
             NodeDefinition::Tensor(input_tensor) => input_tensor.get_dims().iter().product(),
             NodeDefinition::Outputs { .. } => {
@@ -249,8 +242,6 @@ impl<'model> Optimizer<'model> {
 
         // Create an output node so we can perform inference for this node
         if let NodeDefinition::Operator(op_def) = node.definition() {
-            let output_name = op_def.proto.output.get(0).unwrap().to_owned();
-
             let out_node = Arc::new(Node {
                 definition: NodeDefinition::Outputs {
                     names: vec!["output".to_string()],
@@ -269,16 +260,19 @@ impl<'model> Optimizer<'model> {
 
             // Take the output tensor and make it into an initializer node
             let (_, output_tensor) = outputs.drain().take(1).next().unwrap();
-            log::info!("folded {output_name} to {output_tensor:?}");
+            log::info!(
+                "folded output of {} to {output_tensor:?}",
+                op_def.get_display_name()
+            );
             let mut output_tensor_proto = TensorProto::from(
                 output_tensor,
-                op_def.output_shapes[0]
+                op_def.output_shapes()[0]
                     .dims
                     .iter()
                     .map(|x| *x as i64)
                     .collect(),
             );
-            output_tensor_proto.set_name(output_name);
+            output_tensor_proto.set_name(op_def.get_display_name().to_string());
 
             let tensor_node = Node {
                 definition: NodeDefinition::Tensor(Box::new(Cow::Owned(output_tensor_proto))),
@@ -441,7 +435,7 @@ impl<'model> Optimizer<'model> {
 
         // Fold Shape/Size nodes (not considered constant but we can still fold it)
         if let NodeDefinition::Operator(op_def) = &node.definition {
-            match op_def.proto.get_op_type() {
+            match op_def.get_op_type() {
                 "Shape" => {
                     return Ok(Arc::new(Node {
                         definition: NodeDefinition::Tensor(Box::new(Cow::Owned(
@@ -476,29 +470,22 @@ impl<'model> Optimizer<'model> {
 
         match &node.definition {
             NodeDefinition::Operator(op_def) => {
-                match op_def.proto.get_op_type() {
+                match op_def.get_op_type() {
                     "Conv" | "ConvRelu" | "ConvLeakyRelu" => {
                         // This optimization inserts some padding to convolution between kernels with kernel 3x3, because of
                         // the stride of matrix3x3 is 16 in wgsl. It makes the computation matrixable and increases the performance.
                         if new_inputs.len() > 2
-                            && op_def
-                                .proto
-                                .get_attribute_value::<Vec<i64>>("kernel_shape", None)?
+                            && op_def.get_attribute_value::<Vec<i64>>("kernel_shape", None)?
                                 == [3, 3]
-                            && (op_def
-                                .proto
-                                .get_attribute_value("pads", Some(vec![0, 0, 0, 0]))?
+                            && (op_def.get_attribute_value("pads", Some(vec![0, 0, 0, 0]))?
                                 == [1, 1, 1, 1]
-                                || op_def.proto.get_attribute_value(
+                                || op_def.get_attribute_value(
                                     "auto_pad",
                                     Some("SAME_UPPER".to_string()),
                                 )? == "SAME_UPPER")
-                            && op_def
-                                .proto
-                                .get_attribute_value("strides", Some(vec![1, 1]))?
-                                == [1, 1]
-                            && op_def.proto.get_attribute_value("group", Some(1))? == 1
-                            && op_def.output_shapes[0].dim(1) % 4 == 0
+                            && op_def.get_attribute_value("strides", Some(vec![1, 1]))? == [1, 1]
+                            && op_def.get_attribute_value("group", Some(1))? == 1
+                            && op_def.output_shapes()[0].dim(1) % 4 == 0
                         {
                             if let NodeDefinition::Tensor(tensor) =
                                 &new_inputs[1].source_node.definition
@@ -585,8 +572,7 @@ impl<'model> Optimizer<'model> {
                         };
 
                         // Make a new copy of the attributes list (we're going to add attributes)
-                        let mut new_proto = op_def.proto.clone().into_owned();
-                        let mut attributes = op_def.proto.get_attribute().to_vec();
+                        let mut new_proto = op_def.clone();
 
                         // Loop over the inputs (skipping the first one - that's going to be the data input)
                         for input_index in 1..(new_inputs.len().min(attr_names.len())) {
@@ -629,10 +615,8 @@ impl<'model> Optimizer<'model> {
                                                     data_type,
                                                     value,
                                                 );
-                                                attributes.push(attribute(
-                                                    attr_names[input_index],
-                                                    value,
-                                                ));
+                                                new_proto
+                                                    .set_attribute(attr_names[input_index], value);
                                             }
                                             ScalarType::I64 => {
                                                 let value = if tensor_proto
@@ -650,10 +634,8 @@ impl<'model> Optimizer<'model> {
                                                     data_type,
                                                     value,
                                                 );
-                                                attributes.push(attribute(
-                                                    attr_names[input_index],
-                                                    value,
-                                                ));
+                                                new_proto
+                                                    .set_attribute(attr_names[input_index], value);
                                             }
                                             _ => {
                                                 return Err(OptimizerError::InvalidInputDataType {
@@ -687,15 +669,9 @@ impl<'model> Optimizer<'model> {
                             }
                         }
 
-                        // Create new node with extra attributes
-                        new_proto.set_attribute(RepeatedField::from(attributes));
-
                         let new_node = Node {
                             inputs: vec![new_inputs[0].clone()],
-                            definition: NodeDefinition::Operator(Box::new(OperatorDefinition {
-                                proto: Cow::Owned(new_proto),
-                                output_shapes: op_def.output_shapes.clone(),
-                            })),
+                            definition: NodeDefinition::Operator(new_proto),
                         };
 
                         Ok(Arc::new(new_node))
@@ -732,14 +708,14 @@ impl<'model> Optimizer<'model> {
     ) -> Result<bool, OptimizerError> {
         // Start by throwing out all Identity nodes
         chain.retain(|n| match &n.definition {
-            NodeDefinition::Operator(op_def) => op_def.proto.get_op_type() != "Identity",
+            NodeDefinition::Operator(op_def) => op_def.get_op_type() != "Identity",
             _ => true,
         });
 
         let names: Vec<&str> = chain
             .iter()
             .map(|x| match &x.definition {
-                NodeDefinition::Operator(op_def) => op_def.proto.get_op_type(),
+                NodeDefinition::Operator(op_def) => op_def.get_op_type(),
                 _ => "",
             })
             .collect();
@@ -763,38 +739,28 @@ impl<'model> Optimizer<'model> {
                     (&conv.definition, &relu.definition)
                 {
                     // Use the Conv node as template for the new fused Conv[Leaky]Relu node
-                    let mut convrelu_def = *conv_def.clone();
-                    let mut convrelu_proto = conv_def.proto.clone().into_owned();
-                    let new_op_type = match relu_def.proto.get_op_type() {
+                    let mut convrelu_def = conv_def.clone();
+                    let new_op_type = match relu_def.get_op_type() {
                         "LeakyRelu" => "ConvLeakyRelu",
                         "Relu" => "ConvRelu",
                         _ => unreachable!(),
                     };
-                    convrelu_proto.set_op_type(new_op_type.to_string());
+                    convrelu_def.set_op_type(new_op_type);
 
                     // Copy all Relu attributes over to the copy of the Conv node
-                    let mut attributes = conv_def.proto.get_attribute().to_vec();
-                    attributes.extend(relu_def.proto.get_attribute().iter().cloned());
-                    convrelu_proto.set_attribute(RepeatedField::from(attributes));
-                    convrelu_proto.set_name(format!(
-                        "{}+{}",
-                        conv.definition.get_name(),
-                        relu.definition.get_name()
-                    ));
+                    convrelu_def.append_attributes_from(relu_def);
 
                     log::debug!(
                         "can fuse chain of Conv/[Leaky]Relu to Conv[Leaky]Relu: {:?}: {:?} + {:?} = {}",
                         names,
                         conv.definition(),
                         relu.definition(),
-                        convrelu_proto.get_name()
+                        convrelu_def.get_display_name()
                     );
-
-                    convrelu_def.proto = Cow::Owned(convrelu_proto);
 
                     let node = Arc::new(Node {
                         inputs: conv.inputs.clone(),
-                        definition: NodeDefinition::Operator(Box::new(convrelu_def)),
+                        definition: NodeDefinition::Operator(convrelu_def),
                     });
 
                     chain.remove(0);
@@ -820,7 +786,7 @@ static PAD_INPUT_NAMES: &[&str] = &["data", "pads", "constant_value"];
 
 /// Generate the output for a ConstantOfShape node
 pub fn constant_of_shape_output(
-    node: &NodeProto,
+    node: &OperatorDefinition,
     element_count: usize,
 ) -> Result<OutputTensor, OptimizerError> {
     if let Ok(constant_value_tensor) = node.get_attribute_value::<TensorProto>("value", None) {
@@ -890,9 +856,9 @@ mod test {
             NodeDefinition::Outputs { .. } => String::from("<outputs>"),
             NodeDefinition::Missing => String::from("<missing>"),
             NodeDefinition::Operator(op_def) => {
-                format!("{}_{}", op_def.proto.get_op_type(), op_def.proto.get_name())
+                format!("{}_{}", op_def.get_op_type(), op_def.get_display_name())
             }
-            d => format!("{}", d.get_name()),
+            d => format!("{}", d.get_display_name()),
         }
     }
 
@@ -919,8 +885,8 @@ mod test {
                 vec![tensor("A", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "a", "Identity", vec![]),
-                    node(vec!["A"], vec!["Y"], "b", "Identity", vec![]),
+                    node(vec!["X"], vec!["A"], "Identity", vec![]),
+                    node(vec!["A"], vec!["Y"], "Identity", vec![]),
                 ],
             ));
 
@@ -944,8 +910,8 @@ mod test {
                 vec![tensor("A", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                    node(vec!["A"], vec!["Y"], "b", "Neg", vec![]),
+                    node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    node(vec!["A"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -970,9 +936,9 @@ mod test {
                 vec![tensor("A", &[1]), tensor("B", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                    node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
-                    node(vec!["B"], vec!["Y"], "c", "Neg", vec![]),
+                    node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    node(vec!["A"], vec!["B"], "Neg", vec![]),
+                    node(vec!["B"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -984,8 +950,8 @@ mod test {
             assert_eq!(
                 new_pairs,
                 vec![
-                    ("Neg_c".to_string(), "<outputs>".to_string()),
-                    ("X".to_string(), "Neg_c".to_string())
+                    ("Neg_Y".to_string(), "<outputs>".to_string()),
+                    ("X".to_string(), "Neg_Y".to_string())
                 ]
             );
         });
@@ -1002,10 +968,10 @@ mod test {
                 vec![tensor("A", &[1]), tensor("B", &[1]), tensor("C", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                    node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
-                    node(vec!["B"], vec!["C"], "c", "Neg", vec![]),
-                    node(vec!["C"], vec!["Y"], "d", "Neg", vec![]),
+                    node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    node(vec!["A"], vec!["B"], "Neg", vec![]),
+                    node(vec!["B"], vec!["C"], "Neg", vec![]),
+                    node(vec!["C"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -1034,11 +1000,11 @@ mod test {
                 ],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                    node(vec!["A"], vec!["B"], "b", "Neg", vec![]),
-                    node(vec!["B"], vec!["C"], "c", "Neg", vec![]),
-                    node(vec!["C"], vec!["D"], "d", "Neg", vec![]),
-                    node(vec!["D"], vec!["Y"], "e", "Neg", vec![]),
+                    node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    node(vec!["A"], vec!["B"], "Neg", vec![]),
+                    node(vec!["B"], vec!["C"], "Neg", vec![]),
+                    node(vec!["C"], vec!["D"], "Neg", vec![]),
+                    node(vec!["D"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -1050,8 +1016,8 @@ mod test {
             assert_eq!(
                 new_pairs,
                 vec![
-                    ("Neg_e".to_string(), "<outputs>".to_string()),
-                    ("X".to_string(), "Neg_e".to_string())
+                    ("Neg_Y".to_string(), "<outputs>".to_string()),
+                    ("X".to_string(), "Neg_Y".to_string())
                 ]
             );
         });
@@ -1068,8 +1034,8 @@ mod test {
                 vec![tensor("A", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                    node(vec!["A"], vec!["Y"], "b", "Neg", vec![]),
+                    node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    node(vec!["A"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -1082,8 +1048,8 @@ mod test {
                 new_pairs,
                 vec![
                     ("X".to_string(), "<outputs>".to_string()),
-                    ("Neg_a".to_string(), "<outputs>".to_string()),
-                    ("X".to_string(), "Neg_a".to_string())
+                    ("Neg_A".to_string(), "<outputs>".to_string()),
+                    ("X".to_string(), "Neg_A".to_string())
                 ]
             );
         });
@@ -1101,9 +1067,9 @@ mod test {
                 vec![tensor("A", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "a", "Neg", vec![]),
-                    node(vec!["A"], vec!["Z"], "b", "Identity", vec![]),
-                    node(vec!["A"], vec!["Y"], "c", "Identity", vec![]),
+                    node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    node(vec!["A"], vec!["Z"], "Identity", vec![]),
+                    node(vec!["A"], vec!["Y"], "Identity", vec![]),
                 ],
             ));
 
@@ -1115,10 +1081,10 @@ mod test {
             assert_eq!(
                 new_pairs,
                 vec![
-                    ("Neg_a".to_string(), "<outputs>".to_string()),
-                    ("Neg_a".to_string(), "<outputs>".to_string()),
-                    ("X".to_string(), "Neg_a".to_string()),
-                    ("X".to_string(), "Neg_a".to_string()),
+                    ("Neg_A".to_string(), "<outputs>".to_string()),
+                    ("Neg_A".to_string(), "<outputs>".to_string()),
+                    ("X".to_string(), "Neg_A".to_string()),
+                    ("X".to_string(), "Neg_A".to_string()),
                 ]
             );
         });
@@ -1138,7 +1104,7 @@ mod test {
                     initializer("A", vec![21.0], vec![1]),
                     initializer("B", vec![7.0], vec![1]),
                 ],
-                vec![node(vec!["A", "B"], vec!["C"], "c", "Add", vec![])],
+                vec![node(vec!["A", "B"], vec!["C"], "Add", vec![])],
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
@@ -1164,7 +1130,6 @@ mod test {
                 vec![node(
                     vec![],
                     vec!["Y"],
-                    "y",
                     "Constant",
                     vec![attribute("value_float", 42.0)],
                 )],
@@ -1216,7 +1181,7 @@ mod test {
                 vec![tensor("Y", &[expected.len() as i64])],
                 vec![],
                 vec![],
-                vec![node(vec!["X"], vec!["Y"], "y", "Shape", attrs)],
+                vec![node(vec!["X"], vec!["Y"], "Shape", attrs)],
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
@@ -1251,7 +1216,7 @@ mod test {
                 vec![tensor("Y", &[expected.len() as i64])],
                 vec![],
                 vec![],
-                vec![node(vec!["X"], vec!["Y"], "y", "Size", vec![])],
+                vec![node(vec!["X"], vec!["Y"], "Size", vec![])],
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();

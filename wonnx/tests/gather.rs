@@ -25,7 +25,6 @@ fn assert_gather(
         vec![node(
             vec!["X", "I"],
             vec!["Y"],
-            "myGather",
             "Gather",
             vec![attribute("axis", axis)],
         )],

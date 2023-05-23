@@ -5,6 +5,7 @@ pub mod constant_folding;
 pub mod image;
 pub mod shape_inference;
 pub mod text;
+mod utils;
 
 pub enum Tensor {
     F32(ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>),
