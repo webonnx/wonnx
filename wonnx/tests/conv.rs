@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
-use wonnx::tensor::{attribute, graph, initializer, model, node, tensor, TensorData};
+use wonnx::onnx_model::{
+    onnx_attribute, onnx_graph, onnx_initializer, onnx_model, onnx_node, onnx_tensor,
+};
+use wonnx::tensor::TensorData;
 use wonnx::*;
 mod common;
 
@@ -16,18 +19,18 @@ fn conv_pad() {
 
     let data_w: Vec<f32> = (0..2 * c * 3 * 3).map(|_| 1.0f32).collect();
 
-    let conv_model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &[2, 2, n, n])],
+    let conv_model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &[2, 2, n, n])],
         vec![],
-        vec![initializer("W", data_w, vec![2, c, 3, 3])],
-        vec![node(
+        vec![onnx_initializer("W", data_w, vec![2, c, 3, 3])],
+        vec![onnx_node(
             vec!["X", "W"],
             vec!["Y"],
             "Conv",
             vec![
-                attribute("kernel_shape", vec![3, 3]),
-                attribute("auto_pad", "SAME_UPPER"),
+                onnx_attribute("kernel_shape", vec![3, 3]),
+                onnx_attribute("auto_pad", "SAME_UPPER"),
             ],
         )],
     ));
@@ -67,16 +70,20 @@ fn conv_without_pad() {
     let kernel_n = 3;
     let m = 1;
     let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
-    let conv_model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &[1, 1, 3, 3])],
+    let conv_model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &[1, 1, 3, 3])],
         vec![],
-        vec![initializer("W", data_w, vec![m, c, kernel_n, kernel_n])],
-        vec![node(
+        vec![onnx_initializer(
+            "W",
+            data_w,
+            vec![m, c, kernel_n, kernel_n],
+        )],
+        vec![onnx_node(
             vec!["X", "W"],
             vec!["Y"],
             "Conv",
-            vec![attribute("kernel_shape", vec![3, 3])],
+            vec![onnx_attribute("kernel_shape", vec![3, 3])],
         )],
     ));
 
@@ -96,16 +103,19 @@ fn conv_group_simple() {
     let shape = vec![1, 2, 1, 1];
     input_data.insert("X".to_string(), [1.0, 2.0][..].into());
 
-    let conv_model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &shape)],
+    let conv_model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &shape)],
         vec![],
-        vec![initializer("W", vec![0.5, 2.0], vec![2, 1, 1, 1])],
-        vec![node(
+        vec![onnx_initializer("W", vec![0.5, 2.0], vec![2, 1, 1, 1])],
+        vec![onnx_node(
             vec!["X", "W"],
             vec!["Y"],
             "Conv",
-            vec![attribute("kernel_shape", vec![1, 1]), attribute("group", 2)],
+            vec![
+                onnx_attribute("kernel_shape", vec![1, 1]),
+                onnx_attribute("group", 2),
+            ],
         )],
     ));
 
@@ -133,19 +143,23 @@ fn conv_stride() {
     //    auto_pad.set_name("auto_pad".to_string());
     //    auto_pad.set_s("SAME_UPPER".to_string().into_bytes());
 
-    let model = model(graph(
-        vec![tensor("X", &[1, c, 7, 5])],
-        vec![tensor("Y", &[1, 1, 4, 3])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[1, c, 7, 5])],
+        vec![onnx_tensor("Y", &[1, 1, 4, 3])],
         vec![],
-        vec![initializer("W", data_w, vec![m, c, kernel_n, kernel_n])],
-        vec![node(
+        vec![onnx_initializer(
+            "W",
+            data_w,
+            vec![m, c, kernel_n, kernel_n],
+        )],
+        vec![onnx_node(
             vec!["X", "W"],
             vec!["Y"],
             "Conv",
             vec![
-                attribute("strides", vec![2, 2]),
-                attribute("pads", vec![1, 1, 1, 1]),
-                attribute("kernel_shape", vec![kernel_n, kernel_n]),
+                onnx_attribute("strides", vec![2, 2]),
+                onnx_attribute("pads", vec![1, 1, 1, 1]),
+                onnx_attribute("kernel_shape", vec![kernel_n, kernel_n]),
             ],
         )],
     ));
@@ -177,19 +191,23 @@ fn conv_asymetric_stride() {
     let m = 1;
     let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
 
-    let model = model(graph(
-        vec![tensor("X", &[1, c, 7, 5])],
-        vec![tensor("Y", &[1, 1, 4, 2])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[1, c, 7, 5])],
+        vec![onnx_tensor("Y", &[1, 1, 4, 2])],
         vec![],
-        vec![initializer("W", data_w, vec![m, c, kernel_n, kernel_n])],
-        vec![node(
+        vec![onnx_initializer(
+            "W",
+            data_w,
+            vec![m, c, kernel_n, kernel_n],
+        )],
+        vec![onnx_node(
             vec!["X", "W"],
             vec!["Y"],
             "Conv",
             vec![
-                attribute("strides", vec![2, 2]),
-                attribute("pads", vec![1, 0, 1, 0]),
-                attribute("kernel_shape", vec![kernel_n, kernel_n]),
+                onnx_attribute("strides", vec![2, 2]),
+                onnx_attribute("pads", vec![1, 0, 1, 0]),
+                onnx_attribute("kernel_shape", vec![kernel_n, kernel_n]),
             ],
         )],
     ));

@@ -41,7 +41,7 @@ fn static_initializer_value_i64<'a>(
     name: &str,
 ) -> Result<&'a [i64], ShapeInferenceError> {
     if let Some(shape_tensor) = initializers.get(name) {
-        if shape_tensor.get_data_type() != ScalarType::I64.to_datatype().value() {
+        if shape_tensor.get_data_type() != ScalarType::I64.to_onnx_datatype().value() {
             return Err(ShapeInferenceError::Unsupported(format!(
                 "initializer {} has data type {} and not int64, which is currently not supported",
                 name,
@@ -149,7 +149,7 @@ pub(crate) fn dimensions_infos(
     }
 
     for info in graph_proto.get_initializer() {
-        if let Ok(data_type) = ScalarType::from_i32(info.get_data_type()) {
+        if let Ok(data_type) = ScalarType::from_onnx_i32(info.get_data_type()) {
             let shape = Shape::from(
                 data_type,
                 &info
@@ -225,21 +225,21 @@ fn replace_constant_ops_with_initializers(
 
                 // Get constant value
                 if let Ok(values) = node.get_attribute_value::<Vec<f32>>("value_floats", None) {
-                    initializer.set_data_type(ScalarType::F32.to_datatype().value());
+                    initializer.set_data_type(ScalarType::F32.to_onnx_datatype().value());
                     initializer.set_dims(vec![values.len() as i64]);
                     initializer.set_float_data(values);
                 } else if let Ok(values) = node.get_attribute_value::<Vec<i64>>("value_ints", None)
                 {
-                    initializer.set_data_type(ScalarType::I64.to_datatype().value());
+                    initializer.set_data_type(ScalarType::I64.to_onnx_datatype().value());
                     initializer.set_dims(vec![values.len() as i64]);
                     initializer.set_int64_data(values);
                 } else if let Ok(values) = node.get_attribute_value::<i64>("value_int", None) {
                     initializer.set_int64_data(vec![values]);
-                    initializer.set_data_type(ScalarType::I64.to_datatype().value());
+                    initializer.set_data_type(ScalarType::I64.to_onnx_datatype().value());
                     initializer.set_dims(vec![1]);
                 } else if let Ok(values) = node.get_attribute_value::<f32>("value_float", None) {
                     initializer.set_float_data(vec![values]);
-                    initializer.set_data_type(ScalarType::F32.to_datatype().value());
+                    initializer.set_data_type(ScalarType::F32.to_onnx_datatype().value());
                     initializer.set_dims(vec![1]);
                 } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
                     initializer = tp;
@@ -352,7 +352,7 @@ pub async fn infer_shapes(
 
                 let mut tip = TypeProto::new();
                 let mut ttp = TypeProto_Tensor::new();
-                ttp.set_elem_type(output_shape.data_type.to_datatype().value());
+                ttp.set_elem_type(output_shape.data_type.to_onnx_datatype().value());
 
                 let mut tsp = TensorShapeProto::new();
                 tsp.set_dim(
@@ -501,7 +501,7 @@ pub(crate) fn infer_output_shapes(
             let to_value: i64 = node
                 .get_attribute_value("to", None)
                 .map_err(ShapeInferenceError::MissingAttribute)?;
-            let to_data_type = ScalarType::from_i32(to_value as i32).map_err(|_| {
+            let to_data_type = ScalarType::from_onnx_i32(to_value as i32).map_err(|_| {
                 ShapeInferenceError::InvalidNode(
                     node.get_name().to_string(),
                     format!(
@@ -975,7 +975,7 @@ pub(crate) fn infer_output_shapes(
                 .get_attribute_value::<TensorProto>("value", None)
                 .map_err(ShapeInferenceError::MissingAttribute)?;
 
-            let data_type = ScalarType::from_i32(value.get_data_type())
+            let data_type = ScalarType::from_onnx_i32(value.get_data_type())
                 .map_err(ShapeInferenceError::UnsupportedDataType)?;
 
             Ok(vec![Shape::from(
@@ -995,7 +995,7 @@ pub(crate) fn infer_output_shapes(
                 Ok(vec![Shape::from(ScalarType::I64, &[1])])
             } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
                 Ok(vec![Shape::from(
-                    ScalarType::from_i32(tp.get_data_type()).map_err(|_| {
+                    ScalarType::from_onnx_i32(tp.get_data_type()).map_err(|_| {
                         ShapeInferenceError::InvalidNode(
                             node.get_name().to_string(),
                             "invalid tensor data type".to_string(),
@@ -1285,7 +1285,7 @@ fn process_slice_inputs(
 fn fix_raw_tensor(tensor: &mut TensorProto) -> Result<(), ShapeInferenceError> {
     if tensor.has_raw_data() {
         let raw_data = tensor.take_raw_data();
-        match ScalarType::from_i32(tensor.get_data_type())
+        match ScalarType::from_onnx_i32(tensor.get_data_type())
             .map_err(ShapeInferenceError::UnsupportedDataType)?
         {
             ScalarType::F32 => tensor.set_float_data(bytemuck::cast_slice(&raw_data[..]).to_vec()),

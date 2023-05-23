@@ -443,7 +443,7 @@ pub fn compile(
 
         "Cast" => {
             let cast_to_type =
-                ScalarType::from_i32(op_def.get_attribute_value::<i64>("to", None)? as i32)?;
+                ScalarType::from_onnx_i32(op_def.get_attribute_value::<i64>("to", None)? as i32)?;
 
             if !cast_to_type.wgsl_supported() {
                 return Err(CompileError::UnimplementedVariant {

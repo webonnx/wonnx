@@ -1,5 +1,7 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::tensor::{attribute, graph, model_with_opset, node, tensor};
+use wonnx::onnx_model::{
+    onnx_attribute, onnx_graph, onnx_model_with_opset, onnx_node, onnx_tensor,
+};
 mod common;
 
 fn softmax_with_axis(x: &[f32], x_dims: &[i64], axis: i64, expected_y: &[f32], opset_version: i64) {
@@ -7,17 +9,17 @@ fn softmax_with_axis(x: &[f32], x_dims: &[i64], axis: i64, expected_y: &[f32], o
     input_data.insert("X".to_string(), x.into());
 
     // Model: X -> SoftMax -> Y
-    let model = model_with_opset(
-        graph(
-            vec![tensor("X", x_dims)],
-            vec![tensor("Y", x_dims)],
+    let model = onnx_model_with_opset(
+        onnx_graph(
+            vec![onnx_tensor("X", x_dims)],
+            vec![onnx_tensor("Y", x_dims)],
             vec![],
             vec![],
-            vec![node(
+            vec![onnx_node(
                 vec!["X"],
                 vec!["Y"],
                 "Softmax",
-                vec![attribute("axis", axis)],
+                vec![onnx_attribute("axis", axis)],
             )],
         ),
         opset_version,

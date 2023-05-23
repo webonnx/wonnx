@@ -1,7 +1,8 @@
 use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::AttributeProto,
-    tensor::{attribute, graph, model, node, tensor, TensorData},
+    onnx_model::{onnx_attribute, onnx_graph, onnx_model, onnx_node, onnx_tensor},
+    tensor::TensorData,
 };
 mod common;
 
@@ -23,20 +24,20 @@ fn test_onehot(
 
     let mut attributes: Vec<AttributeProto> = vec![];
     if let Some(axis) = axis {
-        attributes.push(attribute("axis", axis))
+        attributes.push(onnx_attribute("axis", axis))
     }
 
     // Model: I, D, V -> OneHot -> Y
-    let model = model(graph(
+    let model = onnx_model(onnx_graph(
         vec![
-            tensor("I", indexes_shape),
-            tensor("D", &[]),
-            tensor("V", &[values.len() as i64]),
+            onnx_tensor("I", indexes_shape),
+            onnx_tensor("D", &[]),
+            onnx_tensor("V", &[values.len() as i64]),
         ],
-        vec![tensor("Y", output_shape)],
+        vec![onnx_tensor("Y", output_shape)],
         vec![],
         vec![],
-        vec![node(
+        vec![onnx_node(
             vec!["I", "D", "V"],
             vec!["Y"],
             "OneHot",

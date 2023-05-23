@@ -1,5 +1,9 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::tensor::{graph, model, node, tensor, TensorData};
+use wonnx::{
+    onnx_model::{onnx_graph, onnx_model, onnx_node, onnx_tensor},
+    tensor::TensorData,
+};
+
 mod common;
 
 #[test]
@@ -12,12 +16,12 @@ fn test_identity() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Identity -> Y; Y==Z
-    let model = model(graph(
-        vec![tensor("X", &dims)],
-        vec![tensor("Y", &dims)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &dims)],
+        vec![onnx_tensor("Y", &dims)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "Identity", vec![])],
+        vec![onnx_node(vec!["X"], vec!["Y"], "Identity", vec![])],
     ));
 
     let session =
@@ -37,14 +41,14 @@ fn test_double_identity() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Identity -> Y -> Identity -> Z. X==Z
-    let model = model(graph(
-        vec![tensor("X", &dims)],
-        vec![tensor("Z", &dims)],
-        vec![tensor("Y", &dims)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &dims)],
+        vec![onnx_tensor("Z", &dims)],
+        vec![onnx_tensor("Y", &dims)],
         vec![],
         vec![
-            node(vec!["X"], vec!["Y"], "Identity", vec![]),
-            node(vec!["Y"], vec!["Z"], "Identity", vec![]),
+            onnx_node(vec!["X"], vec!["Y"], "Identity", vec![]),
+            onnx_node(vec!["Y"], vec!["Z"], "Identity", vec![]),
         ],
     ));
 
@@ -66,15 +70,15 @@ fn test_buffer_readability() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Cos -> Y -> Flatten -> Z -> Flatten -> W
-    let model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("W", &shape)],
-        vec![tensor("Y", &shape), tensor("Z", &shape)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("W", &shape)],
+        vec![onnx_tensor("Y", &shape), onnx_tensor("Z", &shape)],
         vec![],
         vec![
-            node(vec!["X"], vec!["Y"], "Cos", vec![]),
-            node(vec!["Y"], vec!["Z"], "Reshape", vec![]),
-            node(vec!["Z"], vec!["W"], "Reshape", vec![]),
+            onnx_node(vec!["X"], vec!["Y"], "Cos", vec![]),
+            onnx_node(vec!["Y"], vec!["Z"], "Reshape", vec![]),
+            onnx_node(vec!["Z"], vec!["W"], "Reshape", vec![]),
         ],
     ));
 

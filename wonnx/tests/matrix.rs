@@ -1,5 +1,8 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::tensor::{attribute, graph, initializer, initializer_int64, model, node, tensor};
+use wonnx::onnx_model::{
+    onnx_attribute, onnx_graph, onnx_initializer, onnx_initializer_int64, onnx_model, onnx_node,
+    onnx_tensor,
+};
 mod common;
 
 #[test]
@@ -26,12 +29,12 @@ fn test_matmul_square_matrix() {
     input_data.insert("B".to_string(), data_b.as_slice().unwrap().into());
 
     let n = n as i64;
-    let model = model(graph(
-        vec![tensor("A", &[n, n]), tensor("B", &[n, n])],
-        vec![tensor("C", &[n, n])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("A", &[n, n]), onnx_tensor("B", &[n, n])],
+        vec![onnx_tensor("C", &[n, n])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
+        vec![onnx_node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -53,23 +56,23 @@ fn test_transpose_4d_perm(transpose_first: &[i64], transpose_second: &[i64]) {
         .collect();
 
     // Model: X -> Transpose -> Y -> Transpose -> Z; X==Z
-    let model = model(graph(
-        vec![tensor("X", &x_dims)],
-        vec![tensor("Z", &x_dims)],
-        vec![tensor("Y", &intermediate_dims)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &x_dims)],
+        vec![onnx_tensor("Z", &x_dims)],
+        vec![onnx_tensor("Y", &intermediate_dims)],
         vec![],
         vec![
-            node(
+            onnx_node(
                 vec!["X"],
                 vec!["Y"],
                 "Transpose",
-                vec![attribute("perm", transpose_first.to_vec())],
+                vec![onnx_attribute("perm", transpose_first.to_vec())],
             ),
-            node(
+            onnx_node(
                 vec!["Y"],
                 vec!["Z"],
                 "Transpose",
-                vec![attribute("perm", transpose_second.to_vec())],
+                vec![onnx_attribute("perm", transpose_second.to_vec())],
             ),
         ],
     ));
@@ -112,16 +115,16 @@ fn test_transposes_4d_0312() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Transpose -> Y
-    let model = model(graph(
-        vec![tensor("X", &[1, 2, 3, 4])],
-        vec![tensor("Y", &[1, 4, 2, 3])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[1, 2, 3, 4])],
+        vec![onnx_tensor("Y", &[1, 4, 2, 3])],
         vec![],
         vec![],
-        vec![node(
+        vec![onnx_node(
             vec!["X"],
             vec!["Y"],
             "Transpose",
-            vec![attribute("perm", vec![0, 3, 1, 2])],
+            vec![onnx_attribute("perm", vec![0, 3, 1, 2])],
         )],
     ));
 
@@ -146,14 +149,14 @@ fn test_two_transposes_default_4d() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Transpose -> Y -> Transpose -> Z; X==Z
-    let model = model(graph(
-        vec![tensor("X", &[2, 3, 4])],
-        vec![tensor("Z", &[2, 3, 4])],
-        vec![tensor("Y", &[4, 3, 2])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[2, 3, 4])],
+        vec![onnx_tensor("Z", &[2, 3, 4])],
+        vec![onnx_tensor("Y", &[4, 3, 2])],
         vec![],
         vec![
-            node(vec!["X"], vec!["Y"], "Transpose", vec![]),
-            node(vec!["Y"], vec!["Z"], "Transpose", vec![]),
+            onnx_node(vec!["X"], vec!["Y"], "Transpose", vec![]),
+            onnx_node(vec!["Y"], vec!["Z"], "Transpose", vec![]),
         ],
     ));
 
@@ -171,23 +174,23 @@ fn test_two_transposes() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Transpose -> Y -> Transpose -> Z; X==Z
-    let model = model(graph(
-        vec![tensor("X", &[2, 3, 4])],
-        vec![tensor("Z", &[2, 3, 4])],
-        vec![tensor("Y", &[4, 3, 2])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[2, 3, 4])],
+        vec![onnx_tensor("Z", &[2, 3, 4])],
+        vec![onnx_tensor("Y", &[4, 3, 2])],
         vec![],
         vec![
-            node(
+            onnx_node(
                 vec!["X"],
                 vec!["Y"],
                 "Transpose",
-                vec![attribute("perm", vec![2, 1, 0])],
+                vec![onnx_attribute("perm", vec![2, 1, 0])],
             ),
-            node(
+            onnx_node(
                 vec!["Y"],
                 vec!["Z"],
                 "Transpose",
-                vec![attribute("perm", vec![2, 1, 0])],
+                vec![onnx_attribute("perm", vec![2, 1, 0])],
             ),
         ],
     ));
@@ -206,16 +209,16 @@ fn test_split() {
     let data = (1..=2 * 6).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
 
-    let model = model(graph(
-        vec![tensor("X", &[2, 6])],
-        vec![tensor("Y", &[2, 3]), tensor("W", &[2, 3])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[2, 6])],
+        vec![onnx_tensor("Y", &[2, 3]), onnx_tensor("W", &[2, 3])],
         vec![],
         vec![],
-        vec![node(
+        vec![onnx_node(
             vec!["X"],
             vec!["Y", "W"],
             "Split",
-            vec![attribute("axis", -1)],
+            vec![onnx_attribute("axis", -1)],
         )],
     ));
 
@@ -240,12 +243,12 @@ fn test_pad_example() {
     ].to_vec();
     input_data.insert("X".to_string(), data.as_slice().into());
 
-    let model = model(graph(
-        vec![tensor("X", &[3, 2])],
-        vec![tensor("Y", &[3, 4])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[3, 2])],
+        vec![onnx_tensor("Y", &[3, 4])],
         vec![],
-        vec![initializer_int64("pads", vec![0, 2, 0, 0], vec![4])],
-        vec![node(vec!["X", "pads"], vec!["Y"], "Pad", vec![])],
+        vec![onnx_initializer_int64("pads", vec![0, 2, 0, 0], vec![4])],
+        vec![onnx_node(vec!["X", "pads"], vec!["Y"], "Pad", vec![])],
     ));
 
     let session =
@@ -270,17 +273,17 @@ fn test_pad_complex() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     let kv = 0.5;
-    let model = model(graph(
-        vec![tensor("X", &[1, 3, 2])],
-        vec![tensor("Y", &[2, 4, 5])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[1, 3, 2])],
+        vec![onnx_tensor("Y", &[2, 4, 5])],
         vec![],
         vec![],
-        vec![node(
+        vec![onnx_node(
             vec!["X"],
             vec!["Y"],
             "Pad",
             vec![
-                attribute(
+                onnx_attribute(
                     "pads",
                     vec![
                         0, // x1_begin
@@ -291,7 +294,7 @@ fn test_pad_complex() {
                         1, // x3_end
                     ],
                 ),
-                attribute("constant_value", kv),
+                onnx_attribute("constant_value", kv),
             ],
         )],
     ));
@@ -338,16 +341,16 @@ fn test_resize() {
     let data = (1..=2 * 4).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
 
-    let downsampling_model = model(graph(
-        vec![tensor("X", &[1, 1, 2, 4])],
-        vec![tensor("Y", &[1, 1, 1, 2])],
+    let downsampling_model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[1, 1, 2, 4])],
+        vec![onnx_tensor("Y", &[1, 1, 1, 2])],
         vec![],
-        vec![initializer("scales", vec![1., 1., 0.6, 0.6], vec![4])],
-        vec![node(
+        vec![onnx_initializer("scales", vec![1., 1., 0.6, 0.6], vec![4])],
+        vec![onnx_node(
             vec!["X", "" /* roi */, "scales"],
             vec!["Y"],
             "Resize",
-            vec![attribute("nearest_mode", "floor")],
+            vec![onnx_attribute("nearest_mode", "floor")],
         )],
     ));
 
@@ -362,16 +365,16 @@ fn test_resize() {
     let data = (1..=4).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
 
-    let upsampling_model = model(graph(
-        vec![tensor("X", &[1, 1, 2, 2])],
-        vec![tensor("Y", &[1, 1, 4, 6])],
+    let upsampling_model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[1, 1, 2, 2])],
+        vec![onnx_tensor("Y", &[1, 1, 4, 6])],
         vec![],
-        vec![initializer("scales", vec![1., 1., 2., 3.], vec![4])],
-        vec![node(
+        vec![onnx_initializer("scales", vec![1., 1., 2., 3.], vec![4])],
+        vec![onnx_node(
             vec!["X", "" /* roi */, "scales"],
             vec!["Y"],
             "Resize",
-            vec![attribute("nearest_mode", "floor")],
+            vec![onnx_attribute("nearest_mode", "floor")],
         )],
     ));
 
@@ -406,12 +409,12 @@ fn test_matmul_square_matrix_small() {
     input_data.insert("B".to_string(), data_b.as_slice().unwrap().into());
 
     let n = n as i64;
-    let model = model(graph(
-        vec![tensor("A", &[n, n]), tensor("B", &[n, n])],
-        vec![tensor("C", &[n, n])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("A", &[n, n]), onnx_tensor("B", &[n, n])],
+        vec![onnx_tensor("C", &[n, n])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
+        vec![onnx_node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -436,12 +439,12 @@ fn test_matmul_nonsquare_matrix_small() {
     input_data.insert("A".to_string(), a_data.as_slice().into());
     input_data.insert("B".to_string(), b_data.as_slice().into());
 
-    let model = model(graph(
-        vec![tensor("A", &[4, 4]), tensor("B", &[4, 2])],
-        vec![tensor("C", &[4, 2])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("A", &[4, 4]), onnx_tensor("B", &[4, 2])],
+        vec![onnx_tensor("C", &[4, 2])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
+        vec![onnx_node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -466,12 +469,15 @@ fn test_matmul_stacks_4d() {
     input_data.insert("A".to_string(), a_data.as_slice().into());
     input_data.insert("B".to_string(), b_data.as_slice().into());
 
-    let model = model(graph(
-        vec![tensor("A", &[1, 4, 2, 2]), tensor("B", &[1, 4, 2, 2])],
-        vec![tensor("C", &[1, 4, 2, 2])],
+    let model = onnx_model(onnx_graph(
+        vec![
+            onnx_tensor("A", &[1, 4, 2, 2]),
+            onnx_tensor("B", &[1, 4, 2, 2]),
+        ],
+        vec![onnx_tensor("C", &[1, 4, 2, 2])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
+        vec![onnx_node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -501,12 +507,12 @@ fn test_matmul_stacks() {
     input_data.insert("A".to_string(), a_data.as_slice().into());
     input_data.insert("B".to_string(), b_data.as_slice().into());
 
-    let model = model(graph(
-        vec![tensor("A", &[4, 2, 2]), tensor("B", &[4, 2, 2])],
-        vec![tensor("C", &[4, 2, 2])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("A", &[4, 2, 2]), onnx_tensor("B", &[4, 2, 2])],
+        vec![onnx_tensor("C", &[4, 2, 2])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
+        vec![onnx_node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -537,12 +543,12 @@ fn test_matmul_1d() {
     input_data.insert("A".to_string(), a_data.as_slice().into());
     input_data.insert("B".to_string(), b_data.as_slice().into());
 
-    let model = model(graph(
-        vec![tensor("A", &[1, 4]), tensor("B", &[4, 2])],
-        vec![tensor("C", &[1, 2])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("A", &[1, 4]), onnx_tensor("B", &[4, 2])],
+        vec![onnx_tensor("C", &[1, 2])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
+        vec![onnx_node(vec!["A", "B"], vec!["C"], "MatMul", vec![])],
     ));
 
     let session =
@@ -571,16 +577,16 @@ fn test_gemm_matrix_bias() {
     input_data.insert("B".to_string(), b_data.as_slice().into());
     input_data.insert("C".to_string(), c_data.as_slice().into());
 
-    let model = model(graph(
+    let model = onnx_model(onnx_graph(
         vec![
-            tensor("A", &[4, 6]),
-            tensor("B", &[6, 4]),
-            tensor("C", &[4, 4]),
+            onnx_tensor("A", &[4, 6]),
+            onnx_tensor("B", &[6, 4]),
+            onnx_tensor("C", &[4, 4]),
         ],
-        vec![tensor("D", &[4, 4])],
+        vec![onnx_tensor("D", &[4, 4])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
+        vec![onnx_node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
     ));
 
     let session =
@@ -612,16 +618,16 @@ fn test_gemm_broadcasting_bias() {
     input_data.insert("B".to_string(), b_data.as_slice().into());
     input_data.insert("C".to_string(), c_data.as_slice().into());
 
-    let model = model(graph(
+    let model = onnx_model(onnx_graph(
         vec![
-            tensor("A", &[4, 6]),
-            tensor("B", &[6, 4]),
-            tensor("C", &[1, 4]),
+            onnx_tensor("A", &[4, 6]),
+            onnx_tensor("B", &[6, 4]),
+            onnx_tensor("C", &[1, 4]),
         ],
-        vec![tensor("D", &[4, 4])],
+        vec![onnx_tensor("D", &[4, 4])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
+        vec![onnx_node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
     ));
 
     let session =
@@ -652,16 +658,16 @@ fn test_gemm_broadcasting_second_bias() {
     input_data.insert("B".to_string(), b_data.as_slice().into());
     input_data.insert("C".to_string(), c_data.as_slice().into());
 
-    let model = model(graph(
+    let model = onnx_model(onnx_graph(
         vec![
-            tensor("A", &[4, 6]),
-            tensor("B", &[6, 4]),
-            tensor("C", &[4, 1]),
+            onnx_tensor("A", &[4, 6]),
+            onnx_tensor("B", &[6, 4]),
+            onnx_tensor("C", &[4, 1]),
         ],
-        vec![tensor("D", &[4, 4])],
+        vec![onnx_tensor("D", &[4, 4])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
+        vec![onnx_node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
     ));
 
     let session =
@@ -692,16 +698,16 @@ fn test_gemm_scalar_bias() {
     input_data.insert("B".to_string(), b_data.as_slice().into());
     input_data.insert("C".to_string(), c_data.as_slice().into());
 
-    let model = model(graph(
+    let model = onnx_model(onnx_graph(
         vec![
-            tensor("A", &[4, 6]),
-            tensor("B", &[6, 4]),
-            tensor("C", &[1]),
+            onnx_tensor("A", &[4, 6]),
+            onnx_tensor("B", &[6, 4]),
+            onnx_tensor("C", &[1]),
         ],
-        vec![tensor("D", &[4, 4])],
+        vec![onnx_tensor("D", &[4, 4])],
         vec![],
         vec![],
-        vec![node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
+        vec![onnx_node(vec!["A", "B", "C"], vec!["D"], "Gemm", vec![])],
     ));
 
     let session =

@@ -1,7 +1,9 @@
 use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::AttributeProto,
-    tensor::{attribute, graph, initializer_int64, model, node, tensor},
+    onnx_model::{
+        onnx_attribute, onnx_graph, onnx_initializer_int64, onnx_model, onnx_node, onnx_tensor,
+    },
 };
 mod common;
 
@@ -20,18 +22,18 @@ fn test_reduce(
 
     #[allow(clippy::bool_to_int_with_if)]
     let mut attributes: Vec<AttributeProto> =
-        vec![attribute("keepdims", if keep_dims { 1 } else { 0 })];
+        vec![onnx_attribute("keepdims", if keep_dims { 1 } else { 0 })];
     if let Some(axes) = axes {
-        attributes.push(attribute("axes", axes))
+        attributes.push(onnx_attribute("axes", axes))
     }
 
     // Model: X -> ReduceMean -> Y
-    let model = model(graph(
-        vec![tensor("X", data_shape)],
-        vec![tensor("Y", output_shape)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", data_shape)],
+        vec![onnx_tensor("Y", output_shape)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], op_name, attributes)],
+        vec![onnx_node(vec!["X"], vec!["Y"], op_name, attributes)],
     ));
 
     let session =
@@ -255,15 +257,20 @@ fn test_reduce_sum_with_axes_as_input() {
     ];
 
     input_data.insert("X".to_string(), data.into());
-    let attributes: Vec<AttributeProto> = vec![attribute("keepdims", 1)];
+    let attributes: Vec<AttributeProto> = vec![onnx_attribute("keepdims", 1)];
 
     // Model: X -> ReduceMean -> Y
-    let model = model(graph(
-        vec![tensor("X", &[3, 2, 2])],
-        vec![tensor("Y", &[3, 2])],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &[3, 2, 2])],
+        vec![onnx_tensor("Y", &[3, 2])],
         vec![],
-        vec![initializer_int64("A", vec![-2], vec![1])],
-        vec![node(vec!["X", "A"], vec!["Y"], "ReduceSum", attributes)],
+        vec![onnx_initializer_int64("A", vec![-2], vec![1])],
+        vec![onnx_node(
+            vec!["X", "A"],
+            vec!["Y"],
+            "ReduceSum",
+            attributes,
+        )],
     ));
 
     let session =

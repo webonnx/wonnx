@@ -1,5 +1,5 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::tensor::{attribute, graph, model, node, tensor};
+use wonnx::onnx_model::{onnx_attribute, onnx_graph, onnx_model, onnx_node, onnx_tensor};
 mod common;
 
 fn assert_gather(
@@ -17,16 +17,19 @@ fn assert_gather(
     input_data.insert("I".to_string(), indices.into());
 
     // Model: (X, I) -> Gather -> Y
-    let bn_model = model(graph(
-        vec![tensor("X", data_shape), tensor("I", indices_shape)],
-        vec![tensor("Y", output_shape)],
+    let bn_model = onnx_model(onnx_graph(
+        vec![
+            onnx_tensor("X", data_shape),
+            onnx_tensor("I", indices_shape),
+        ],
+        vec![onnx_tensor("Y", output_shape)],
         vec![],
         vec![],
-        vec![node(
+        vec![onnx_node(
             vec!["X", "I"],
             vec!["Y"],
             "Gather",
-            vec![attribute("axis", axis)],
+            vec![onnx_attribute("axis", axis)],
         )],
     ));
 

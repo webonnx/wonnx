@@ -55,7 +55,7 @@ impl ValueInfoProtoUtil for ValueInfoProto {
         Ok(match &self.get_field_type().value {
             Some(x) => match x {
                 wonnx::onnx::TypeProto_oneof_value::tensor_type(t) => {
-                    ScalarType::from_i32(t.get_elem_type())?
+                    ScalarType::from_onnx_i32(t.get_elem_type())?
                 }
                 wonnx::onnx::TypeProto_oneof_value::sequence_type(_) => todo!(),
                 wonnx::onnx::TypeProto_oneof_value::map_type(_) => todo!(),

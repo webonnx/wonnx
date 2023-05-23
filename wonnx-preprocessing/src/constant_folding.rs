@@ -10,7 +10,8 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, ValueInfoProto,
     },
-    tensor::{model_with_opset, DataTypeError, ScalarType, Shape, TensorData},
+    onnx_model::onnx_model_with_opset,
+    tensor::{DataTypeError, ScalarType, Shape, TensorData},
     CompileError, GpuError, Session, SessionError,
 };
 
@@ -45,11 +46,12 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
     Ok(match node.get_op_type() {
         "Identity" | "Unsqueeze" | "Squeeze" | "Reshape" => Some(inputs.to_vec()),
         "Cast" => {
-            let cast_to_type =
-                ScalarType::from_i32(node.get_attribute_value::<i64>("to", None).map_err(|_| {
+            let cast_to_type = ScalarType::from_onnx_i32(
+                node.get_attribute_value::<i64>("to", None).map_err(|_| {
                     ConstantFoldingError::InvalidNode("to attribute missing for Cast ".to_string())
-                })? as i32)
-                .map_err(ConstantFoldingError::UnsupportedDataType)?;
+                })? as i32,
+            )
+            .map_err(ConstantFoldingError::UnsupportedDataType)?;
             let input_tensor = &inputs[0];
 
             let output_tensor: TensorData<'static> = match (input_tensor, cast_to_type) {
@@ -162,7 +164,7 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
             ));
             graph.set_node(RepeatedField::from(vec![temp_node]));
 
-            let model = model_with_opset(graph, opset_version);
+            let model = onnx_model_with_opset(graph, opset_version);
 
             let session = match Session::from_model(model).await {
                 Ok(v) => v,
@@ -205,7 +207,7 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
 
 fn input_to_value_info(shape: &Shape, name: &str) -> ValueInfoProto {
     let mut ttp = TypeProto_Tensor::new();
-    ttp.set_elem_type(shape.data_type.to_datatype().value());
+    ttp.set_elem_type(shape.data_type.to_onnx_datatype().value());
     let mut tsp = TensorShapeProto::new();
     tsp.set_dim(RepeatedField::from(
         shape
@@ -262,7 +264,10 @@ fn calculate_shape_operator<'a>(
 
 #[cfg(test)]
 mod test {
-    use wonnx::tensor::{attribute, node, Shape, TensorData};
+    use wonnx::{
+        onnx_model::{onnx_attribute, onnx_node},
+        tensor::{Shape, TensorData},
+    };
 
     use super::calculate_shape_operator;
 
@@ -274,12 +279,12 @@ mod test {
     ) {
         let mut attrs = vec![];
         if let Some(start) = start {
-            attrs.push(attribute("start", start));
+            attrs.push(onnx_attribute("start", start));
         }
         if let Some(end) = end {
-            attrs.push(attribute("end", end));
+            attrs.push(onnx_attribute("end", end));
         }
-        let node = node(vec!["X"], vec!["Y"], "Shape", attrs);
+        let node = onnx_node(vec!["X"], vec!["Y"], "Shape", attrs);
         let shape = Shape::from(
             wonnx::tensor::ScalarType::F32,
             &dims.iter().map(|x| *x as usize).collect::<Vec<usize>>(),

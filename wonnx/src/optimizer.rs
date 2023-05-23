@@ -6,8 +6,9 @@ use crate::{
         Tensor,
     },
     onnx::TensorProto,
+    onnx_model::to_tensor,
     resource::{padding, request_device_queue},
-    tensor::{to_tensor, DataTypeError, ScalarType, TensorData},
+    tensor::{DataTypeError, ScalarType, TensorData},
     GpuError,
 };
 use async_recursion::async_recursion;
@@ -828,7 +829,7 @@ pub fn constant_of_shape_output(
     element_count: usize,
 ) -> Result<TensorData<'static>, OptimizerError> {
     if let Ok(constant_value_tensor) = node.get_attribute_value::<TensorProto>("value", None) {
-        match ScalarType::from_i32(constant_value_tensor.get_data_type()).map_err(|_| {
+        match ScalarType::from_onnx_i32(constant_value_tensor.get_data_type()).map_err(|_| {
             OptimizerError::Unsupported(format!(
                 "unsupported data type {}",
                 constant_value_tensor.get_data_type()
@@ -884,7 +885,10 @@ mod test {
     use crate::{
         ir::{self, Node, NodeDefinition},
         onnx::AttributeProto,
-        tensor::{attribute, graph, initializer, model, node, tensor, TensorData},
+        onnx_model::{
+            onnx_attribute, onnx_graph, onnx_initializer, onnx_model, onnx_node, onnx_tensor,
+        },
+        tensor::TensorData,
     };
 
     use super::Optimizer;
@@ -917,14 +921,14 @@ mod test {
     pub fn test_optimize_identity_identity() {
         let _ = env_logger::builder().is_test(true).try_init();
         pollster::block_on(async {
-            let m = model(graph(
-                vec![tensor("X", &[1])],
-                vec![tensor("Y", &[1])],
-                vec![tensor("A", &[1])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", &[1])],
+                vec![onnx_tensor("Y", &[1])],
+                vec![onnx_tensor("A", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "Identity", vec![]),
-                    node(vec!["A"], vec!["Y"], "Identity", vec![]),
+                    onnx_node(vec!["X"], vec!["A"], "Identity", vec![]),
+                    onnx_node(vec!["A"], vec!["Y"], "Identity", vec![]),
                 ],
             ));
 
@@ -942,14 +946,14 @@ mod test {
     pub fn test_optimize_neg_neg() {
         let _ = env_logger::builder().is_test(true).try_init();
         pollster::block_on(async {
-            let m = model(graph(
-                vec![tensor("X", &[1])],
-                vec![tensor("Y", &[1])],
-                vec![tensor("A", &[1])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", &[1])],
+                vec![onnx_tensor("Y", &[1])],
+                vec![onnx_tensor("A", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "Neg", vec![]),
-                    node(vec!["A"], vec!["Y"], "Neg", vec![]),
+                    onnx_node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    onnx_node(vec!["A"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -968,15 +972,15 @@ mod test {
         pollster::block_on(async {
             let _ = env_logger::builder().is_test(true).try_init();
 
-            let m = model(graph(
-                vec![tensor("X", &[1])],
-                vec![tensor("Y", &[1])],
-                vec![tensor("A", &[1]), tensor("B", &[1])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", &[1])],
+                vec![onnx_tensor("Y", &[1])],
+                vec![onnx_tensor("A", &[1]), onnx_tensor("B", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "Neg", vec![]),
-                    node(vec!["A"], vec!["B"], "Neg", vec![]),
-                    node(vec!["B"], vec!["Y"], "Neg", vec![]),
+                    onnx_node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    onnx_node(vec!["A"], vec!["B"], "Neg", vec![]),
+                    onnx_node(vec!["B"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -1000,16 +1004,20 @@ mod test {
     pub fn test_optimize_4neg() {
         let _ = env_logger::builder().is_test(true).try_init();
         pollster::block_on(async {
-            let m = model(graph(
-                vec![tensor("X", &[1])],
-                vec![tensor("Y", &[1])],
-                vec![tensor("A", &[1]), tensor("B", &[1]), tensor("C", &[1])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", &[1])],
+                vec![onnx_tensor("Y", &[1])],
+                vec![
+                    onnx_tensor("A", &[1]),
+                    onnx_tensor("B", &[1]),
+                    onnx_tensor("C", &[1]),
+                ],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "Neg", vec![]),
-                    node(vec!["A"], vec!["B"], "Neg", vec![]),
-                    node(vec!["B"], vec!["C"], "Neg", vec![]),
-                    node(vec!["C"], vec!["Y"], "Neg", vec![]),
+                    onnx_node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    onnx_node(vec!["A"], vec!["B"], "Neg", vec![]),
+                    onnx_node(vec!["B"], vec!["C"], "Neg", vec![]),
+                    onnx_node(vec!["C"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -1027,22 +1035,22 @@ mod test {
     pub fn test_optimize_5neg() {
         let _ = env_logger::builder().is_test(true).try_init();
         pollster::block_on(async {
-            let m = model(graph(
-                vec![tensor("X", &[1])],
-                vec![tensor("Y", &[1])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", &[1])],
+                vec![onnx_tensor("Y", &[1])],
                 vec![
-                    tensor("A", &[1]),
-                    tensor("B", &[1]),
-                    tensor("C", &[1]),
-                    tensor("D", &[1]),
+                    onnx_tensor("A", &[1]),
+                    onnx_tensor("B", &[1]),
+                    onnx_tensor("C", &[1]),
+                    onnx_tensor("D", &[1]),
                 ],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "Neg", vec![]),
-                    node(vec!["A"], vec!["B"], "Neg", vec![]),
-                    node(vec!["B"], vec!["C"], "Neg", vec![]),
-                    node(vec!["C"], vec!["D"], "Neg", vec![]),
-                    node(vec!["D"], vec!["Y"], "Neg", vec![]),
+                    onnx_node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    onnx_node(vec!["A"], vec!["B"], "Neg", vec![]),
+                    onnx_node(vec!["B"], vec!["C"], "Neg", vec![]),
+                    onnx_node(vec!["C"], vec!["D"], "Neg", vec![]),
+                    onnx_node(vec!["D"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -1066,14 +1074,14 @@ mod test {
     pub fn test_optimize_neg_neg_branch() {
         let _ = env_logger::builder().is_test(true).try_init();
         pollster::block_on(async {
-            let m = model(graph(
-                vec![tensor("X", &[1])],
-                vec![tensor("Y", &[1]), tensor("A", &[1])],
-                vec![tensor("A", &[1])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", &[1])],
+                vec![onnx_tensor("Y", &[1]), onnx_tensor("A", &[1])],
+                vec![onnx_tensor("A", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "Neg", vec![]),
-                    node(vec!["A"], vec!["Y"], "Neg", vec![]),
+                    onnx_node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    onnx_node(vec!["A"], vec!["Y"], "Neg", vec![]),
                 ],
             ));
 
@@ -1099,15 +1107,15 @@ mod test {
         let _ = env_logger::builder().is_test(true).try_init();
 
         pollster::block_on(async {
-            let m = model(graph(
-                vec![tensor("X", &[1])],
-                vec![tensor("Y", &[1]), tensor("Z", &[1])],
-                vec![tensor("A", &[1])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", &[1])],
+                vec![onnx_tensor("Y", &[1]), onnx_tensor("Z", &[1])],
+                vec![onnx_tensor("A", &[1])],
                 vec![],
                 vec![
-                    node(vec!["X"], vec!["A"], "Neg", vec![]),
-                    node(vec!["A"], vec!["Z"], "Identity", vec![]),
-                    node(vec!["A"], vec!["Y"], "Identity", vec![]),
+                    onnx_node(vec!["X"], vec!["A"], "Neg", vec![]),
+                    onnx_node(vec!["A"], vec!["Z"], "Identity", vec![]),
+                    onnx_node(vec!["A"], vec!["Y"], "Identity", vec![]),
                 ],
             ));
 
@@ -1134,15 +1142,15 @@ mod test {
         let _ = env_logger::builder().is_test(true).try_init();
 
         pollster::block_on(async {
-            let m = model(graph(
+            let m = onnx_model(onnx_graph(
                 vec![],
-                vec![tensor("C", &[1])],
+                vec![onnx_tensor("C", &[1])],
                 vec![],
                 vec![
-                    initializer("A", vec![21.0], vec![1]),
-                    initializer("B", vec![7.0], vec![1]),
+                    onnx_initializer("A", vec![21.0], vec![1]),
+                    onnx_initializer("B", vec![7.0], vec![1]),
                 ],
-                vec![node(vec!["A", "B"], vec!["C"], "Add", vec![])],
+                vec![onnx_node(vec!["A", "B"], vec!["C"], "Add", vec![])],
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
@@ -1163,16 +1171,16 @@ mod test {
         let _ = env_logger::builder().is_test(true).try_init();
 
         pollster::block_on(async {
-            let m = model(graph(
+            let m = onnx_model(onnx_graph(
                 vec![],
-                vec![tensor("Y", &[1])],
+                vec![onnx_tensor("Y", &[1])],
                 vec![],
                 vec![],
-                vec![node(
+                vec![onnx_node(
                     vec![],
                     vec!["Y"],
                     "Constant",
-                    vec![attribute("value_float", 42.0)],
+                    vec![onnx_attribute("value_float", 42.0)],
                 )],
             ));
 
@@ -1193,18 +1201,18 @@ mod test {
     pub fn test_shape_operator() {
         test_shape_operator_with(
             &[1, 2, 3],
-            vec![attribute("start", -3), attribute("end", -2)],
+            vec![onnx_attribute("start", -3), onnx_attribute("end", -2)],
             &[1],
         );
         test_shape_operator_with(&[1, 2, 3], vec![], &[1, 2, 3]);
-        test_shape_operator_with(&[3, 4, 5], vec![attribute("start", 0)], &[3, 4, 5]);
-        test_shape_operator_with(&[3, 4, 5], vec![attribute("start", 1)], &[4, 5]);
-        test_shape_operator_with(&[3, 4, 5], vec![attribute("start", -1)], &[5]);
-        test_shape_operator_with(&[3, 4, 5], vec![attribute("end", 10)], &[3, 4, 5]);
-        test_shape_operator_with(&[3, 4, 5], vec![attribute("end", 1)], &[3]);
+        test_shape_operator_with(&[3, 4, 5], vec![onnx_attribute("start", 0)], &[3, 4, 5]);
+        test_shape_operator_with(&[3, 4, 5], vec![onnx_attribute("start", 1)], &[4, 5]);
+        test_shape_operator_with(&[3, 4, 5], vec![onnx_attribute("start", -1)], &[5]);
+        test_shape_operator_with(&[3, 4, 5], vec![onnx_attribute("end", 10)], &[3, 4, 5]);
+        test_shape_operator_with(&[3, 4, 5], vec![onnx_attribute("end", 1)], &[3]);
         test_shape_operator_with(
             &[3, 4, 5],
-            vec![attribute("start", 10), attribute("end", 10)],
+            vec![onnx_attribute("start", 10), onnx_attribute("end", 10)],
             &[],
         );
     }
@@ -1217,12 +1225,12 @@ mod test {
         let _ = env_logger::builder().is_test(true).try_init();
 
         pollster::block_on(async {
-            let m = model(graph(
-                vec![tensor("X", input_shape)],
-                vec![tensor("Y", &[expected.len() as i64])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", input_shape)],
+                vec![onnx_tensor("Y", &[expected.len() as i64])],
                 vec![],
                 vec![],
-                vec![node(vec!["X"], vec!["Y"], "Shape", attrs)],
+                vec![onnx_node(vec!["X"], vec!["Y"], "Shape", attrs)],
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();
@@ -1255,12 +1263,12 @@ mod test {
         let _ = env_logger::builder().is_test(true).try_init();
 
         pollster::block_on(async {
-            let m = model(graph(
-                vec![tensor("X", input_shape)],
-                vec![tensor("Y", &[expected.len() as i64])],
+            let m = onnx_model(onnx_graph(
+                vec![onnx_tensor("X", input_shape)],
+                vec![onnx_tensor("Y", &[expected.len() as i64])],
                 vec![],
                 vec![],
-                vec![node(vec!["X"], vec!["Y"], "Size", vec![])],
+                vec![onnx_node(vec!["X"], vec!["Y"], "Size", vec![])],
             ));
 
             let root = ir::Node::from_model(&m, None).unwrap();

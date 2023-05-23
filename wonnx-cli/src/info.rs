@@ -32,7 +32,7 @@ fn dimensions_infos(
 
     for info in graph_proto.get_initializer() {
         let shape = Shape::from(
-            ScalarType::from_i32(info.get_data_type())?,
+            ScalarType::from_onnx_i32(info.get_data_type())?,
             &info
                 .get_dims()
                 .iter()
@@ -120,7 +120,7 @@ pub fn sizes_table(model: &ModelProto) -> Result<Table, WonnxError> {
     let mut initializer_size: usize = 0;
     for info in model.get_graph().get_initializer() {
         let shape = Shape::from(
-            ScalarType::from_i32(info.get_data_type())?,
+            ScalarType::from_onnx_i32(info.get_data_type())?,
             &info
                 .get_dims()
                 .iter()
