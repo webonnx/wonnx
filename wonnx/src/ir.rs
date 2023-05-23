@@ -81,13 +81,13 @@ impl OperatorDefinition {
         &self.op_type
     }
 
-    pub fn get_attribute_value<T: std::convert::From<AttributeValue>>(
-        &self,
+    pub fn get_attribute_value<'a, T: From<&'a AttributeValue>>(
+        &'a self,
         attribute: &str,
         default: Option<T>,
     ) -> Result<T, AttributeNotFoundError> {
         match (self.attributes.get(attribute), default) {
-            (Some(attribute_value), _) => Ok(attribute_value.clone().into()),
+            (Some(attribute_value), _) => Ok(attribute_value.into()),
             (None, Some(default_value)) => Ok(default_value),
             (None, None) => Err(AttributeNotFoundError {
                 attribute: attribute.to_string(),

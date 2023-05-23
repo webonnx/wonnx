@@ -12,8 +12,8 @@ pub struct AttributeNotFoundError {
 
 pub trait NodeAttributes {
     fn has_attribute(&self, attribute_name: &str) -> bool;
-    fn get_attribute_value<T: std::convert::From<onnx::AttributeProto>>(
-        &self,
+    fn get_attribute_value<'a, T: std::convert::From<&'a onnx::AttributeProto>>(
+        &'a self,
         attribute: &str,
         default: Option<T>,
     ) -> Result<T, AttributeNotFoundError>;
@@ -26,18 +26,21 @@ impl NodeAttributes for onnx::NodeProto {
             .any(|attr| attr.get_name() == attribute_name)
     }
 
-    fn get_attribute_value<T: std::convert::From<onnx::AttributeProto>>(
-        &self,
+    fn get_attribute_value<'a, T>(
+        &'a self,
         attribute: &str,
         default: Option<T>,
-    ) -> Result<T, AttributeNotFoundError> {
+    ) -> Result<T, AttributeNotFoundError>
+    where
+        T: From<&'a onnx::AttributeProto>,
+    {
         match (
             self.get_attribute()
                 .iter()
                 .find(|attr| attr.get_name() == attribute),
             default,
         ) {
-            (Some(attr), _) => Ok(attr.clone().into()),
+            (Some(attr), _) => Ok(attr.into()),
             (None, Some(default_attr)) => Ok(default_attr),
             (None, None) => Err(AttributeNotFoundError {
                 attribute: attribute.to_string(),

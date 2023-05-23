@@ -7,7 +7,7 @@ use crate::{
     },
     onnx::TensorProto,
     resource::{padding, request_device_queue},
-    utils::{DataTypeError, ScalarType, TensorData},
+    utils::{to_tensor, DataTypeError, ScalarType, TensorData},
     GpuError,
 };
 use async_recursion::async_recursion;
@@ -171,41 +171,46 @@ impl<'model> Optimizer<'model> {
         assert_eq!(op_def.get_op_type(), "Constant");
         let display_name = op_def.get_display_name().into();
 
-        let tp: Tensor =
-            if let Ok(values) = op_def.get_attribute_value::<Vec<f32>>("value_floats", None) {
-                let dims = vec![values.len()];
-                Tensor {
-                    data: TensorData::F32(values.into()),
-                    dims,
-                    display_name,
-                }
-            } else if let Ok(values) = op_def.get_attribute_value::<Vec<i64>>("value_ints", None) {
-                let dims = vec![values.len()];
-                Tensor {
-                    data: TensorData::I64(values.into()),
-                    dims,
-                    display_name,
-                }
-            } else if let Ok(value) = op_def.get_attribute_value::<f32>("value_float", None) {
-                Tensor {
-                    data: TensorData::F32(vec![value].into()),
-                    dims: vec![1],
-                    display_name,
-                }
-            } else if let Ok(value) = op_def.get_attribute_value::<i64>("value_int", None) {
-                Tensor {
-                    data: TensorData::I64(vec![value].into()),
-                    dims: vec![1],
-                    display_name,
-                }
-            } else if let Ok(_tp) = op_def.get_attribute_value::<TensorProto>("value", None) {
-                todo!();
-                // to_tensor(Cow::Owned(tp))?
-            } else {
-                return Err(OptimizerError::Unsupported(
-                    "Constant node with unknown value type".to_string(),
-                ));
-            };
+        let tp: Tensor = if let Ok(values) =
+            op_def.get_attribute_value::<Vec<f32>>("value_floats", None)
+        {
+            let dims = vec![values.len()];
+            Tensor {
+                data: TensorData::F32(values.into()),
+                dims,
+                display_name,
+            }
+        } else if let Ok(values) = op_def.get_attribute_value::<Vec<i64>>("value_ints", None) {
+            let dims = vec![values.len()];
+            Tensor {
+                data: TensorData::I64(values.into()),
+                dims,
+                display_name,
+            }
+        } else if let Ok(value) = op_def.get_attribute_value::<f32>("value_float", None) {
+            Tensor {
+                data: TensorData::F32(vec![value].into()),
+                dims: vec![1],
+                display_name,
+            }
+        } else if let Ok(value) = op_def.get_attribute_value::<i64>("value_int", None) {
+            Tensor {
+                data: TensorData::I64(vec![value].into()),
+                dims: vec![1],
+                display_name,
+            }
+        } else if let Ok(tensor_proto) = op_def.get_attribute_value::<&TensorProto>("value", None) {
+            let t = to_tensor(tensor_proto)?;
+            Tensor {
+                data: t.data.into_static(),
+                dims: t.dims,
+                display_name: t.display_name,
+            }
+        } else {
+            return Err(OptimizerError::Unsupported(
+                "Constant node with unknown value type".to_string(),
+            ));
+        };
         Ok(tp)
     }
 

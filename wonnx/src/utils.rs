@@ -679,38 +679,45 @@ impl From<TensorProto> for onnx::AttributeProto {
     }
 }
 
-impl From<onnx::AttributeProto> for Vec<i64> {
-    fn from(value: onnx::AttributeProto) -> Self {
+// Attribute to value conversions
+impl From<&onnx::AttributeProto> for Vec<i64> {
+    fn from(value: &onnx::AttributeProto) -> Self {
         value.get_ints().to_vec()
     }
 }
 
-impl From<onnx::AttributeProto> for TensorProto {
-    fn from(value: onnx::AttributeProto) -> Self {
+impl From<&onnx::AttributeProto> for TensorProto {
+    fn from(value: &onnx::AttributeProto) -> Self {
         value.get_t().clone()
     }
 }
 
-impl From<onnx::AttributeProto> for Vec<f32> {
-    fn from(value: onnx::AttributeProto) -> Self {
+impl<'a> From<&'a onnx::AttributeProto> for &'a TensorProto {
+    fn from(value: &'a onnx::AttributeProto) -> Self {
+        value.get_t()
+    }
+}
+
+impl From<&onnx::AttributeProto> for Vec<f32> {
+    fn from(value: &onnx::AttributeProto) -> Self {
         value.get_floats().to_vec()
     }
 }
 
-impl From<onnx::AttributeProto> for f32 {
-    fn from(value: onnx::AttributeProto) -> Self {
+impl From<&onnx::AttributeProto> for f32 {
+    fn from(value: &onnx::AttributeProto) -> Self {
         value.get_f()
     }
 }
 
-impl From<onnx::AttributeProto> for i64 {
-    fn from(value: onnx::AttributeProto) -> Self {
+impl From<&onnx::AttributeProto> for i64 {
+    fn from(value: &onnx::AttributeProto) -> Self {
         value.get_i()
     }
 }
 
-impl From<onnx::AttributeProto> for String {
-    fn from(value: onnx::AttributeProto) -> Self {
+impl From<&onnx::AttributeProto> for String {
+    fn from(value: &onnx::AttributeProto) -> Self {
         from_utf8(value.get_s()).unwrap().to_string()
     }
 }
