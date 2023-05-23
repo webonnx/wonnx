@@ -280,7 +280,10 @@ mod test {
             attrs.push(attribute("end", end));
         }
         let node = node(vec!["X"], vec!["Y"], "Shape", attrs);
-        let shape = Shape::from(wonnx::utils::ScalarType::F32, dims);
+        let shape = Shape::from(
+            wonnx::utils::ScalarType::F32,
+            &dims.iter().map(|x| *x as usize).collect::<Vec<usize>>(),
+        );
         assert_eq!(
             calculate_shape_operator(&node, &shape).unwrap(),
             TensorData::I64(out_dims.into())

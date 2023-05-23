@@ -31,7 +31,14 @@ fn dimensions_infos(
     }
 
     for info in graph_proto.get_initializer() {
-        let shape = Shape::from(ScalarType::from_i32(info.get_data_type())?, info.get_dims());
+        let shape = Shape::from(
+            ScalarType::from_i32(info.get_data_type())?,
+            &info
+                .get_dims()
+                .iter()
+                .map(|x| *x as usize)
+                .collect::<Vec<usize>>(),
+        );
         shapes_info.insert(info.get_name().to_string(), Some(shape));
     }
 
@@ -112,7 +119,14 @@ pub fn sizes_table(model: &ModelProto) -> Result<Table, WonnxError> {
 
     let mut initializer_size: usize = 0;
     for info in model.get_graph().get_initializer() {
-        let shape = Shape::from(ScalarType::from_i32(info.get_data_type())?, info.get_dims());
+        let shape = Shape::from(
+            ScalarType::from_i32(info.get_data_type())?,
+            &info
+                .get_dims()
+                .iter()
+                .map(|x| *x as usize)
+                .collect::<Vec<usize>>(),
+        );
         initializer_size += shape.buffer_bytes_aligned();
     }
 

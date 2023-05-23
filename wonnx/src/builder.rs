@@ -1,16 +1,12 @@
-use std::{borrow::Cow, marker::PhantomData, sync::Arc};
-
-use protobuf::ProtobufEnum;
-
 use crate::{
     gpu::GpuModel,
-    ir::{Input, Node, NodeDefinition, OperatorDefinition},
-    onnx::TensorProto_DataType,
+    ir::{Input, Node, NodeDefinition, OperatorDefinition, Tensor},
     optimizer::Optimizer,
     resource,
-    utils::Shape,
+    utils::{Shape, TensorData},
     Session, SessionError,
 };
+use std::{marker::PhantomData, sync::Arc};
 
 pub struct GraphBuilder<'model> {
     _d: PhantomData<&'model ()>,
@@ -87,23 +83,24 @@ impl<'model> GraphBuilder<'model> {
         }
     }
 
-    pub fn tensor_f32(&mut self, name: &str, dims: &[usize], data: &[f32]) -> TensorRef<'model> {
-        let mut initializer = crate::onnx::TensorProto::new();
-        let udims: Vec<i64> = dims.iter().map(|x| *x as i64).collect();
-        let shape = Shape::from(crate::utils::ScalarType::F32, &udims);
-        assert_eq!(shape.element_count() as usize, data.len());
-        initializer.set_dims(shape.dims.iter().map(|x| *x as i64).collect());
-        initializer.set_name(name.to_string());
-        initializer.set_data_type(TensorProto_DataType::FLOAT.value());
-        initializer.set_float_data(data.to_vec());
-        let definition = NodeDefinition::Tensor(Box::new(Cow::Owned(initializer)));
+    pub fn tensor<S: ToString>(
+        &mut self,
+        name: S,
+        dims: &[usize],
+        data: TensorData<'model>,
+    ) -> TensorRef<'model> {
+        let output_shape = Shape::from(data.scalar_type(), dims);
         TensorRef {
             node: Arc::new(Node {
                 inputs: vec![],
-                definition,
+                definition: NodeDefinition::Tensor(Tensor {
+                    data,
+                    dims: dims.to_vec(),
+                    display_name: name.to_string(),
+                }),
             }),
             output_index: 0,
-            output_shape: shape,
+            output_shape,
         }
     }
 
@@ -152,8 +149,8 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
         pollster::block_on(async {
             let mut m = GraphBuilder::new();
-            let a = m.tensor_f32("x", &[1, 3], &[0.1, 0.2, 0.3]);
-            let b = m.tensor_f32("y", &[1, 3], &[3.0, 2.0, 1.0]);
+            let a = m.tensor("x", &[1, 3], vec![0.1, 0.2, 0.3].into());
+            let b = m.tensor("y", &[1, 3], vec![3.0, 2.0, 1.0].into());
             let axb = a.add(&b);
             let sesh = m
                 .session(vec!["result".to_string()], &[axb], 13)

@@ -119,8 +119,8 @@ pub fn load_image_input(
     input_shape: &Shape,
 ) -> Result<ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>, NNXError> {
     if input_shape.rank() == 3 {
-        let mut w = input_shape.dim(1) as usize;
-        let mut h = input_shape.dim(2) as usize;
+        let mut w = input_shape.dim(1);
+        let mut h = input_shape.dim(2);
         if w == 0 {
             w = 224;
         }
@@ -138,8 +138,8 @@ pub fn load_image_input(
             Err(NNXError::InvalidInputShape)
         }
     } else if input_shape.rank() == 4 {
-        let mut w = input_shape.dim(2) as usize;
-        let mut h = input_shape.dim(3) as usize;
+        let mut w = input_shape.dim(2);
+        let mut h = input_shape.dim(3);
         if w == 0 {
             w = 224;
         }
@@ -179,12 +179,12 @@ impl InferenceInput {
                 .get_input_shape(&infer_opt.qa_segment_input)?
                 .ok_or_else(|| NNXError::InputNotFound(infer_opt.qa_segment_input.clone()))?;
 
-            let segment_length = tokens_input_shape.element_count() as usize;
+            let segment_length = tokens_input_shape.element_count();
 
-            if segment_length != mask_input_shape.element_count() as usize {
+            if segment_length != mask_input_shape.element_count() {
                 return Err(NNXError::InvalidInputShape);
             }
-            if segment_length != segment_input_shape.element_count() as usize {
+            if segment_length != segment_input_shape.element_count() {
                 return Err(NNXError::InvalidInputShape);
             }
 
@@ -272,7 +272,7 @@ impl InferenceInput {
 
             let values: Result<Vec<f32>, _> = text.split(',').map(|v| v.parse::<f32>()).collect();
             let mut values = values.map_err(NNXError::InvalidNumber)?;
-            values.resize(raw_input_shape.element_count() as usize, 0.0);
+            values.resize(raw_input_shape.element_count(), 0.0);
             inputs.insert(
                 raw_input_name.clone(),
                 Tensor::F32(Array::from_vec(values).into_dyn()),

@@ -1,7 +1,7 @@
 //! DAG representation of ONNX ops allowing for transformations and optimizations before compilation
-use crate::onnx::{self, ModelProto, NodeProto, TensorProto, ValueInfoProto};
-use crate::utils::{DataTypeError, Shape};
-use std::borrow::Cow;
+use crate::onnx::{self, GraphProto, ModelProto, NodeProto, ValueInfoProto};
+use crate::utils::{to_tensor, DataTypeError, Shape, TensorData};
+use std::borrow::{Borrow, Cow};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ptr;
@@ -98,20 +98,46 @@ impl OperatorDefinition {
 }
 
 #[derive(Clone)]
+pub struct Tensor<'a> {
+    pub(crate) data: TensorData<'a>,
+    pub(crate) dims: Vec<usize>,
+    pub(crate) display_name: String,
+}
+
+impl<'a> Tensor<'a> {
+    pub fn dims(&self) -> &[usize] {
+        &self.dims
+    }
+
+    pub fn shape(&self) -> Shape {
+        Shape::from(self.data.scalar_type(), &self.dims)
+    }
+
+    pub fn display_name(&self) -> &str {
+        self.display_name.borrow()
+    }
+
+    pub fn data(&self) -> &TensorData<'a> {
+        &self.data
+    }
+}
+
+#[derive(Clone)]
 pub enum NodeDefinition<'model> {
     Operator(OperatorDefinition),
-    Tensor(Box<Cow<'model, TensorProto>>),
+    Tensor(Tensor<'model>),
     Input(&'model ValueInfoProto),
     Outputs { names: Vec<String> },
     Missing, // A missing input (optional)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Input<'model> {
     pub source_node: Arc<Node<'model>>,
     pub output_index: usize,
 }
 
+#[derive(Debug)]
 pub struct Node<'model> {
     pub definition: NodeDefinition<'model>,
     pub inputs: Vec<Input<'model>>,
@@ -138,7 +164,7 @@ impl<'m> NodeDefinition<'m> {
             // Nodes are identified by their first output's name, because node names are optional (and "only to be used
             // for diagnostic purposes" according to the ONNX IR specification) whereas output names are required and should be unique.
             NodeDefinition::Operator(op_def) => Cow::from(op_def.get_display_name()),
-            NodeDefinition::Tensor(t) => Cow::from(t.get_name()),
+            NodeDefinition::Tensor(t) => Cow::from(t.display_name()),
             NodeDefinition::Input(i) => Cow::from(i.get_name()),
             NodeDefinition::Outputs { .. } => Cow::from(" "),
             NodeDefinition::Missing => Cow::from(""),
@@ -265,13 +291,15 @@ impl<'model> Node<'model> {
         model: &'model ModelProto,
         outputs: Option<&[String]>,
     ) -> Result<Arc<Node<'model>>, IrError> {
+        let graph: &'model GraphProto = model.get_graph();
+
         // Collect value shapes
         let mut value_shapes: HashMap<&'model str, Shape> = HashMap::new();
-        for vi in model.get_graph().get_value_info() {
+        for vi in graph.get_value_info() {
             value_shapes.insert(vi.get_name(), vi.get_shape()?);
         }
 
-        for vi in model.get_graph().get_output() {
+        for vi in graph.get_output() {
             let output_name = vi.get_name();
             if !output_name.is_empty() {
                 value_shapes.insert(output_name, vi.get_shape()?);
@@ -280,7 +308,7 @@ impl<'model> Node<'model> {
 
         // Sort nodes by output nodes
         let mut node_definitions_by_output = HashMap::<String, Cow<'model, NodeProto>>::new();
-        for node in model.get_graph().get_node().iter() {
+        for node in graph.get_node().iter() {
             for output in node.get_output() {
                 if !output.is_empty() {
                     node_definitions_by_output.insert(output.to_string(), Cow::Borrowed(node));
@@ -291,11 +319,11 @@ impl<'model> Node<'model> {
         let mut nodes_by_output_name = HashMap::new();
 
         // Translate initializers
-        for initializer in model.get_graph().get_initializer().iter() {
+        for initializer in graph.initializer.iter() {
             nodes_by_output_name.insert(
                 initializer.get_name().to_string(),
                 Arc::new(Node::new(
-                    NodeDefinition::Tensor(Box::new(Cow::Borrowed(initializer))),
+                    NodeDefinition::Tensor(to_tensor(initializer)?),
                     vec![],
                 )),
             );
@@ -371,7 +399,7 @@ impl<'model> Debug for NodeDefinition<'model> {
             NodeDefinition::Operator(def) => {
                 write!(f, "op: {} ({})", def.get_display_name(), def.get_op_type())
             }
-            NodeDefinition::Tensor(def) => write!(f, "tensor {}", def.get_name()),
+            NodeDefinition::Tensor(def) => write!(f, "tensor {}", def.display_name()),
             NodeDefinition::Input(def) => write!(f, "input {}", def.get_name()),
             NodeDefinition::Outputs { .. } => write!(f, "outputs"),
             NodeDefinition::Missing => write!(f, "missing (optional)"),

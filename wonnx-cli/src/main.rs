@@ -238,7 +238,10 @@ async fn prepare_command(prepare_opt: PrepareOptions) -> Result<(), NNXError> {
             {
                 Some(input) => {
                     let data_type = input.data_type().map_err(|_| NNXError::InvalidInputShape)?;
-                    let shape = Shape::from(data_type, &new_dims);
+                    let shape = Shape::from(
+                        data_type,
+                        &new_dims.iter().map(|x| *x as usize).collect::<Vec<usize>>(),
+                    );
                     input.set_shape(&shape);
                     log::info!("setting shape of input {input_name} to {shape}");
                 }

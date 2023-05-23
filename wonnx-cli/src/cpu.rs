@@ -86,12 +86,7 @@ impl Inferer for CPUInferer {
                 .unwrap_or_else(|| panic!("input not found with name {}", input_name));
             log::info!("set input fact {} for cpu model", input_index.0,);
 
-            let dims: Vec<usize> = self.input_shapes[input_name]
-                .dims
-                .iter()
-                .map(|x| (*x) as usize)
-                .collect();
-
+            let dims: Vec<usize> = self.input_shapes[input_name].dims.to_vec();
             cpu_inputs.insert(input_index.0, input_tensor.to_tract_tensor(&dims)?);
         }
 

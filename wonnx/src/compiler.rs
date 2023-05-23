@@ -9,12 +9,12 @@ use thiserror::Error;
 
 /// The maximum number of threads that can be spawned in each dimension, according to the WebGPU specification. See
 /// <https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsperdimension>
-pub const MAX_COMPUTE_WORKGROUPS_PER_DIMENSION: u32 = 65535;
+pub const MAX_COMPUTE_WORKGROUPS_PER_DIMENSION: usize = 65535;
 
 /// The maximum workgroup size per dimension (see <https://www.w3.org/TR/webgpu/#dom-supported-limits-maxcomputeworkgroupsizex>)
-pub const MAX_WORKGROUP_SIZE_X: u32 = 256;
-pub const MAX_WORKGROUP_SIZE_Y: u32 = 256;
-// pub const MAX_WORKGROUP_SIZE_Z: u32 = 64;
+pub const MAX_WORKGROUP_SIZE_X: usize = 256;
+pub const MAX_WORKGROUP_SIZE_Y: usize = 256;
+// pub const MAX_WORKGROUP_SIZE_Z: usize = 64;
 
 lazy_static! {
     // Templates for shader source code that we generate for nodes
@@ -142,7 +142,7 @@ lazy_static! {
 
 pub struct CompiledNode {
     pub shader: String,
-    pub threads: (u32, u32, u32),
+    pub threads: (usize, usize, usize),
 }
 
 #[derive(Error, Debug)]
@@ -179,7 +179,7 @@ pub enum CompileError {
     },
 
     #[error("the model exceeds the limit for {0}: {1} > {2}")]
-    ComputeLimitExceeded(String, u32, u32),
+    ComputeLimitExceeded(String, usize, usize),
 
     #[error("cannot determine data type to use: {0} or {1}")]
     TypesDisagree(ScalarType, ScalarType),
@@ -203,7 +203,7 @@ pub enum CompileError {
 struct NodeTemplate {
     scalar_type: ScalarType,
     template: &'static str,
-    threads: (u32, u32, u32),
+    threads: (usize, usize, usize),
 }
 
 /// Returns the data type of the input and output shapes, but error if these types differ or when no input/output was specified
@@ -253,17 +253,17 @@ pub fn compile(
     let input_lengths = input_shapes
         .iter()
         .map(|shape| shape.element_count())
-        .collect::<Vec<u64>>();
+        .collect::<Vec<usize>>();
 
     let output_lengths = output_shapes
         .iter()
         .map(|shape| shape.element_count())
-        .collect::<Vec<u64>>();
+        .collect::<Vec<usize>>();
 
-    let input_chunks: Vec<Vec<u64>> = input_shapes.iter().map(|d| d.chunks()).collect();
-    let output_chunks: Vec<Vec<u64>> = output_shapes.iter().map(|d| d.chunks()).collect();
-    let i_dims: Vec<&Vec<u64>> = input_shapes.iter().map(|s| &s.dims).collect();
-    let o_dims: Vec<&Vec<u64>> = output_shapes.iter().map(|s| &s.dims).collect();
+    let input_chunks: Vec<Vec<usize>> = input_shapes.iter().map(|d| d.chunks()).collect();
+    let output_chunks: Vec<Vec<usize>> = output_shapes.iter().map(|d| d.chunks()).collect();
+    let i_dims: Vec<&Vec<usize>> = input_shapes.iter().map(|s| &s.dims).collect();
+    let o_dims: Vec<&Vec<usize>> = output_shapes.iter().map(|s| &s.dims).collect();
 
     let mut context = Context::new();
     context.insert("i_lens", &input_lengths);
@@ -315,7 +315,7 @@ pub fn compile(
                 .collect();
             let scalar_type = agreed_type(&[input_shapes[0]], output_shapes)?;
 
-            let dims_removed: Vec<i64> = input_shapes[0]
+            let dims_removed: Vec<usize> = input_shapes[0]
                 .dims
                 .iter()
                 .enumerate()
@@ -323,7 +323,7 @@ pub fn compile(
                     if axes.contains(&(idx as i64)) {
                         1
                     } else {
-                        *dim as i64
+                        *dim
                     }
                 })
                 .collect();
@@ -412,7 +412,7 @@ pub fn compile(
 
             let elements_per_index = input_chunks[0][0];
             let scalar_type = agreed_type(&input_shapes[0..1], output_shapes)?;
-            let chunk_type = MultiType::for_size(elements_per_index as usize, scalar_type);
+            let chunk_type = MultiType::for_size(elements_per_index, scalar_type);
             let chunk_size = chunk_type.elements();
 
             // The X dimension represents the indexes
@@ -424,7 +424,7 @@ pub fn compile(
 
             // The Y dimension represents the elements to copy for each index
             let (y_threads, workgroup_size_y) = workgroup_size(
-                ceil(elements_per_index, chunk_size as u64),
+                ceil(elements_per_index, chunk_size),
                 MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
                 MAX_WORKGROUP_SIZE_Y,
             )?;
@@ -498,15 +498,11 @@ pub fn compile(
                 });
             }
 
-            let left_of_axis = input_shapes[0].dims[0..(axis as usize)]
-                .iter()
-                .product::<u64>();
-            let axis_chunk = input_shapes[0].dims[(axis as usize)..]
-                .iter()
-                .product::<u64>();
+            let left_of_axis = input_shapes[0].dims[0..(axis as usize)].iter().product();
+            let axis_chunk: usize = input_shapes[0].dims[(axis as usize)..].iter().product();
             let right_of_axis_chunk = input_shapes[0].dims[((axis + 1) as usize)..]
                 .iter()
-                .product::<u64>();
+                .product();
 
             context.insert("axis_chunk", &axis_chunk);
 
@@ -709,7 +705,7 @@ pub fn compile(
             }
 
             // If w*h is a multiple of 4, we can use vec4 in our shader
-            let elem_type = MultiType::for_size((input_w * input_h) as usize, ScalarType::F32);
+            let elem_type = MultiType::for_size(input_w * input_h, ScalarType::F32);
 
             context.insert("elem_type", &elem_type.wgsl_type_name());
             context.insert("elem_stride", &elem_type.stride());
@@ -719,21 +715,18 @@ pub fn compile(
             context.insert("epsilon", &epsilon);
             context.insert(
                 "batch_size",
-                &ceil(
-                    input_channels * input_w * input_h,
-                    elem_type.elements() as u64,
-                ),
+                &ceil(input_channels * input_w * input_h, elem_type.elements()),
             );
             context.insert(
                 "channel_size",
-                &ceil(input_w * input_h, elem_type.elements() as u64),
+                &ceil(input_w * input_h, elem_type.elements()),
             );
 
             NodeTemplate {
                 scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
                 template: "endomorphism/batchnormalization.wgsl",
                 threads: (
-                    ceil(input_w * input_h, elem_type.elements() as u64) as _,
+                    ceil(input_w * input_h, elem_type.elements()) as _,
                     input_channels as _,
                     input_batches as _,
                 ),
@@ -796,7 +789,7 @@ pub fn compile(
             NodeTemplate {
                 scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "matrix/concat.wgsl",
-                threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
+                threads: (ceil(output_lengths[0], 256), 1, 1),
             }
         }
         op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
@@ -828,7 +821,7 @@ pub fn compile(
             let strides = op_def.get_attribute_value("strides", Some(vec![1, 1]))?;
             let pads = op_def.get_attribute_value("pads", Some(vec![0, 0, 0, 0]))?;
             let count_include_pad = op_def.get_attribute_value("count_include_pad", Some(0))?;
-            let group = op_def.get_attribute_value("group", Some(1))? as u64;
+            let group = op_def.get_attribute_value("group", Some(1))? as usize;
 
             let pads = match auto_pad.as_str() {
                 "NOTSET" => pads.to_vec(),
@@ -903,7 +896,7 @@ pub fn compile(
             context.insert("kernel_length", &(kernel_shape[0] * kernel_shape[1]));
             context.insert(
                 "kernel_channel_len",
-                &((kernel_shape[0] as u64) * (kernel_shape[1] as u64) * channels_per_group),
+                &((kernel_shape[0]) * (kernel_shape[1]) * channels_per_group as i64),
             );
             context.insert("pad", &pads);
             context.insert("count_include_pad", &count_include_pad);
@@ -984,9 +977,9 @@ pub fn compile(
             let mut input_left_shape = input_shapes[0].clone();
             let mut input_right_shape = input_shapes[1].clone();
             let mut output_shape = output_shapes[0].clone();
-            let mut stack_left_stride: u64 = 0;
-            let mut stack_right_stride: u64 = 0;
-            let mut stack_output_stride: u64 = 0;
+            let mut stack_left_stride: usize = 0;
+            let mut stack_right_stride: usize = 0;
+            let mut stack_output_stride: usize = 0;
 
             if op == "MatMul" {
                 // - If either argument is N-D, N > 2, it is treated as a stack of matrices residing in the last two indexes
@@ -1280,7 +1273,7 @@ pub fn compile(
             NodeTemplate {
                 scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
                 template: "matrix/resize.wgsl",
-                threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
+                threads: (ceil(output_lengths[0], 256), 1, 1),
             }
         }
         "Sum" => return Err(CompileError::UnimplementedOp(String::from("Sum"))),
@@ -1291,7 +1284,7 @@ pub fn compile(
             }
             context.insert("axis", &axis);
 
-            let split_chunk = input_shapes[0].dim(axis as usize) as usize / output_shapes.len();
+            let split_chunk = input_shapes[0].dim(axis as usize) / output_shapes.len();
             let default_split = (1..=output_shapes.len())
                 .map(|x| (x * split_chunk) as _)
                 .collect();
@@ -1302,7 +1295,7 @@ pub fn compile(
             NodeTemplate {
                 scalar_type: agreed_type(&input_shapes[0..1], output_shapes)?,
                 template: "matrix/split.wgsl",
-                threads: (ceil(input_lengths[0], 256) as u32, 1, 1),
+                threads: (ceil(input_lengths[0], 256), 1, 1),
             }
         }
         "Pad" => {
@@ -1340,7 +1333,7 @@ pub fn compile(
 
                 pad_info.push(PadInfo {
                     copy_start: begin as _,
-                    end_pad_start: input_shapes[0].dim(axis) + begin as u64 - end as u64,
+                    end_pad_start: input_shapes[0].dim(axis) as u64 + begin as u64 - end as u64,
                 });
             }
             context.insert("pad_info", &pad_info);
@@ -1348,7 +1341,7 @@ pub fn compile(
             NodeTemplate {
                 scalar_type: agreed_type(&input_shapes[0..1], &output_shapes[0..1])?,
                 template: "matrix/pad.wgsl",
-                threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
+                threads: (ceil(output_lengths[0], 256), 1, 1),
             }
         }
         "Transpose" => {
@@ -1367,12 +1360,8 @@ pub fn compile(
 
             let chunks = perms
                 .iter()
-                .map(|p| {
-                    input_shapes[0].dims[((*p as usize) + 1)..]
-                        .iter()
-                        .product::<u64>()
-                })
-                .collect::<Vec<_>>();
+                .map(|p| input_shapes[0].dims[((*p as usize) + 1)..].iter().product())
+                .collect::<Vec<usize>>();
 
             context.insert("permuted_chunks", &chunks);
 
@@ -1438,15 +1427,15 @@ pub fn compile(
 
 /// Determines the appropriate number of threads and workgroup size given a number of times the entry point of the shader should be run
 fn workgroup_size(
-    x: u64,
-    max_threads: u32,
-    max_workgroup_size: u32,
-) -> Result<(u32, u32), CompileError> {
-    let max_x = max_threads as u64;
+    x: usize,
+    max_threads: usize,
+    max_workgroup_size: usize,
+) -> Result<(usize, usize), CompileError> {
+    let max_x = max_threads;
 
     Ok(if x > max_x {
         let workgroup_size = ceil(x, max_x) as _;
-        let threads = ceil(x, workgroup_size as u64) as _;
+        let threads = ceil(x, workgroup_size) as _;
         log::debug!(
             "number of items ({}) exceeds maximum number of threads ({}); adjusting workgroup size={} and threads={} (this will compute {} items)",
             x,
@@ -1474,6 +1463,6 @@ fn workgroup_size(
 
         (threads, workgroup_size)
     } else {
-        (x as u32, 1)
+        (x, 1)
     })
 }

@@ -15,8 +15,7 @@ use wgpu::{Buffer, BufferAsyncError, BufferUsages, CommandEncoder, Device};
 
 use crate::{
     compiler::{compile, CompileError, CompiledNode},
-    ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
-    onnx::TensorProto,
+    ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition, Tensor},
     resource::{self, resize},
     utils::{ceil, DataTypeError, ScalarType, Shape, TensorData, MINIMUM_BUFFER_SIZE_BYTES},
 };
@@ -44,7 +43,7 @@ enum GpuStep {
     Operator {
         pipeline: wgpu::ComputePipeline,
         bind_groups: Vec<wgpu::BindGroup>,
-        threads: (u32, u32, u32),
+        threads: (usize, usize, usize),
         output_tensors: Vec<GpuTensor>,
     },
 
@@ -570,12 +569,9 @@ impl GpuModel {
                 // For tensor (initializer) nodes, we just create a buffer and fill it with the initializer data
                 NodeDefinition::Tensor(tensor_def) => {
                     let tensor_buffer =
-                        Arc::new(tensor_def.buffer(&self.device, outputs_readable)?);
+                        Arc::new(self.tensor_to_buffer(tensor_def, outputs_readable)?);
                     output_tensors.push(GpuTensor {
-                        shape: Shape::from(
-                            ScalarType::from_i32(tensor_def.get_data_type())?,
-                            tensor_def.get_dims(),
-                        ),
+                        shape: tensor_def.shape(),
                         buffer: tensor_buffer.clone(),
                     });
                     GpuStep::Initializer(tensor_buffer)
@@ -669,73 +665,39 @@ impl GpuModel {
 
         Ok(output_data)
     }
-}
 
-trait TensorProtoExtra {
-    fn buffer(&self, device: &wgpu::Device, readable: bool) -> Result<Buffer, GpuError>;
-}
-
-impl TensorProtoExtra for TensorProto {
-    /// Create a GPU buffer containing the data of this initializer
-    fn buffer(&self, device: &wgpu::Device, readable: bool) -> Result<Buffer, GpuError> {
-        let scalar_type = ScalarType::from_i32(self.get_data_type())?;
-        let input_shape = Shape::from(scalar_type, self.get_dims());
-        log::debug!(
-            "creating buffer for tensor {} shape {}",
-            self.get_name(),
-            input_shape
-        );
-
-        match scalar_type {
-            ScalarType::F32 => {
-                let data = self.get_float_data();
-                buffer_with_bytes(
-                    device,
-                    readable,
-                    self.get_name(),
-                    if !data.is_empty() {
-                        bytemuck::cast_slice(data)
-                    } else {
-                        self.get_raw_data()
-                    },
-                )
-            }
-            ScalarType::U8 => {
-                // WGSL doesn't support 8 bit unsigned integers, so we load them as 32 bit ints
-                log::warn!("initializers with uint8 data type are not supported, converting into int32 initializer");
-                let ints: Vec<i32> = self
-                    .get_raw_data()
-                    .iter()
-                    .map(|x| (*x).try_into())
-                    .collect::<Result<Vec<i32>, _>>()
-                    .map_err(|_e| GpuError::OutOfBoundsError)?;
-                let raw_data = bytemuck::cast_slice(&ints);
-                buffer_with_bytes(device, readable, self.get_name(), raw_data)
-            }
-            ScalarType::I64 => {
+    fn tensor_to_buffer(&mut self, tensor: &Tensor, readable: bool) -> Result<Buffer, GpuError> {
+        match tensor.data() {
+            TensorData::F32(data) => buffer_with_bytes(
+                &self.device,
+                readable,
+                tensor.display_name(),
+                bytemuck::cast_slice(data),
+            ),
+            TensorData::I32(data) => buffer_with_bytes(
+                &self.device,
+                readable,
+                tensor.display_name(),
+                bytemuck::cast_slice(data),
+            ),
+            TensorData::I64(data) => {
                 // WGSL doesn't support 64 bit integers, so we load 64 bit tensors as 32 bit ints
                 log::warn!("initializers with int64 data type are not supported, converting into int32 initializer");
-                let ints: Vec<i32> = self
-                    .get_int64_data()
+                let ints: Vec<i32> = data
                     .iter()
                     .map(|x| (*x).try_into())
                     .collect::<Result<Vec<i32>, _>>()
                     .map_err(|_e| GpuError::OutOfBoundsError)?;
-                let raw_data = bytemuck::cast_slice(&ints);
-                buffer_with_bytes(device, readable, self.get_name(), raw_data)
-            }
-            ScalarType::I32 => {
-                let data = self.get_int32_data();
+
                 buffer_with_bytes(
-                    device,
+                    &self.device,
                     readable,
-                    self.get_name(),
-                    if !data.is_empty() {
-                        bytemuck::cast_slice(data)
-                    } else {
-                        self.get_raw_data()
-                    },
+                    tensor.display_name(),
+                    bytemuck::cast_slice(&ints),
                 )
+            }
+            TensorData::U8(data) => {
+                buffer_with_bytes(&self.device, readable, tensor.display_name(), data)
             }
         }
     }
@@ -747,6 +709,7 @@ fn buffer_with_bytes(
     name: &str,
     raw_data: &[u8],
 ) -> Result<Buffer, GpuError> {
+    log::info!("creating buffer: {} {}b", name, raw_data.len());
     let buffer_usage = match readable {
         true => BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         false => BufferUsages::STORAGE,
@@ -890,7 +853,7 @@ impl OperatorDefinition {
         });
 
         // Create 'bind groups' (groups of bound buffers)
-        let number_of_groups = ceil(binding_counter as u64, MAX_BINDINGS_PER_GROUP as u64) as usize;
+        let number_of_groups = ceil(binding_counter, MAX_BINDINGS_PER_GROUP);
         for group_index in 0..number_of_groups {
             let group_range = group_index * MAX_BINDINGS_PER_GROUP
                 ..usize::min(
@@ -992,7 +955,7 @@ impl GpuStep {
                     compute_pass.set_bind_group(index as u32, bind_group, &[]);
                 }
                 let (x, y, z) = *threads;
-                compute_pass.dispatch_workgroups(x, y, z);
+                compute_pass.dispatch_workgroups(x as u32, y as u32, z as u32);
                 Ok(())
             }
         }
@@ -1057,7 +1020,7 @@ impl GpuTensor {
     {
         // The actual buffer may be bigger than what we should return, because buffers have a minimum size in wgpu
         // Fetch the size we should expect so we can chop the buffer to the correct size
-        let output_buffer_size = shape.element_count() as usize;
+        let output_buffer_size = shape.element_count();
         match shape.data_type {
             ScalarType::F32 => TensorData::F32(Cow::Owned(
                 bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec(),

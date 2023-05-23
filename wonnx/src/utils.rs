@@ -3,6 +3,7 @@ use protobuf::ProtobufEnum;
 use protobuf::RepeatedField;
 use serde::Serialize;
 
+use crate::ir::Tensor;
 use crate::onnx;
 use crate::onnx::ModelProto;
 use crate::onnx::OperatorSetIdProto;
@@ -29,15 +30,15 @@ pub(crate) const MINIMUM_BUFFER_SIZE_BYTES: u64 = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shape {
-    pub dims: Vec<u64>,
+    pub dims: Vec<usize>,
     pub data_type: ScalarType,
 }
 
 impl Shape {
-    pub fn from(data_type: ScalarType, dims: &[i64]) -> Shape {
+    pub fn from(data_type: ScalarType, dims: &[usize]) -> Shape {
         Shape {
             data_type,
-            dims: dims.iter().map(|x| *x as u64).collect(),
+            dims: dims.to_vec(),
         }
     }
 
@@ -49,7 +50,7 @@ impl Shape {
         self.dims.len()
     }
 
-    pub fn element_count(&self) -> u64 {
+    pub fn element_count(&self) -> usize {
         self.dims.iter().product()
     }
 
@@ -60,18 +61,18 @@ impl Shape {
             (n + 15) / 16 * 16
         }
 
-        round_to_next_multiple_of_16((self.element_count() as usize) * self.data_type.stride())
+        round_to_next_multiple_of_16(self.element_count() * self.data_type.stride())
     }
 
-    pub fn dim(&self, idx: usize) -> u64 {
+    pub fn dim(&self, idx: usize) -> usize {
         self.dims[idx]
     }
 
-    pub fn chunks(&self) -> Vec<u64> {
+    pub fn chunks(&self) -> Vec<usize> {
         let mut chunk = vec![];
         let ds = &self.dims;
         for i in 1..self.dims.len() {
-            chunk.push(ds[i..].iter().product::<u64>());
+            chunk.push(ds[i..].iter().product());
         }
         chunk.push(1);
         chunk
@@ -85,7 +86,7 @@ impl Shape {
         }
 
         let max_rank = shapes.iter().map(|x| x.rank()).max().unwrap_or(0);
-        let mut shape: Vec<i64> = Vec::with_capacity(max_rank);
+        let mut shape: Vec<usize> = Vec::with_capacity(max_rank);
 
         // Shapes must all have the same data type
         let data_type = shapes[0].data_type;
@@ -108,14 +109,14 @@ impl Shape {
                     wanted_size = dim;
                 }
             }
-            shape.push(wanted_size as i64);
+            shape.push(wanted_size);
         }
 
         shape.reverse();
         Some(Shape::from(data_type, &shape))
     }
 
-    pub(crate) fn left_padded_to(&self, x: u64, rank: usize) -> Shape {
+    pub(crate) fn left_padded_to(&self, x: usize, rank: usize) -> Shape {
         let mut dims = self.dims.clone();
         let current_rank = dims.len();
         dims.resize(rank, x);
@@ -146,6 +147,21 @@ impl<'a> TensorData<'a> {
             TensorData::I64(x) => TensorData::I64(Cow::Owned(x.into_owned())),
             TensorData::U8(x) => TensorData::U8(Cow::Owned(x.into_owned())),
         }
+    }
+
+    pub fn scalar_type(&self) -> ScalarType {
+        match self {
+            TensorData::F32(_) => ScalarType::F32,
+            TensorData::I32(_) => ScalarType::I32,
+            TensorData::I64(_) => ScalarType::I64,
+            TensorData::U8(_) => ScalarType::U8,
+        }
+    }
+}
+
+impl<'a> From<Vec<f32>> for TensorData<'a> {
+    fn from(value: Vec<f32>) -> Self {
+        TensorData::F32(Cow::Owned(value))
     }
 }
 
@@ -420,8 +436,8 @@ impl Display for Shape {
 }
 
 /// Divide a number by the indicated dividend, then round up to the next multiple of the dividend if there is a rest.
-pub(crate) fn ceil(num: u64, div: u64) -> u64 {
-    num / div + (num % div != 0) as u64
+pub(crate) fn ceil(num: usize, div: usize) -> usize {
+    num / div + (num % div != 0) as usize
 }
 
 impl ValueInfoProto {
@@ -441,9 +457,9 @@ impl ValueInfoProto {
                                     x.get_dim_param().to_string(),
                                 ));
                             }
-                            Ok(x.get_dim_value())
+                            Ok(x.get_dim_value() as usize)
                         })
-                        .collect::<Result<Vec<i64>, DataTypeError>>()?
+                        .collect::<Result<Vec<usize>, DataTypeError>>()?
                         .as_slice(),
                 ),
                 onnx::TypeProto_oneof_value::sequence_type(_) => todo!(),
@@ -736,6 +752,59 @@ pub fn get_opset_version(model: &ModelProto) -> Result<Option<i64>, OpsetError> 
     Ok(onnx_opset_version)
 }
 
+pub(crate) fn to_tensor<'model>(
+    proto: &'model TensorProto,
+) -> Result<Tensor<'model>, DataTypeError> {
+    let scalar_type = ScalarType::from_i32(proto.get_data_type())?;
+    let dims = proto
+        .get_dims()
+        .iter()
+        .map(|x| *x as usize)
+        .collect::<Vec<usize>>();
+    log::debug!(
+        "creating tensor for ONNX tensor {} shape {}",
+        proto.get_name(),
+        Shape::from(scalar_type, &dims)
+    );
+
+    let tensor_data: TensorData<'model> = match scalar_type {
+        ScalarType::F32 => {
+            let fd = proto.get_float_data();
+            if fd.is_empty() {
+                let fd: &[f32] = bytemuck::cast_slice(proto.get_raw_data());
+                TensorData::F32(Cow::from(fd))
+            } else {
+                TensorData::F32(Cow::from(fd))
+            }
+        }
+        ScalarType::I32 => {
+            let fd = proto.get_int32_data();
+            if fd.is_empty() {
+                let fd: &[i32] = bytemuck::cast_slice(proto.get_raw_data());
+                TensorData::I32(Cow::from(fd))
+            } else {
+                TensorData::I32(Cow::from(fd))
+            }
+        }
+        ScalarType::I64 => {
+            let fd = proto.get_int64_data();
+            if fd.is_empty() {
+                let fd: &[i64] = bytemuck::cast_slice(proto.get_raw_data());
+                TensorData::I64(Cow::from(fd))
+            } else {
+                TensorData::I64(Cow::from(fd))
+            }
+        }
+        ScalarType::U8 => TensorData::U8(Cow::from(proto.get_raw_data())),
+    };
+
+    Ok(Tensor {
+        data: tensor_data,
+        dims,
+        display_name: proto.get_name().to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::utils::{
@@ -787,7 +856,7 @@ mod tests {
     // Test cases for Shape::multi_broadcast, some inspired by <https://github.com/sonos/tract/blob/68db0209c9ffd1b91dff82884f4ae03b3622dd34/core/src/broadcast.rs#L31>
     #[test]
     pub fn test_multi_broadcast() {
-        fn shape(s: &[i64]) -> Shape {
+        fn shape(s: &[usize]) -> Shape {
             Shape::from(ScalarType::F32, s)
         }
 
