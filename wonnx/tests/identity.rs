@@ -1,5 +1,5 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::utils::{graph, model, node, tensor, OutputTensor};
+use wonnx::utils::{graph, model, node, tensor, TensorData};
 mod common;
 
 #[test]
@@ -82,5 +82,5 @@ fn test_buffer_readability() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["W"], OutputTensor::F32(vec![1.0; 16]));
+    assert_eq!(result["W"], TensorData::F32(vec![1.0; 16].into()));
 }

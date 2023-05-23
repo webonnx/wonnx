@@ -3,8 +3,7 @@ use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::TensorProto_DataType,
     utils::{
-        graph, initializer, initializer_int64, model, node, tensor, tensor_of_type, InputTensor,
-        OutputTensor,
+        graph, initializer, initializer_int64, model, node, tensor, tensor_of_type, TensorData,
     },
 };
 
@@ -32,7 +31,7 @@ fn test_cos() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], OutputTensor::F32(vec![1.0; 16]));
+    assert_eq!(result["Y"], TensorData::F32(vec![1.0; 16].into()));
 }
 
 #[test]
@@ -72,7 +71,7 @@ fn test_integer() {
 
     let data = vec![21i32; n];
     let shape = vec![n as i64];
-    input_data.insert("X".to_string(), InputTensor::I32(data.as_slice().into()));
+    input_data.insert("X".to_string(), TensorData::I32(data.as_slice().into()));
 
     // Model: X -> Add -> Y
     let model = model(graph(
@@ -87,7 +86,7 @@ fn test_integer() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], OutputTensor::I32(vec![42; n]));
+    assert_eq!(result["Y"], TensorData::I32(vec![42; n].into()));
 }
 
 #[test]
@@ -110,11 +109,11 @@ fn test_int64_initializers() {
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let mut input_data: HashMap<String, InputTensor> = HashMap::new();
+    let mut input_data: HashMap<String, TensorData> = HashMap::new();
     input_data.insert("X".to_string(), left.as_slice().into());
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    assert_eq!(result["Z"], OutputTensor::I64(sum))
+    assert_eq!(result["Z"], TensorData::I64(sum.into()))
 }
 
 pub fn assert_eq_vector_weak(xs: &[f32], ys: &[f32]) {
@@ -289,7 +288,7 @@ fn test_sign() {
         .collect();
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], OutputTensor::F32(expected));
+    assert_eq!(result["Y"], TensorData::F32(expected.into()));
 }
 
 #[test]
@@ -309,12 +308,15 @@ fn test_clip() {
     let mut input_data = HashMap::new();
     input_data.insert(
         "X".to_string(),
-        InputTensor::F32([-1.0, 0.0, 1.0, 2.0].as_slice().into()),
+        TensorData::F32([-1.0, 0.0, 1.0, 2.0].as_slice().into()),
     );
 
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], OutputTensor::F32(vec![0.0, 0.0, 1.0, 1.0]));
+    assert_eq!(
+        result["Y"],
+        TensorData::F32(vec![0.0, 0.0, 1.0, 1.0].into())
+    );
 }

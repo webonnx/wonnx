@@ -7,7 +7,7 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, TypeProto_oneof_value, ValueInfoProto,
     },
-    utils::{DataTypeError, InputTensor, ScalarType, Shape},
+    utils::{DataTypeError, ScalarType, Shape, TensorData},
 };
 
 use crate::{
@@ -380,16 +380,16 @@ pub async fn infer_shapes(
                 log::debug!("node '{}' can be folded", node.get_name());
 
                 // Collect constant inputs
-                let inputs: Vec<InputTensor> = node
+                let inputs: Vec<TensorData> = node
                     .input
                     .iter()
                     .map(|input_name| {
                         if let Some(initializer) = initializers.get(input_name) {
-                            InputTensor::try_from(initializer.as_ref())
+                            Ok(TensorData::try_from(initializer.as_ref())?.into_static())
                         } else {
                             // This should only happen when is_known_shape is true. In this case we will not do any GPU inference
                             // and the contents if this tensor don't matter
-                            Ok(InputTensor::I64(Cow::Owned(vec![])))
+                            Ok(TensorData::I64(Cow::Owned(vec![])))
                         }
                     })
                     .collect::<Result<_, _>>()

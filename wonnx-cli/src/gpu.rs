@@ -4,7 +4,7 @@ use wonnx::onnx::ModelProto;
 use wonnx::SessionConfig;
 
 use async_trait::async_trait;
-use wonnx::utils::OutputTensor;
+use wonnx::utils::TensorData;
 
 use crate::types::Inferer;
 use crate::types::NNXError;
@@ -33,14 +33,14 @@ impl Inferer for GPUInferer {
         outputs: &[String],
         inputs: &HashMap<String, crate::Tensor>,
         _model: &ModelProto,
-    ) -> Result<HashMap<String, OutputTensor>, NNXError> {
+    ) -> Result<HashMap<String, TensorData<'static>>, NNXError> {
         let input_refs = inputs
             .iter()
             .map(|(k, v)| (k.clone(), v.input_tensor()))
             .collect();
         let mut result = self.session.run(&input_refs).await.expect("run failed");
 
-        let mut output_tensors = HashMap::<String, OutputTensor>::new();
+        let mut output_tensors = HashMap::<String, TensorData>::new();
 
         for output_name in outputs {
             let result = match result.remove(output_name) {

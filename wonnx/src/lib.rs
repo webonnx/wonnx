@@ -19,7 +19,7 @@ use protobuf::{self, Message, ProtobufError};
 use std::collections::HashMap;
 use std::path::Path;
 use std::result::Result;
-use utils::{get_opset_version, DataTypeError, InputTensor, OpsetError, OutputTensor};
+use utils::{get_opset_version, DataTypeError, OpsetError, TensorData};
 
 use crate::gpu::GpuModel;
 use thiserror::Error;
@@ -172,8 +172,8 @@ impl Session {
     /// Perform inference given the inputs provided and return all the outputs the model was compiled to return.
     pub async fn run<'a>(
         &self,
-        inputs: &HashMap<String, InputTensor<'a>>,
-    ) -> Result<HashMap<String, OutputTensor>, SessionError> {
+        inputs: &HashMap<String, TensorData<'a>>,
+    ) -> Result<HashMap<String, TensorData<'static>>, SessionError> {
         Ok(self.gpu_model.infer(inputs).await?)
     }
 }

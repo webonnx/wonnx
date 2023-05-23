@@ -4,7 +4,7 @@ use crate::{
     ir::{AttributeNotFoundError, Input, Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
     onnx::TensorProto,
     resource::{padding, request_device_queue},
-    utils::{DataTypeError, OutputTensor, ScalarType, Shape},
+    utils::{DataTypeError, ScalarType, Shape, TensorData},
     GpuError,
 };
 use async_recursion::async_recursion;
@@ -160,7 +160,7 @@ impl<'model> Optimizer<'model> {
             .map(|x| *x as i64)
             .collect();
         let dims = vec![values.len() as i64];
-        Ok(TensorProto::from(OutputTensor::I64(values), dims))
+        Ok(TensorProto::from(TensorData::I64(values.into()), dims))
     }
 
     // Takes a node with operator type 'Constant' and returns its output as a tensor
@@ -173,14 +173,14 @@ impl<'model> Optimizer<'model> {
         let mut tp: TensorProto =
             if let Ok(values) = op_def.get_attribute_value::<Vec<f32>>("value_floats", None) {
                 let dims = vec![values.len() as i64];
-                TensorProto::from(OutputTensor::F32(values), dims)
+                TensorProto::from(TensorData::F32(values.into()), dims)
             } else if let Ok(values) = op_def.get_attribute_value::<Vec<i64>>("value_ints", None) {
                 let dims = vec![values.len() as i64];
-                TensorProto::from(OutputTensor::I64(values), dims)
+                TensorProto::from(TensorData::I64(values.into()), dims)
             } else if let Ok(value) = op_def.get_attribute_value::<f32>("value_float", None) {
-                TensorProto::from(OutputTensor::F32(vec![value]), vec![1])
+                TensorProto::from(TensorData::F32(vec![value].into()), vec![1])
             } else if let Ok(value) = op_def.get_attribute_value::<i64>("value_int", None) {
-                TensorProto::from(OutputTensor::I64(vec![value]), vec![1])
+                TensorProto::from(TensorData::I64(vec![value].into()), vec![1])
             } else if let Ok(tp) = op_def.get_attribute_value::<TensorProto>("value", None) {
                 tp
             } else {
@@ -228,7 +228,7 @@ impl<'model> Optimizer<'model> {
         };
 
         Ok(TensorProto::from(
-            OutputTensor::I64(vec![in_element_count]),
+            TensorData::I64(vec![in_element_count].into()),
             vec![1],
         ))
     }
@@ -788,7 +788,7 @@ static PAD_INPUT_NAMES: &[&str] = &["data", "pads", "constant_value"];
 pub fn constant_of_shape_output(
     node: &OperatorDefinition,
     element_count: usize,
-) -> Result<OutputTensor, OptimizerError> {
+) -> Result<TensorData<'static>, OptimizerError> {
     if let Ok(constant_value_tensor) = node.get_attribute_value::<TensorProto>("value", None) {
         match ScalarType::from_i32(constant_value_tensor.get_data_type()).map_err(|_| {
             OptimizerError::Unsupported(format!(
@@ -803,7 +803,7 @@ pub fn constant_of_shape_output(
                         "value tensor for ConstantOfShape is empty".to_string(),
                     ));
                 }
-                Ok(OutputTensor::F32(vec![fd[0]; element_count]))
+                Ok(TensorData::F32(vec![fd[0]; element_count].into()))
             }
             ScalarType::I64 => {
                 let fd = constant_value_tensor.get_int64_data();
@@ -812,7 +812,7 @@ pub fn constant_of_shape_output(
                         "value tensor for ConstantOfShape is empty".to_string(),
                     ));
                 }
-                Ok(OutputTensor::I64(vec![fd[0]; element_count]))
+                Ok(TensorData::I64(vec![fd[0]; element_count].into()))
             }
             ScalarType::I32 => {
                 let fd = constant_value_tensor.get_int32_data();
@@ -821,7 +821,7 @@ pub fn constant_of_shape_output(
                         "value tensor for ConstantOfShape is empty".to_string(),
                     ));
                 }
-                Ok(OutputTensor::I32(vec![fd[0]; element_count]))
+                Ok(TensorData::I32(vec![fd[0]; element_count].into()))
             }
             ScalarType::U8 => {
                 let fd = constant_value_tensor.get_raw_data();
@@ -830,12 +830,12 @@ pub fn constant_of_shape_output(
                         "value tensor for ConstantOfShape is empty".to_string(),
                     ));
                 }
-                Ok(OutputTensor::U8(vec![fd[0]; element_count]))
+                Ok(TensorData::U8(vec![fd[0]; element_count].into()))
             }
         }
     } else {
         // The default value is a zero f32
-        Ok(OutputTensor::F32(vec![0.0; element_count]))
+        Ok(TensorData::F32(vec![0.0; element_count].into()))
     }
 }
 

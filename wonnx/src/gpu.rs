@@ -18,10 +18,7 @@ use crate::{
     ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
     onnx::TensorProto,
     resource::{self, resize},
-    utils::{
-        ceil, DataTypeError, InputTensor, OutputTensor, ScalarType, Shape,
-        MINIMUM_BUFFER_SIZE_BYTES,
-    },
+    utils::{ceil, DataTypeError, ScalarType, Shape, TensorData, MINIMUM_BUFFER_SIZE_BYTES},
 };
 
 /// The maximum number of bindings in a binding group (defined by wgpu)
@@ -635,8 +632,8 @@ impl GpuModel {
     /// Perform inference using this model and the specified inference inputs.
     pub async fn infer<'a>(
         &self,
-        inference_inputs: &HashMap<String, InputTensor<'a>>,
-    ) -> Result<HashMap<String, OutputTensor>, GpuError> {
+        inference_inputs: &HashMap<String, TensorData<'a>>,
+    ) -> Result<HashMap<String, TensorData<'static>>, GpuError> {
         log::info!("encode inference steps");
         let mut encoder = self
             .device
@@ -647,28 +644,27 @@ impl GpuModel {
         log::debug!("submit inference steps");
         self.queue.submit(Some(encoder.finish()));
         log::info!("inference completed");
-        self.read_outputs(inference_inputs).await
+        Ok(self.read_outputs(inference_inputs).await?.to_owned())
     }
 
     /// Reads the relevant buffers for the requested inference outputs
     async fn read_outputs<'a>(
         &self,
-        inference_inputs: &HashMap<String, InputTensor<'a>>,
-    ) -> Result<HashMap<String, OutputTensor>, GpuError> {
-        let mut output_data: HashMap<String, OutputTensor> = HashMap::new();
+        inference_inputs: &HashMap<String, TensorData<'a>>,
+    ) -> Result<HashMap<String, TensorData<'static>>, GpuError> {
+        let mut output_data: HashMap<String, TensorData<'static>> = HashMap::new();
 
         for (output_name, output_source) in &self.inference_outputs {
-            output_data.insert(
-                output_name.to_string(),
-                match output_source {
-                    InferenceOutput::InferenceInput(input_name) => {
-                        (&inference_inputs[input_name]).into()
-                    }
-                    InferenceOutput::Tensor(tensor) => {
-                        tensor.read_to_vec(&self.device, &self.queue).await?
-                    }
-                },
-            );
+            let v: TensorData<'static> = match output_source {
+                InferenceOutput::InferenceInput(input_name) => {
+                    inference_inputs[input_name].clone().into_static()
+                }
+                InferenceOutput::Tensor(tensor) => {
+                    tensor.read_to_vec(&self.device, &self.queue).await?
+                }
+            }
+            .to_owned();
+            output_data.insert(output_name.to_string(), v);
         }
 
         Ok(output_data)
@@ -924,7 +920,7 @@ impl GpuStep {
         &self,
         queue: &wgpu::Queue,
         encoder: &mut CommandEncoder,
-        inputs: &HashMap<String, InputTensor>,
+        inputs: &HashMap<String, TensorData>,
     ) -> Result<(), GpuError> {
         match self {
             GpuStep::None | GpuStep::Forward(_) | GpuStep::Initializer(_) => {
@@ -940,21 +936,21 @@ impl GpuStep {
                 log::debug!("write input data for {}", input_name);
 
                 match input_data {
-                    InputTensor::F32(float_input) => {
+                    TensorData::F32(float_input) => {
                         queue.write_buffer(
                             input_buffer,
                             0,
                             bytemuck::cast_slice(&resize(float_input.to_vec())),
                         );
                     }
-                    InputTensor::I32(int_input) => {
+                    TensorData::I32(int_input) => {
                         queue.write_buffer(
                             input_buffer,
                             0,
                             bytemuck::cast_slice(&resize(int_input.to_vec())),
                         );
                     }
-                    InputTensor::I64(int_input) => {
+                    TensorData::I64(int_input) => {
                         log::warn!("reading int64 input '{input_name}' as int32 (int64 is not supported for calculation but can be used as input as long as values fit in int32)");
                         let int32_input = int_input
                             .iter()
@@ -966,7 +962,7 @@ impl GpuStep {
                             bytemuck::cast_slice(&resize(int32_input)),
                         );
                     }
-                    InputTensor::U8(int_input) => {
+                    TensorData::U8(int_input) => {
                         log::warn!("reading uint8 input as int32 (uint8 is not supported for calculation but can be used as input)");
                         let int32_input = int_input
                             .iter()
@@ -1009,7 +1005,7 @@ impl GpuTensor {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> Result<OutputTensor, GpuError> {
+    ) -> Result<TensorData<'static>, GpuError> {
         let shape = self.shape.clone();
 
         #[cfg(target_arch = "wasm32")]
@@ -1043,18 +1039,19 @@ impl GpuTensor {
             wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
                 // Called on download completed
                 tx.send(match buffer {
-                    Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
+                    Ok(bytes) => Ok(bytes.to_vec()),
                     Err(error) => Err(GpuError::BufferAsyncError(error)),
                 })
                 .unwrap();
             });
             device.poll(wgpu::Maintain::Wait);
             // The callback will have been called by now due to poll(Wait)
-            rx.recv().unwrap()
+            let bytes_vec = rx.recv().unwrap()?;
+            Ok(Self::read_bytes_to_vec(&bytes_vec, shape))
         }
     }
 
-    fn read_bytes_to_vec<A>(output_data: &[A], shape: Shape) -> OutputTensor
+    fn read_bytes_to_vec<A>(output_data: &[A], shape: Shape) -> TensorData<'static>
     where
         A: NoUninit,
     {
@@ -1062,20 +1059,20 @@ impl GpuTensor {
         // Fetch the size we should expect so we can chop the buffer to the correct size
         let output_buffer_size = shape.element_count() as usize;
         match shape.data_type {
-            ScalarType::F32 => {
-                OutputTensor::F32(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
-            }
-            ScalarType::I32 => {
-                OutputTensor::I32(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
-            }
-            ScalarType::U8 => {
-                OutputTensor::U8(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
-            }
+            ScalarType::F32 => TensorData::F32(Cow::Owned(
+                bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec(),
+            )),
+            ScalarType::I32 => TensorData::I32(Cow::Owned(
+                bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec(),
+            )),
+            ScalarType::U8 => TensorData::U8(Cow::Owned(
+                bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec(),
+            )),
             ScalarType::I64 => {
                 log::warn!("reading int64 output as int32 because internally int64 scalars are not supported");
                 let result_ints: Vec<i32> =
                     bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec();
-                OutputTensor::I64(result_ints.iter().map(|i| *i as i64).collect())
+                TensorData::I64(Cow::Owned(result_ints.iter().map(|i| *i as i64).collect()))
             }
         }
     }

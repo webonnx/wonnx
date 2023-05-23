@@ -4,7 +4,7 @@ use std::convert::TryInto;
 use image::{imageops::FilterType, ImageBuffer, Pixel, Rgb};
 use std::path::Path;
 use std::time::Instant;
-use wonnx::utils::OutputTensor;
+use wonnx::utils::TensorData;
 
 // Args Management
 async fn run() {
@@ -22,7 +22,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Option<HashMap<String, OutputTensor>> {
+async fn execute_gpu<'a>() -> Option<HashMap<String, TensorData<'a>>> {
     let mut input_data = HashMap::new();
 
     let image = load_image();

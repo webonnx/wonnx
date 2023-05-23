@@ -142,7 +142,7 @@ impl<'model> Default for GraphBuilder<'model> {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::OutputTensor;
+    use crate::utils::TensorData;
 
     use super::GraphBuilder;
     use std::collections::HashMap;
@@ -160,7 +160,10 @@ mod tests {
                 .await
                 .unwrap();
             let result = sesh.run(&HashMap::new()).await.unwrap();
-            assert_eq!(result["result"], OutputTensor::F32(vec![3.1, 2.2, 1.3]))
+            assert_eq!(
+                result["result"],
+                TensorData::F32(vec![3.1, 2.2, 1.3].into())
+            )
         });
     }
 }

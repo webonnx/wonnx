@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use protobuf::ProtobufEnum;
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{attribute, graph, model, node, tensor, tensor_of_type, OutputTensor},
+    utils::{attribute, graph, model, node, tensor, tensor_of_type, TensorData},
 };
 
 #[test]
@@ -38,6 +38,6 @@ fn test_cast() {
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     assert_eq!(
         result["Y"],
-        OutputTensor::I32(vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5])
+        TensorData::I32(vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5].into())
     );
 }

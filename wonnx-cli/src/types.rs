@@ -4,7 +4,7 @@ use structopt::StructOpt;
 use thiserror::Error;
 use wonnx::{
     onnx::ModelProto,
-    utils::{OpsetError, OutputTensor, Shape, TensorConversionError},
+    utils::{OpsetError, Shape, TensorConversionError, TensorData},
     SessionError, WonnxError,
 };
 use wonnx_preprocessing::{
@@ -296,7 +296,7 @@ pub trait Inferer {
         outputs: &[String],
         inputs: &HashMap<String, Tensor>,
         model: &ModelProto,
-    ) -> Result<HashMap<String, OutputTensor>, NNXError>;
+    ) -> Result<HashMap<String, TensorData<'static>>, NNXError>;
 }
 
 pub struct InferenceInput {

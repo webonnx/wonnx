@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use tract_onnx::prelude::*;
 use wonnx::{
     onnx::ModelProto,
-    utils::{OutputTensor, Shape},
+    utils::{Shape, TensorData},
 };
 
 type RunnableOnnxModel =
@@ -73,7 +73,7 @@ impl Inferer for CPUInferer {
         outputs: &[String],
         inputs: &HashMap<String, crate::Tensor>,
         model: &ModelProto,
-    ) -> Result<HashMap<String, OutputTensor>, NNXError> {
+    ) -> Result<HashMap<String, TensorData<'static>>, NNXError> {
         let mut cpu_inputs: HashMap<usize, tract_onnx::prelude::Tensor> = HashMap::new();
 
         for (input_name, input_tensor) in inputs {
@@ -103,7 +103,7 @@ impl Inferer for CPUInferer {
         let result = self.model.run(cpu_inputs_ordered)?;
         log::debug!("cpu result: {:?}", result);
 
-        let mut output_tensors = HashMap::<String, OutputTensor>::new();
+        let mut output_tensors = HashMap::<String, TensorData>::new();
 
         for output_name in outputs {
             let result_vector = {
@@ -132,7 +132,7 @@ impl Inferer for CPUInferer {
             let av = result_vector.to_array_view()?;
             output_tensors.insert(
                 output_name.clone(),
-                OutputTensor::F32(av.as_slice().unwrap().to_vec()),
+                TensorData::F32(av.as_slice().unwrap().into()).into_static(),
             );
         }
         Ok(output_tensors)

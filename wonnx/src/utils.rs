@@ -129,41 +129,53 @@ impl Shape {
     }
 }
 
-#[derive(Clone)]
-pub enum InputTensor<'a> {
+#[derive(Clone, Serialize, Debug, PartialEq)]
+#[serde(untagged)]
+pub enum TensorData<'a> {
     F32(Cow<'a, [f32]>),
     I32(Cow<'a, [i32]>),
     I64(Cow<'a, [i64]>),
     U8(Cow<'a, [u8]>),
 }
 
-impl<'a> From<&'a [f32]> for InputTensor<'a> {
+impl<'a> TensorData<'a> {
+    pub fn into_static(self) -> TensorData<'static> {
+        match self {
+            TensorData::F32(x) => TensorData::F32(Cow::Owned(x.into_owned())),
+            TensorData::I32(x) => TensorData::I32(Cow::Owned(x.into_owned())),
+            TensorData::I64(x) => TensorData::I64(Cow::Owned(x.into_owned())),
+            TensorData::U8(x) => TensorData::U8(Cow::Owned(x.into_owned())),
+        }
+    }
+}
+
+impl<'a> From<&'a [f32]> for TensorData<'a> {
     fn from(a: &'a [f32]) -> Self {
-        InputTensor::F32(Cow::Borrowed(a))
+        TensorData::F32(Cow::Borrowed(a))
     }
 }
 
-impl<'a> From<&'a [i32]> for InputTensor<'a> {
+impl<'a> From<&'a [i32]> for TensorData<'a> {
     fn from(a: &'a [i32]) -> Self {
-        InputTensor::I32(Cow::Borrowed(a))
+        TensorData::I32(Cow::Borrowed(a))
     }
 }
 
-impl<'a> From<&'a [i64]> for InputTensor<'a> {
+impl<'a> From<&'a [i64]> for TensorData<'a> {
     fn from(a: &'a [i64]) -> Self {
-        InputTensor::I64(Cow::Borrowed(a))
+        TensorData::I64(Cow::Borrowed(a))
     }
 }
 
-impl<'a> TryFrom<&'a TensorProto> for InputTensor<'a> {
+impl<'a> TryFrom<&'a TensorProto> for TensorData<'a> {
     type Error = DataTypeError;
 
     fn try_from(value: &'a TensorProto) -> Result<Self, Self::Error> {
         Ok(match ScalarType::from_i32(value.get_data_type())? {
-            ScalarType::F32 => InputTensor::F32(Cow::Borrowed(value.get_float_data())),
-            ScalarType::I64 => InputTensor::I64(Cow::Borrowed(value.get_int64_data())),
-            ScalarType::I32 => InputTensor::I32(Cow::Borrowed(value.get_int32_data())),
-            ScalarType::U8 => InputTensor::U8(Cow::Borrowed(value.get_raw_data())),
+            ScalarType::F32 => TensorData::F32(Cow::Borrowed(value.get_float_data())),
+            ScalarType::I64 => TensorData::I64(Cow::Borrowed(value.get_int64_data())),
+            ScalarType::I32 => TensorData::I32(Cow::Borrowed(value.get_int32_data())),
+            ScalarType::U8 => TensorData::U8(Cow::Borrowed(value.get_raw_data())),
         })
     }
 }
@@ -177,33 +189,24 @@ pub enum TensorConversionError {
     DataTypeError,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum OutputTensor {
-    F32(Vec<f32>),
-    I32(Vec<i32>),
-    I64(Vec<i64>),
-    U8(Vec<u8>),
-}
-
-impl TryFrom<OutputTensor> for Vec<f32> {
+impl<'a> TryFrom<TensorData<'a>> for Vec<f32> {
     type Error = TensorConversionError;
 
     /// Convert OutputTensor into a `Vec<f32>`, possibly converting integer tensors if the values fit
-    fn try_from(value: OutputTensor) -> Result<Self, Self::Error> {
+    fn try_from(value: TensorData) -> Result<Self, Self::Error> {
         match value {
-            OutputTensor::F32(floats) => Ok(floats),
-            OutputTensor::I32(ints) => ints
-                .into_iter()
-                .map(|i| f32::from_i32(i).ok_or(TensorConversionError::OutOfBoundsError))
+            TensorData::F32(floats) => Ok(floats.to_vec()),
+            TensorData::I32(ints) => ints
+                .iter()
+                .map(|i| f32::from_i32(*i).ok_or(TensorConversionError::OutOfBoundsError))
                 .collect::<Result<_, _>>(),
-            OutputTensor::I64(ints) => ints
-                .into_iter()
-                .map(|i| f32::from_i64(i).ok_or(TensorConversionError::OutOfBoundsError))
+            TensorData::I64(ints) => ints
+                .iter()
+                .map(|i| f32::from_i64(*i).ok_or(TensorConversionError::OutOfBoundsError))
                 .collect::<Result<_, _>>(),
-            OutputTensor::U8(ints) => ints
-                .into_iter()
-                .map(|i| f32::from_u8(i).ok_or(TensorConversionError::OutOfBoundsError))
+            TensorData::U8(ints) => ints
+                .iter()
+                .map(|i| f32::from_u8(*i).ok_or(TensorConversionError::OutOfBoundsError))
                 .collect::<Result<_, _>>(),
         }
     }
@@ -211,49 +214,38 @@ impl TryFrom<OutputTensor> for Vec<f32> {
 
 /// Convert &OutputTensor into an &[f32]. Because we cannot store converted results, this operation does not attempt
 /// to convert the tensor if the values are of a different type
-impl<'a> TryFrom<&'a OutputTensor> for &'a [f32] {
+impl<'a> TryFrom<&'a TensorData<'a>> for &'a [f32] {
     type Error = TensorConversionError;
 
-    fn try_from(value: &'a OutputTensor) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a TensorData) -> Result<Self, Self::Error> {
         match value {
-            OutputTensor::F32(floats) => Ok(floats.as_slice()),
-            OutputTensor::I32(_) | OutputTensor::I64(_) | OutputTensor::U8(_) => {
+            TensorData::F32(floats) => Ok(floats),
+            TensorData::I32(_) | TensorData::I64(_) | TensorData::U8(_) => {
                 Err(TensorConversionError::DataTypeError)
             }
         }
     }
 }
 
-impl<'a> From<&InputTensor<'a>> for OutputTensor {
-    fn from(input: &InputTensor<'a>) -> Self {
-        match input {
-            InputTensor::F32(fs) => OutputTensor::F32(fs.to_vec()),
-            InputTensor::I32(fs) => OutputTensor::I32(fs.to_vec()),
-            InputTensor::I64(fs) => OutputTensor::I64(fs.to_vec()),
-            InputTensor::U8(fs) => OutputTensor::U8(fs.to_vec()),
-        }
-    }
-}
-
 impl TensorProto {
-    pub fn from(value: OutputTensor, dims: Vec<i64>) -> Self {
+    pub fn from(value: TensorData, dims: Vec<i64>) -> Self {
         let mut tensor = TensorProto::new();
         match value {
-            OutputTensor::F32(v) => {
+            TensorData::F32(v) => {
                 tensor.set_data_type(ScalarType::F32.to_datatype().value());
-                tensor.set_float_data(v);
+                tensor.set_float_data(v.to_vec());
             }
-            OutputTensor::I32(v) => {
+            TensorData::I32(v) => {
                 tensor.set_data_type(ScalarType::I32.to_datatype().value());
-                tensor.set_int32_data(v);
+                tensor.set_int32_data(v.to_vec());
             }
-            OutputTensor::I64(v) => {
+            TensorData::I64(v) => {
                 tensor.set_data_type(ScalarType::I64.to_datatype().value());
-                tensor.set_int64_data(v);
+                tensor.set_int64_data(v.to_vec());
             }
-            OutputTensor::U8(v) => {
+            TensorData::U8(v) => {
                 tensor.set_data_type(ScalarType::U8.to_datatype().value());
-                tensor.set_raw_data(v);
+                tensor.set_raw_data(v.to_vec());
             }
         }
         tensor.set_dims(dims);
@@ -747,7 +739,7 @@ pub fn get_opset_version(model: &ModelProto) -> Result<Option<i64>, OpsetError> 
 #[cfg(test)]
 mod tests {
     use crate::utils::{
-        attribute, graph, initializer, model, node, tensor, OutputTensor, ScalarType, Shape,
+        attribute, graph, initializer, model, node, tensor, ScalarType, Shape, TensorData,
     };
 
     #[test]
@@ -788,7 +780,7 @@ mod tests {
 
         assert_eq!(
             result["Y"],
-            OutputTensor::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.])
+            TensorData::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.].into())
         );
     }
 

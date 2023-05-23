@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use wonnx::{
-    utils::{attribute, graph, initializer, model, node, tensor, OutputTensor},
+    utils::{attribute, graph, initializer, model, node, tensor, TensorData},
     SessionError, WonnxError,
 };
 
@@ -11,13 +11,13 @@ async fn run() -> Result<(), WonnxError> {
 
     assert_eq!(
         result,
-        OutputTensor::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.])
+        TensorData::F32(vec![54., 63., 72., 99., 108., 117., 144., 153., 162.].into())
     );
     Ok(())
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<HashMap<String, OutputTensor>, SessionError> {
+async fn execute_gpu() -> Result<HashMap<String, TensorData<'static>>, SessionError> {
     // USER INPUT
     let n = 5;
     let c = 1;
@@ -50,7 +50,7 @@ async fn execute_gpu() -> Result<HashMap<String, OutputTensor>, SessionError> {
         .await
         .expect("Session did not create");
 
-    session.run(&input_data).await
+    Ok(session.run(&input_data).await?.to_owned())
 }
 
 // #[wasm_bindgen_test]

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::AttributeProto,
-    utils::{attribute, graph, model, node, tensor, InputTensor},
+    utils::{attribute, graph, model, node, tensor, TensorData},
 };
 mod common;
 
@@ -14,7 +14,7 @@ fn test_onehot(
     output: &[f32],
     output_shape: &[i64],
 ) {
-    let mut input_data = HashMap::<String, InputTensor>::new();
+    let mut input_data = HashMap::<String, TensorData>::new();
 
     let depth_tensor: &[i32] = &[depth];
     input_data.insert("I".to_string(), indexes.into());

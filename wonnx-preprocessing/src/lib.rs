@@ -1,5 +1,5 @@
 use ndarray::ArrayBase;
-use wonnx::utils::InputTensor;
+use wonnx::utils::TensorData;
 
 pub mod constant_folding;
 pub mod image;
@@ -14,7 +14,7 @@ pub enum Tensor {
 }
 
 impl Tensor {
-    pub fn input_tensor(&self) -> InputTensor {
+    pub fn input_tensor(&self) -> TensorData {
         match self {
             Tensor::F32(a) => a.as_slice().unwrap().into(),
             Tensor::I32(a) => a.as_slice().unwrap().into(),

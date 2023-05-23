@@ -3,7 +3,7 @@ use ndarray::s;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::Path;
-use wonnx::utils::InputTensor;
+use wonnx::utils::TensorData;
 mod common;
 
 #[test]
@@ -19,7 +19,7 @@ fn test_relu() {
     common::assert_eq_vector((&result["y"]).try_into().unwrap(), &[0.0, 1.0]);
 }
 
-fn infer_mnist(image: InputTensor) -> (usize, f32) {
+fn infer_mnist(image: TensorData) -> (usize, f32) {
     let session = pollster::block_on(wonnx::Session::from_path("../data/models/opt-mnist.onnx"))
         .expect("Session did not create");
 
