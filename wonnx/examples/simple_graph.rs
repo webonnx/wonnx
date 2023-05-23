@@ -19,7 +19,6 @@ async fn run() -> Result<(), WonnxError> {
     Ok(())
 }
 
-// Hardware management
 async fn execute_gpu() -> Result<HashMap<String, TensorData<'static>>, SessionError> {
     // Hyperparameters
     let n = 5;
@@ -30,7 +29,6 @@ async fn execute_gpu() -> Result<HashMap<String, TensorData<'static>>, SessionEr
     let data_w: Vec<f32> = (0..m * c * kernel_n * kernel_n).map(|_| 1.0f32).collect();
 
     let session = {
-        use wonnx::builder::*;
         let input_x = input("X", ScalarType::F32, &[1, c, n, n]);
         let weights = tensor("W", &[m, c, 3, 3], data_w.into());
         let conv = input_x.conv(&weights, &[3, 3], &[m, c, 3, 3]);
