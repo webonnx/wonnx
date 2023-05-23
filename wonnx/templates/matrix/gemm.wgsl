@@ -69,10 +69,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		);
 	
 		product = mat_right * mat_left;
-	
-		for(var index_mat: u32 = 0u; index_mat < {{ kernel_size }}u; index_mat = index_mat + 1u) {
-			tmpsum[index_mat] = tmpsum[index_mat] + product[index_mat];
-		}
+		tmpsum = tmpsum + product;
 	}
 	
 	{% if i_lens | length == 3 %}
