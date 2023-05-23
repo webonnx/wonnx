@@ -977,7 +977,7 @@ impl GpuTensor {
         {
             let buffer_slice = self.buffer.slice(..);
             let (sender, receiver) =
-                futures::channel::oneshot::channel::<Result<OutputTensor, GpuError>>();
+                futures::channel::oneshot::channel::<Result<TensorData, GpuError>>();
 
             wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
                 // Called on download completed
