@@ -1,22 +1,138 @@
 //! DAG representation of ops allowing for transformations and optimizations before compilation
-use crate::onnx::{self, GraphProto, ModelProto, NodeProto};
-use crate::onnx_model::to_tensor;
 use crate::tensor::{DataTypeError, Shape, TensorData};
 use std::borrow::{Borrow, Cow};
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ptr;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
-pub type AttributeValue = onnx::AttributeProto;
+#[derive(Clone, Debug)]
+pub enum AttributeValue<'a> {
+    F32(f32),
+    I64(i64),
+    I64s(Cow<'a, [i64]>),
+    F32s(Cow<'a, [f32]>),
+    String(String),
+    Tensor(Tensor<'a>),
+}
+
+impl<'a> AttributeValue<'a> {
+    pub fn into_static(self) -> AttributeValue<'static> {
+        match self {
+            AttributeValue::F32(f) => AttributeValue::F32(f),
+            AttributeValue::I64(f) => AttributeValue::I64(f),
+            AttributeValue::I64s(f) => AttributeValue::I64s(Cow::Owned(f.into_owned())),
+            AttributeValue::F32s(f) => AttributeValue::F32s(Cow::Owned(f.into_owned())),
+            AttributeValue::String(s) => AttributeValue::String(s),
+            AttributeValue::Tensor(t) => AttributeValue::Tensor(t.into_static()),
+        }
+    }
+}
+
+impl TryFrom<&AttributeValue<'_>> for f32 {
+    type Error = ();
+
+    fn try_from(value: &AttributeValue) -> Result<Self, Self::Error> {
+        if let AttributeValue::F32(v) = value {
+            Ok(*v)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<&AttributeValue<'_>> for i64 {
+    type Error = ();
+
+    fn try_from(value: &AttributeValue) -> Result<Self, Self::Error> {
+        if let AttributeValue::I64(v) = value {
+            Ok(*v)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<&AttributeValue<'_>> for Vec<i64> {
+    type Error = ();
+
+    fn try_from(value: &AttributeValue) -> Result<Self, Self::Error> {
+        if let AttributeValue::I64s(v) = value {
+            Ok(v.to_vec())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<&AttributeValue<'_>> for String {
+    type Error = ();
+
+    fn try_from(value: &AttributeValue) -> Result<Self, Self::Error> {
+        if let AttributeValue::String(v) = value {
+            Ok(v.clone())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<&AttributeValue<'_>> for Tensor<'static> {
+    type Error = ();
+
+    fn try_from(value: &AttributeValue) -> Result<Self, Self::Error> {
+        if let AttributeValue::Tensor(v) = value {
+            Ok(v.clone().into_static())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<&AttributeValue<'_>> for Vec<f32> {
+    type Error = ();
+
+    fn try_from(value: &AttributeValue) -> Result<Self, Self::Error> {
+        if let AttributeValue::F32s(v) = value {
+            Ok(v.to_vec())
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl From<i64> for AttributeValue<'_> {
+    fn from(value: i64) -> Self {
+        AttributeValue::I64(value)
+    }
+}
+
+impl From<f32> for AttributeValue<'_> {
+    fn from(value: f32) -> Self {
+        AttributeValue::F32(value)
+    }
+}
+
+impl From<Vec<f32>> for AttributeValue<'_> {
+    fn from(value: Vec<f32>) -> Self {
+        AttributeValue::F32s(Cow::Owned(value))
+    }
+}
+
+impl From<Vec<i64>> for AttributeValue<'_> {
+    fn from(value: Vec<i64>) -> Self {
+        AttributeValue::I64s(Cow::Owned(value))
+    }
+}
 
 #[derive(Clone)]
 pub struct OperatorDefinition {
-    op_type: String,
-    attributes: HashMap<String, AttributeValue>,
-    output_shapes: Vec<Shape>,
-    display_name: String,
+    pub(crate) op_type: String,
+    pub(crate) attributes: HashMap<String, AttributeValue<'static>>,
+    pub(crate) output_shapes: Vec<Shape>,
+    pub(crate) display_name: String,
 }
 
 #[derive(Error, Debug)]
@@ -40,21 +156,6 @@ impl OperatorDefinition {
         }
     }
 
-    pub fn from(node: &NodeProto, output_shapes: Vec<Shape>) -> OperatorDefinition {
-        assert_eq!(node.get_output().len(), output_shapes.len());
-        let mut attributes = HashMap::new();
-        for attr in node.get_attribute() {
-            attributes.insert(attr.get_name().to_string(), attr.clone());
-        }
-
-        OperatorDefinition {
-            op_type: node.get_op_type().to_string(),
-            attributes,
-            output_shapes,
-            display_name: node.get_output()[0].to_string(),
-        }
-    }
-
     pub fn output_shapes(&self) -> &[Shape] {
         &self.output_shapes
     }
@@ -69,7 +170,7 @@ impl OperatorDefinition {
         }
     }
 
-    pub fn set_attribute(&mut self, name: &str, inputs: impl Into<AttributeValue>) {
+    pub fn set_attribute(&mut self, name: &str, inputs: impl Into<AttributeValue<'static>>) {
         let attribute: AttributeValue = inputs.into();
         self.attributes.insert(name.to_string(), attribute);
     }
@@ -82,13 +183,23 @@ impl OperatorDefinition {
         &self.op_type
     }
 
-    pub fn get_attribute_value<'a, T: From<&'a AttributeValue>>(
+    pub fn get_attribute_value<'a, T>(
         &'a self,
         attribute: &str,
         default: Option<T>,
-    ) -> Result<T, AttributeNotFoundError> {
+    ) -> Result<T, AttributeNotFoundError>
+    where
+        T: TryFrom<&'a AttributeValue<'a>>,
+    {
         match (self.attributes.get(attribute), default) {
-            (Some(attribute_value), _) => Ok(attribute_value.into()),
+            (Some(attribute_value), _) => {
+                Ok(
+                    T::try_from(attribute_value).map_err(|_| AttributeNotFoundError {
+                        attribute: attribute.to_string(),
+                        node_name: self.get_display_name().to_string(),
+                    })?,
+                )
+            }
             (None, Some(default_value)) => Ok(default_value),
             (None, None) => Err(AttributeNotFoundError {
                 attribute: attribute.to_string(),
@@ -98,7 +209,7 @@ impl OperatorDefinition {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Tensor<'a> {
     pub(crate) data: TensorData<'a>,
     pub(crate) dims: Vec<usize>,
@@ -108,6 +219,14 @@ pub struct Tensor<'a> {
 impl<'a> Tensor<'a> {
     pub fn dims(&self) -> &[usize] {
         &self.dims
+    }
+
+    pub fn into_static(self) -> Tensor<'static> {
+        Tensor {
+            data: self.data.into_static(),
+            dims: self.dims,
+            display_name: self.display_name,
+        }
     }
 
     pub fn shape(&self) -> Shape {
@@ -196,207 +315,6 @@ impl<'model> Node<'model> {
 
     pub fn definition(&self) -> &NodeDefinition<'model> {
         &self.definition
-    }
-
-    /// Construct part of the intermediate representation tree for the indicated node.
-    pub fn from_node<'a>(
-        node: Cow<'model, NodeProto>,
-        value_shapes: &HashMap<&'model str, Shape>,
-        node_definitions_by_output: &'a HashMap<String, Cow<'model, NodeProto>>,
-        nodes_by_output_names: &mut HashMap<String, Arc<Node<'model>>>,
-    ) -> Result<Arc<Node<'model>>, IrError> {
-        for output_name in node.get_output() {
-            if nodes_by_output_names.contains_key(output_name) {
-                let n = nodes_by_output_names.get(output_name).unwrap();
-                return Ok(n.clone());
-            }
-        }
-
-        let inputs: Result<Vec<Input<'model>>, IrError> = node
-            .get_input()
-            .iter()
-            .map(|input_name: &String| {
-                let my_input_name = input_name.clone();
-
-                // An empty input name signifies missing
-                if input_name.is_empty() {
-                    return Ok(Input {
-                        source_node: Arc::new(Node::new(NodeDefinition::Missing, vec![])),
-                        output_index: 0,
-                    });
-                }
-
-                Ok(match node_definitions_by_output.get(&my_input_name) {
-                    Some(source_node_proto) => {
-                        // The source is another op - continue translating that node
-                        Input {
-                            source_node: Node::from_node(
-                                source_node_proto.clone(),
-                                value_shapes,
-                                node_definitions_by_output,
-                                nodes_by_output_names,
-                            )?,
-                            output_index: source_node_proto
-                                .get_output()
-                                .iter()
-                                .position(|s| s == input_name)
-                                .ok_or_else(|| {
-                                    IrError::OutputNodeNotFound(input_name.to_string())
-                                })?,
-                        }
-                    }
-                    None => {
-                        Input {
-                            output_index: 0,
-                            // Did we already translate this node?
-                            source_node: match nodes_by_output_names.get(input_name) {
-                                Some(node) => node.clone(),
-                                None => {
-                                    return Err(IrError::InputNodeNotFound {
-                                        target_node_name: node.get_name().to_string(),
-                                        input_name: input_name.clone(),
-                                    })
-                                }
-                            },
-                        }
-                    }
-                })
-            })
-            .collect();
-
-        // Obtain output shapes
-        let mut output_shapes: Vec<Shape> = Vec::with_capacity(node.get_output().len());
-        for output_name in node.get_output() {
-            if !value_shapes.contains_key(output_name.as_str()) {
-                return Err(IrError::OutputNodeNotFound(output_name.to_string()));
-            }
-
-            output_shapes.push(value_shapes[&output_name.as_str()].clone());
-        }
-
-        let translated = Arc::new(Node {
-            definition: NodeDefinition::Operator(OperatorDefinition::from(&node, output_shapes)),
-            inputs: inputs?,
-        });
-
-        // Register the translated node by all of its output names
-        for output_name in node.get_output() {
-            nodes_by_output_names.insert(output_name.clone(), translated.clone());
-        }
-
-        Ok(translated)
-    }
-
-    /// Construct an intermediate representation graph for calculating the output with the specified name.
-    pub fn from_model(
-        model: &'model ModelProto,
-        outputs: Option<&[String]>,
-    ) -> Result<Arc<Node<'model>>, IrError> {
-        let graph: &'model GraphProto = model.get_graph();
-
-        // Collect value shapes
-        let mut value_shapes: HashMap<&'model str, Shape> = HashMap::new();
-        for vi in graph.get_value_info() {
-            value_shapes.insert(vi.get_name(), vi.get_shape()?);
-        }
-
-        for vi in graph.get_output() {
-            let output_name = vi.get_name();
-            if !output_name.is_empty() {
-                value_shapes.insert(output_name, vi.get_shape()?);
-            }
-        }
-
-        // Sort nodes by output nodes
-        let mut node_definitions_by_output = HashMap::<String, Cow<'model, NodeProto>>::new();
-        for node in graph.get_node().iter() {
-            for output in node.get_output() {
-                if !output.is_empty() {
-                    node_definitions_by_output.insert(output.to_string(), Cow::Borrowed(node));
-                }
-            }
-        }
-
-        let mut nodes_by_output_name = HashMap::new();
-
-        // Translate initializers
-        for initializer in graph.initializer.iter() {
-            nodes_by_output_name.insert(
-                initializer.get_name().to_string(),
-                Arc::new(Node::new(
-                    NodeDefinition::Tensor(to_tensor(initializer)?),
-                    vec![],
-                )),
-            );
-        }
-
-        // Translate inputs
-        for input in model.get_graph().get_input().iter() {
-            if !nodes_by_output_name.contains_key(input.get_name()) {
-                nodes_by_output_name.insert(
-                    input.get_name().to_string(),
-                    Arc::new(Node::new(
-                        NodeDefinition::Input {
-                            name: input.get_name().to_string(),
-                            shape: input.get_shape()?,
-                        },
-                        vec![],
-                    )),
-                );
-            } else {
-                log::warn!(
-                    "Skipping input definition {}: already defined",
-                    input.get_name()
-                );
-            }
-        }
-
-        let output_names: Vec<String> = match outputs {
-            Some(outputs) => outputs.to_vec(),
-            None => model
-                .get_graph()
-                .get_output()
-                .iter()
-                .map(|x| x.get_name().to_string())
-                .collect(),
-        };
-
-        let output_nodes: Result<Vec<Input<'model>>, IrError> = output_names
-            .iter()
-            .map(|output_name| {
-                let output_node = model
-                    .get_graph()
-                    .get_node()
-                    .iter()
-                    .find(|x| -> bool { x.get_output().contains(output_name) })
-                    .ok_or_else(|| IrError::OutputNodeNotFound(output_name.clone()))?;
-
-                let source_node = Node::<'model>::from_node(
-                    Cow::Borrowed(output_node),
-                    &value_shapes,
-                    &node_definitions_by_output,
-                    &mut nodes_by_output_name,
-                )?;
-
-                let output_index = output_node
-                    .get_output()
-                    .iter()
-                    .position(|s| s == output_name)
-                    .ok_or_else(|| IrError::OutputNodeNotFound(output_name.clone()))?;
-
-                Ok(Input {
-                    source_node,
-                    output_index,
-                })
-            })
-            .collect();
-
-        Ok(Arc::new(Node {
-            definition: NodeDefinition::Outputs {
-                names: output_names,
-            },
-            inputs: output_nodes?,
-        }))
     }
 }
 
