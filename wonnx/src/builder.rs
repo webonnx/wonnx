@@ -2,16 +2,14 @@ use crate::{
     gpu::GpuModel,
     ir::{Input, Node, NodeDefinition, OperatorDefinition, Tensor},
     optimizer::Optimizer,
-    resource,
-    utils::{Shape, TensorData},
-    Session, SessionError,
+    resource, Session,
 };
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
-pub struct GraphBuilder<'model> {
-    _d: PhantomData<&'model ()>,
-}
+pub use crate::utils::{ScalarType, Shape, TensorData};
+pub use crate::{SessionError, WonnxError};
 
+#[derive(Clone)]
 pub struct TensorRef<'model> {
     node: Arc<Node<'model>>,
     output_index: usize,
@@ -56,6 +54,27 @@ impl<'model> TensorRef<'model> {
         }
     }
 
+    pub fn conv(&self, weights: &Self, kernel_shape: &[usize], output_dims: &[usize]) -> Self {
+        let output_shape = Shape::from(self.output_shape.data_type, output_dims);
+        let mut op = OperatorDefinition::new(
+            "Conv",
+            vec![output_shape.clone()],
+            format!("{}_conv", self.node.definition.get_display_name()),
+        );
+        op.set_attribute(
+            "kernel_shape",
+            kernel_shape.iter().map(|x| *x as i64).collect::<Vec<i64>>(),
+        );
+        TensorRef {
+            node: Arc::new(Node::new(
+                NodeDefinition::Operator(op),
+                vec![self.into(), weights.into()],
+            )),
+            output_index: 0,
+            output_shape,
+        }
+    }
+
     fn binary_op(&self, rhs: &Self, op_type: &str, output_shape: Shape) -> Self {
         let def = NodeDefinition::Operator(OperatorDefinition::new(
             op_type,
@@ -76,100 +95,89 @@ impl<'model> TensorRef<'model> {
     }
 }
 
-impl<'model> GraphBuilder<'model> {
-    pub fn new() -> GraphBuilder<'model> {
-        GraphBuilder {
-            _d: PhantomData::default(),
-        }
-    }
-
-    pub fn input<S: ToString>(&mut self, name: S, shape: Shape) -> TensorRef<'model> {
-        TensorRef {
-            node: Arc::new(Node {
-                inputs: vec![],
-                definition: NodeDefinition::Input {
-                    name: name.to_string(),
-                    shape: shape.clone(),
-                },
-            }),
-            output_index: 0,
-            output_shape: shape,
-        }
-    }
-
-    pub fn tensor<S: ToString>(
-        &mut self,
-        name: S,
-        dims: &[usize],
-        data: TensorData<'model>,
-    ) -> TensorRef<'model> {
-        let output_shape = Shape::from(data.scalar_type(), dims);
-        TensorRef {
-            node: Arc::new(Node {
-                inputs: vec![],
-                definition: NodeDefinition::Tensor(Tensor {
-                    data,
-                    dims: dims.to_vec(),
-                    display_name: name.to_string(),
-                }),
-            }),
-            output_index: 0,
-            output_shape,
-        }
-    }
-
-    pub async fn session(
-        &self,
-        output_names: Vec<String>,
-        outputs: &[TensorRef<'model>],
-        onnx_opset_version: i64,
-    ) -> Result<Session, SessionError> {
-        let outputs = Arc::new(Node::new(
-            NodeDefinition::Outputs {
-                names: output_names,
+pub fn input<'model, S: ToString>(
+    name: S,
+    scalar_type: ScalarType,
+    dims: &[usize],
+) -> TensorRef<'model> {
+    let shape = Shape::from(scalar_type, dims);
+    TensorRef {
+        node: Arc::new(Node {
+            inputs: vec![],
+            definition: NodeDefinition::Input {
+                name: name.to_string(),
+                shape: shape.clone(),
             },
-            outputs
-                .iter()
-                .map(|x| Input {
-                    source_node: x.node.clone(),
-                    output_index: x.output_index,
-                })
-                .collect(),
-        ));
-
-        let (device, queue) = resource::request_device_queue().await;
-        let mut optimizer = Optimizer::new(onnx_opset_version);
-        let ir = optimizer.optimize(outputs).await?;
-        let gpu_model = GpuModel::from(ir, device, queue, onnx_opset_version)?;
-        Ok(Session { gpu_model })
+        }),
+        output_index: 0,
+        output_shape: shape,
     }
 }
 
-impl<'model> Default for GraphBuilder<'model> {
-    fn default() -> Self {
-        Self::new()
+pub fn tensor<'model, S: ToString>(
+    name: S,
+    dims: &[usize],
+    data: TensorData<'model>,
+) -> TensorRef<'model> {
+    let output_shape = Shape::from(data.scalar_type(), dims);
+    TensorRef {
+        node: Arc::new(Node {
+            inputs: vec![],
+            definition: NodeDefinition::Tensor(Tensor {
+                data,
+                dims: dims.to_vec(),
+                display_name: name.to_string(),
+            }),
+        }),
+        output_index: 0,
+        output_shape,
     }
+}
+
+/// Start an inference session for calculating the outputs provided. The names will be used as keys in the resulting hashmap
+pub async fn session_for_outputs<'model, S: ToString>(
+    output_names: &[S],
+    outputs: &[TensorRef<'model>],
+    onnx_opset_version: i64,
+) -> Result<Session, SessionError> {
+    let output_names = output_names.iter().map(|x| x.to_string()).collect();
+
+    let outputs = Arc::new(Node::new(
+        NodeDefinition::Outputs {
+            names: output_names,
+        },
+        outputs
+            .iter()
+            .map(|x| Input {
+                source_node: x.node.clone(),
+                output_index: x.output_index,
+            })
+            .collect(),
+    ));
+
+    let (device, queue) = resource::request_device_queue().await;
+    let mut optimizer = Optimizer::new(onnx_opset_version);
+    let ir = optimizer.optimize(outputs).await?;
+    let gpu_model = GpuModel::from(ir, device, queue, onnx_opset_version)?;
+    Ok(Session { gpu_model })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::TensorData;
-
-    use super::GraphBuilder;
+    use crate::{
+        builder::{session_for_outputs, tensor},
+        utils::TensorData,
+    };
     use std::collections::HashMap;
 
     #[test]
     pub fn test_builder() {
         let _ = env_logger::builder().is_test(true).try_init();
         pollster::block_on(async {
-            let mut m = GraphBuilder::new();
-            let a = m.tensor("x", &[1, 3], vec![0.1, 0.2, 0.3].into());
-            let b = m.tensor("y", &[1, 3], vec![3.0, 2.0, 1.0].into());
+            let a = tensor("x", &[1, 3], vec![0.1, 0.2, 0.3].into());
+            let b = tensor("y", &[1, 3], vec![3.0, 2.0, 1.0].into());
             let axb = a.add(&b);
-            let sesh = m
-                .session(vec!["result".to_string()], &[axb], 13)
-                .await
-                .unwrap();
+            let sesh = session_for_outputs(&["result"], &[axb], 13).await.unwrap();
             let result = sesh.run(&HashMap::new()).await.unwrap();
             assert_eq!(
                 result["result"],
