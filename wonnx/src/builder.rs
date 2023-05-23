@@ -83,6 +83,20 @@ impl<'model> GraphBuilder<'model> {
         }
     }
 
+    pub fn input<S: ToString>(&mut self, name: S, shape: Shape) -> TensorRef<'model> {
+        TensorRef {
+            node: Arc::new(Node {
+                inputs: vec![],
+                definition: NodeDefinition::Input {
+                    name: name.to_string(),
+                    shape: shape.clone(),
+                },
+            }),
+            output_index: 0,
+            output_shape: shape,
+        }
+    }
+
     pub fn tensor<S: ToString>(
         &mut self,
         name: S,

@@ -88,7 +88,7 @@ impl<'model> Optimizer<'model> {
                 }
             }
             NodeDefinition::Tensor(_) => Ok(None), // already constantized
-            NodeDefinition::Input(_) | NodeDefinition::Missing => unreachable!(),
+            NodeDefinition::Input { .. } | NodeDefinition::Missing => unreachable!(),
             NodeDefinition::Outputs { .. } => Ok(None), // all the outputs themselves are already constant, so nothing to do
         }
     }
@@ -111,7 +111,7 @@ impl<'model> Optimizer<'model> {
         let input = &node.inputs[0];
         let in_node = &input.source_node.definition;
         let in_shape = match in_node {
-            NodeDefinition::Input(input) => input.get_shape()?,
+            NodeDefinition::Input { shape, .. } => shape.clone(),
             NodeDefinition::Operator(input_op_def) => {
                 input_op_def.output_shapes()[input.output_index].clone()
             }
@@ -227,7 +227,7 @@ impl<'model> Optimizer<'model> {
         let input = &node.inputs[0];
         let in_node = &input.source_node.definition;
         let in_element_count: i64 = match in_node {
-            NodeDefinition::Input(input) => input.get_shape()?.element_count() as i64,
+            NodeDefinition::Input { shape, .. } => shape.element_count() as i64,
             NodeDefinition::Operator(input_op_def) => {
                 input_op_def.output_shapes()[input.output_index].element_count() as i64
             }
@@ -716,7 +716,7 @@ impl<'model> Optimizer<'model> {
                     })),
                 }
             }
-            NodeDefinition::Tensor(..) | NodeDefinition::Input(..) => {
+            NodeDefinition::Tensor(..) | NodeDefinition::Input { .. } => {
                 assert!(
                     new_inputs.is_empty(),
                     "non-operator node cannot have inputs"

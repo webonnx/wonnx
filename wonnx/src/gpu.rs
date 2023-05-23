@@ -351,8 +351,8 @@ impl GpuModel {
                             let tensor = outputs[input.output_index].clone();
                             InferenceOutput::Tensor(tensor)
                         }
-                        NodeDefinition::Input(proto) => {
-                            InferenceOutput::InferenceInput(proto.get_name().to_string())
+                        NodeDefinition::Input { name, .. } => {
+                            InferenceOutput::InferenceInput(name.clone())
                         }
                         NodeDefinition::Missing => {
                             unimplemented!("missing input as output");
@@ -577,37 +577,39 @@ impl GpuModel {
                     GpuStep::Initializer(tensor_buffer)
                 }
                 // For inputs we create an empty buffer that can be used at inference time to supply input data
-                NodeDefinition::Input(input_def) => {
+                NodeDefinition::Input {
+                    name: input_name,
+                    shape: input_shape,
+                } => {
                     if outputs_readable {
                         log::warn!(
                             "it looks like you will be reading back inference input '{}' as output",
-                            input_def.get_name()
+                            input_name
                         );
                     }
 
-                    let input_shape = input_def.get_shape()?;
                     let buffer_size_aligned = input_shape.buffer_bytes_aligned();
                     log::debug!(
                         "creating input buffer for {} shape {} size {}",
-                        input_def.get_name(),
+                        input_name,
                         input_shape,
                         buffer_size_aligned
                     );
                     let input_buffer = Arc::new(resource::buffer(
                         &self.device,
                         input_shape.buffer_bytes_aligned(),
-                        input_def.get_name(),
+                        input_name,
                         // Usage is not COPY_SRC/MAP_READ even when outputs_readable is true; we'll deal with the special
                         // case of reading back inputs as outputs separately.
                         BufferUsages::STORAGE | BufferUsages::COPY_DST,
                     ));
 
                     output_tensors.push(GpuTensor {
-                        shape: input_shape,
+                        shape: input_shape.clone(),
                         buffer: input_buffer.clone(),
                     });
 
-                    GpuStep::Input(input_def.get_name().to_string(), input_buffer)
+                    GpuStep::Input(input_name.clone(), input_buffer)
                 }
                 NodeDefinition::Outputs { .. } | NodeDefinition::Missing => {
                     // Nothing to sequence

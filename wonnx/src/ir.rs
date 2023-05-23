@@ -1,5 +1,5 @@
 //! DAG representation of ONNX ops allowing for transformations and optimizations before compilation
-use crate::onnx::{self, GraphProto, ModelProto, NodeProto, ValueInfoProto};
+use crate::onnx::{self, GraphProto, ModelProto, NodeProto};
 use crate::utils::{to_tensor, DataTypeError, Shape, TensorData};
 use std::borrow::{Borrow, Cow};
 use std::fmt::Debug;
@@ -126,7 +126,7 @@ impl<'a> Tensor<'a> {
 pub enum NodeDefinition<'model> {
     Operator(OperatorDefinition),
     Tensor(Tensor<'model>),
-    Input(&'model ValueInfoProto),
+    Input { name: String, shape: Shape },
     Outputs { names: Vec<String> },
     Missing, // A missing input (optional)
 }
@@ -165,7 +165,7 @@ impl<'m> NodeDefinition<'m> {
             // for diagnostic purposes" according to the ONNX IR specification) whereas output names are required and should be unique.
             NodeDefinition::Operator(op_def) => Cow::from(op_def.get_display_name()),
             NodeDefinition::Tensor(t) => Cow::from(t.display_name()),
-            NodeDefinition::Input(i) => Cow::from(i.get_name()),
+            NodeDefinition::Input { name, .. } => Cow::from(name),
             NodeDefinition::Outputs { .. } => Cow::from(" "),
             NodeDefinition::Missing => Cow::from(""),
         }
@@ -183,7 +183,7 @@ impl<'model> Node<'model> {
     pub fn is_dynamic(&self) -> bool {
         matches!(
             self.definition,
-            NodeDefinition::Operator(..) | NodeDefinition::Input(..)
+            NodeDefinition::Operator(..) | NodeDefinition::Input { .. }
         )
     }
 
@@ -334,7 +334,13 @@ impl<'model> Node<'model> {
             if !nodes_by_output_name.contains_key(input.get_name()) {
                 nodes_by_output_name.insert(
                     input.get_name().to_string(),
-                    Arc::new(Node::new(NodeDefinition::Input(input), vec![])),
+                    Arc::new(Node::new(
+                        NodeDefinition::Input {
+                            name: input.get_name().to_string(),
+                            shape: input.get_shape()?,
+                        },
+                        vec![],
+                    )),
                 );
             } else {
                 log::warn!(
@@ -400,7 +406,7 @@ impl<'model> Debug for NodeDefinition<'model> {
                 write!(f, "op: {} ({})", def.get_display_name(), def.get_op_type())
             }
             NodeDefinition::Tensor(def) => write!(f, "tensor {}", def.display_name()),
-            NodeDefinition::Input(def) => write!(f, "input {}", def.get_name()),
+            NodeDefinition::Input { name, .. } => write!(f, "input {}", name),
             NodeDefinition::Outputs { .. } => write!(f, "outputs"),
             NodeDefinition::Missing => write!(f, "missing (optional)"),
         }
