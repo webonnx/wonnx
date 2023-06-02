@@ -447,8 +447,31 @@ pub fn compile(
 
         "Slice" => {
             // TODO @ Raphael
+            // Goal: Implementing slice in version 11:
+            // https://onnx.ai/onnx/operators/onnx__Slice.html#slice-11
+            // 1. Get attributes out of node.
+            // 2. Create input and output buffer.
+            // 3. Provide attributes to compute shader.
+            // 4. Call compute shader over output.
+            // 5. Fill output in compute shader.
 
-            // Copied from Gather.
+            println!("Slice by Raphael");
+            println!("op_type: {:?}", &node.get_op_type());
+            println!("opset_version: {:?}", &opset_version);
+
+            // Get attributes from node.
+            let starts = node.get_attribute_value("starts", Some(vec![0]))?;
+            let ends = node.get_attribute_value("ends", Some(vec![0]))?;
+            let axes = node.get_attribute_value("axes", Some(vec![0]))?;
+            let steps = node.get_attribute_value("steps", Some(vec![1]))?;
+
+            // Print attributes.
+            println!("starts: {:?}", &starts);
+            println!("ends: {:?}", &ends);
+            println!("axes: {:?}", &axes);
+            println!("steps: {:?}", &steps);
+
+            // Copied from Gather to avoid compilation error.
             // Input 0 is data, input 1 is indices
             // Which axis to gather on. Negative value means counting dimensions from the back. Accepted range is [-r, r-1] where r = rank(data).
             // Default is 0. See https://github.com/onnx/onnx/blob/main/docs/Operators.md#attributes-25
@@ -484,12 +507,12 @@ pub fn compile(
             context.insert("workgroup_size_x", &workgroup_size_x);
             context.insert("workgroup_size_y", &workgroup_size_y);
 
-
             NodeTemplate {
                 scalar_type,
                 template: "endomorphism/slice.wgsl",
                 threads: (x_threads, y_threads, 1),
             }
+            // Above to be removed / replaced.
         }
 
         "Cast" => {
