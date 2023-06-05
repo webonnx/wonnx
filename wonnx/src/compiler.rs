@@ -449,27 +449,36 @@ pub fn compile(
             // TODO @ Raphael
             // Goal: Implementing slice in version 11:
             // https://onnx.ai/onnx/operators/onnx__Slice.html#slice-11
-            // 1. Get attributes out of node.
-            // 2. Create input and output buffer.
+            // 1. Create input buffer.
+            // 2. Create output buffer.
             // 3. Provide attributes to compute shader.
             // 4. Call compute shader over output.
             // 5. Fill output in compute shader.
 
-            println!("Slice by Raphael");
-            println!("op_type: {:?}", &node.get_op_type());
-            println!("opset_version: {:?}", &opset_version);
+            // There must be at least starts and ends defined in the inputs
+            let input_count = input_lengths.len();
+            if input_count < 3 {
+                return Err(CompileError::InvalidInputCount {
+                    expected: 3,
+                    actual: input_count,
+                });
+            }
 
-            // Get attributes from node.
-            let starts = node.get_attribute_value("starts", Some(vec![0]))?;
-            let ends = node.get_attribute_value("ends", Some(vec![0]))?;
-            let axes = node.get_attribute_value("axes", Some(vec![0]))?;
-            let steps = node.get_attribute_value("steps", Some(vec![1]))?;
+            // Print inputs.
+            println!("starts rank: {:?}", input_shapes[1].rank());
+            println!("starts dim: {:?}", input_shapes[1].dim(0));
+            println!("ends rank: {:?}", input_shapes[2].rank());
+            println!("ends dim: {:?}", input_shapes[2].dim(0));
+            if input_count > 3 {
+                println!("axes rank: {:?}", input_shapes[3].rank());
+                println!("axes dim: {:?}", input_shapes[3].dim(0));
+            }
+            if input_count > 4 {
+                println!("steps rank: {:?}", input_shapes[4].rank());
+                println!("steps dim: {:?}", input_shapes[4].dim(0));
+            }
 
-            // Print attributes.
-            println!("starts: {:?}", &starts);
-            println!("ends: {:?}", &ends);
-            println!("axes: {:?}", &axes);
-            println!("steps: {:?}", &steps);
+            // TODO: Create fallback input buffers for axes and steps if not provided.
 
             // Copied from Gather to avoid compilation error.
             // Input 0 is data, input 1 is indices
