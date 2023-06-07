@@ -34,16 +34,20 @@ fn assert_slice(
     input_shapes.push(tensor("E", &ends_lengths[..]));
     input_names.push("E");
 
-    if let Some(axes) = axes {
-        let axes_lengths = vec![axes.len() as i64];
-        input_data.insert("A".to_string(), (&axes[..]).into()); // TODO: Lifetime issues
+    let mut axes_unwraped: Vec<f32> = vec![];
+    if axes.is_some() {
+        axes_unwraped = axes.unwrap();
+        let axes_lengths = vec![axes_unwraped.len() as i64];
+        input_data.insert("A".to_string(), (&axes_unwraped[..]).into());
         input_shapes.push(tensor("A", &axes_lengths[..]));
         input_names.push("A");
     }
 
-    if let Some(steps) = steps {
-        let steps_lengths = vec![steps.len() as i64];
-        input_data.insert("P".to_string(), (&steps[..]).into()); // TODO: Lifetime issues
+    let mut steps_unwraped: Vec<f32> = vec![];
+    if steps.is_some() {
+        steps_unwraped = steps.unwrap();
+        let steps_lengths = vec![steps_unwraped.len() as i64];
+        input_data.insert("P".to_string(), (&steps_unwraped[..]).into());
         input_shapes.push(tensor("P", &steps_lengths[..]));
         input_names.push("P");
     }
