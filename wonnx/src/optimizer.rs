@@ -463,7 +463,7 @@ impl<'model> Optimizer<'model> {
         }
 
         // Fold constant nodes
-        if node.is_constant() {
+        if node.is_constant() && !matches!(node.definition, NodeDefinition::Missing) {
             log::debug!(
                 "node is constant: {:?} {:?}",
                 node.identifier(),
