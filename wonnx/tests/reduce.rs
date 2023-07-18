@@ -223,6 +223,17 @@ fn reduce() {
         &[3, 2],
     );
 
+    // ONNX test case: do_not_keepdims with ArgMax
+    test_reduce(
+        &data,
+        &[3, 2, 2],
+        Some(vec![1]),
+        "ArgMax",
+        false,
+        &[1., 1., 1., 1., 1., 1.],
+        &[3, 2],
+    );
+
     // ONNX test case for ReduceSumSquare (https://github.com/onnx/onnx/blob/94e2f64551ded652df53a7e9111031e8aabddaee/onnx/backend/test/case/node/reducesumsquare.py#L27)
     test_reduce(
         &[1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11., 12.],
