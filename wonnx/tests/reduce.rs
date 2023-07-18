@@ -64,7 +64,7 @@ fn reduce() {
 
     let data2 = [
         5.0, 1.0, 
-        2.0, 20.0 
+        2.0, 20.0, 
         
         30.0, 1.0, 
         40.0, 2.0, 
@@ -236,12 +236,12 @@ fn reduce() {
 
     // ONNX test case: do_not_keepdims with ArgMax
     test_reduce(
-        &data,
+        &data2,
         &[3, 2, 2],
         Some(vec![1]),
         "ArgMax",
         false,
-        &[1., 1., 1., 1., 1., 1.],
+        &[1., 2., 1., 1., 2., 1.],
         &[3, 2],
     );
 
