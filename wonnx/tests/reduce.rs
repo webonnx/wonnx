@@ -62,15 +62,16 @@ fn reduce() {
         60.0, 2.0,
     ];
 
-    let data2 = [
-        5.0, 1.0, 
-        2.0, 20.0, 
+    #[rustfmt::skip]
+    let data_two = [
+        20.0, 1.0, 
+        5.0, 2.0, 
         
         30.0, 1.0, 
         40.0, 2.0, 
         
-        1.0, 55.0,
-        60.0, 2.0,
+        60.0, 1.0,
+        55.0, 2.0,
     ];
 
     // ReduceSum: sum all
@@ -236,12 +237,12 @@ fn reduce() {
 
     // ONNX test case: do_not_keepdims with ArgMax
     test_reduce(
-        &data2,
+        &data_two,
         &[3, 2, 2],
         Some(vec![1]),
         "ArgMax",
         false,
-        &[1., 2., 1., 1., 2., 1.],
+        &[0., 1., 1., 1., 0., 1.],
         &[3, 2],
     );
 
