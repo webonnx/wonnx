@@ -145,7 +145,7 @@ Except when running in WebAssembly, you may set the following environment variab
 
 ## Contribution: On implementing a new Operator
 
-Contribution are very much welcomed even without large experience in DL, WGSL, or Rust. I hope that, this project can be a sandbox for all of us to learn more about those technologies beyond this project initial scope.
+Contributions are very much welcomed even without large experience in DL, WGSL, or Rust. I hope that this project can be a sandbox for all of us to learn more about those technologies beyond this project's initial scope.
 
 To implement an operator all you have to do is:
 1. Add a new matching pattern in `compiler.rs`
@@ -207,7 +207,7 @@ fn test_matmul_square_matrix() {
 ```
 > Check out tera documentation for other templating operation: https://tera.netlify.app/docs/
 
-8. If at any point you want to do optimisation of several node you can do it within `sequencer.rs`.
+8. If at any point you want to do optimisation of several nodes you can do it within `sequencer.rs`.
 
 ## Supported Operators (ref [ONNX IR](https://github.com/onnx/onnx/blob/master/docs/Operators.md?plain=1)) 
 
