@@ -341,6 +341,8 @@ fn test_pad_complex() {
 #[test]
 fn test_resize() {
     let _ = env_logger::builder().is_test(true).try_init();
+
+    // --- resize_downsample_scales_nearest ---
     let mut input_data = HashMap::new();
     let data = (1..=2 * 4).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
@@ -366,6 +368,7 @@ fn test_resize() {
     let test_y = vec![1., 3.];
     common::assert_eq_vector((&result["Y"]).try_into().unwrap(), &test_y);
 
+    // --- resize_upsample_scales_nearest ---
     let mut input_data = HashMap::new();
     let data = (1..=4).map(|x| x as f32).collect::<Vec<f32>>();
     input_data.insert("X".to_string(), data.as_slice().into());
@@ -386,13 +389,17 @@ fn test_resize() {
 
     let session = pollster::block_on(wonnx::Session::from_model(upsampling_model))
         .expect("session did not create");
-    let _result = pollster::block_on(session.run(&input_data)).unwrap();
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    //let test_y = vec![
-    //    1., 1., 1., 2., 2., 2., 1., 1., 1., 2., 2., 2., 3., 3., 3., 4., 4., 4., 3., 3., 3., 4., 4.,
-    //    4.,
-    //];
-    //assert_eq!(result["Y"], test_y);
+    #[rustfmt::skip]
+    let test_y = vec![
+        1., 1., 1., 2., 2., 2.,
+        1., 1., 1., 2., 2., 2.,
+        3., 3., 3., 4., 4., 4.,
+        3., 3., 3., 4., 4., 4.,
+    ];
+    let output: &[f32] = (&result["Y"]).try_into().unwrap();
+    assert_eq!(output, &test_y);
 }
 
 // Multiply a 2x2 matrix with an identity matrix of size 2x2.
