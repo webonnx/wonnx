@@ -7,12 +7,13 @@ use wonnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, TypeProto_oneof_value, ValueInfoProto,
     },
-    utils::{
-        AttributeNotFoundError, DataTypeError, InputTensor, NodeAttributes, ScalarType, Shape,
-    },
+    tensor::{DataTypeError, ScalarType, Shape, TensorData},
 };
 
-use crate::constant_folding::{calculate_constant_node_outputs, ConstantFoldingError};
+use crate::{
+    constant_folding::{calculate_constant_node_outputs, ConstantFoldingError},
+    utils::{AttributeNotFoundError, NodeAttributes},
+};
 
 pub fn apply_dynamic_dimensions(graph: &mut GraphProto, dynamic_dims: &HashMap<String, i64>) {
     // Apply to values
@@ -40,7 +41,7 @@ fn static_initializer_value_i64<'a>(
     name: &str,
 ) -> Result<&'a [i64], ShapeInferenceError> {
     if let Some(shape_tensor) = initializers.get(name) {
-        if shape_tensor.get_data_type() != ScalarType::I64.to_datatype().value() {
+        if shape_tensor.get_data_type() != ScalarType::I64.to_onnx_datatype().value() {
             return Err(ShapeInferenceError::Unsupported(format!(
                 "initializer {} has data type {} and not int64, which is currently not supported",
                 name,
@@ -148,8 +149,15 @@ pub(crate) fn dimensions_infos(
     }
 
     for info in graph_proto.get_initializer() {
-        if let Ok(data_type) = ScalarType::from_i32(info.get_data_type()) {
-            let shape = Shape::from(data_type, info.get_dims());
+        if let Ok(data_type) = ScalarType::from_onnx_i32(info.get_data_type()) {
+            let shape = Shape::from(
+                data_type,
+                &info
+                    .get_dims()
+                    .iter()
+                    .map(|x| *x as usize)
+                    .collect::<Vec<usize>>(),
+            );
             if shapes_info
                 .insert(info.get_name().to_string(), shape)
                 .is_some()
@@ -217,21 +225,21 @@ fn replace_constant_ops_with_initializers(
 
                 // Get constant value
                 if let Ok(values) = node.get_attribute_value::<Vec<f32>>("value_floats", None) {
-                    initializer.set_data_type(ScalarType::F32.to_datatype().value());
+                    initializer.set_data_type(ScalarType::F32.to_onnx_datatype().value());
                     initializer.set_dims(vec![values.len() as i64]);
                     initializer.set_float_data(values);
                 } else if let Ok(values) = node.get_attribute_value::<Vec<i64>>("value_ints", None)
                 {
-                    initializer.set_data_type(ScalarType::I64.to_datatype().value());
+                    initializer.set_data_type(ScalarType::I64.to_onnx_datatype().value());
                     initializer.set_dims(vec![values.len() as i64]);
                     initializer.set_int64_data(values);
                 } else if let Ok(values) = node.get_attribute_value::<i64>("value_int", None) {
                     initializer.set_int64_data(vec![values]);
-                    initializer.set_data_type(ScalarType::I64.to_datatype().value());
+                    initializer.set_data_type(ScalarType::I64.to_onnx_datatype().value());
                     initializer.set_dims(vec![1]);
                 } else if let Ok(values) = node.get_attribute_value::<f32>("value_float", None) {
                     initializer.set_float_data(vec![values]);
-                    initializer.set_data_type(ScalarType::F32.to_datatype().value());
+                    initializer.set_data_type(ScalarType::F32.to_onnx_datatype().value());
                     initializer.set_dims(vec![1]);
                 } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
                     initializer = tp;
@@ -344,7 +352,7 @@ pub async fn infer_shapes(
 
                 let mut tip = TypeProto::new();
                 let mut ttp = TypeProto_Tensor::new();
-                ttp.set_elem_type(output_shape.data_type.to_datatype().value());
+                ttp.set_elem_type(output_shape.data_type.to_onnx_datatype().value());
 
                 let mut tsp = TensorShapeProto::new();
                 tsp.set_dim(
@@ -379,16 +387,16 @@ pub async fn infer_shapes(
                 log::debug!("node '{}' can be folded", node.get_name());
 
                 // Collect constant inputs
-                let inputs: Vec<InputTensor> = node
+                let inputs: Vec<TensorData> = node
                     .input
                     .iter()
                     .map(|input_name| {
                         if let Some(initializer) = initializers.get(input_name) {
-                            InputTensor::try_from(initializer.as_ref())
+                            Ok(TensorData::try_from(initializer.as_ref())?.into_static())
                         } else {
                             // This should only happen when is_known_shape is true. In this case we will not do any GPU inference
                             // and the contents if this tensor don't matter
-                            Ok(InputTensor::I64(Cow::Owned(vec![])))
+                            Ok(TensorData::I64(Cow::Owned(vec![])))
                         }
                     })
                     .collect::<Result<_, _>>()
@@ -493,7 +501,7 @@ pub(crate) fn infer_output_shapes(
             let to_value: i64 = node
                 .get_attribute_value("to", None)
                 .map_err(ShapeInferenceError::MissingAttribute)?;
-            let to_data_type = ScalarType::from_i32(to_value as i32).map_err(|_| {
+            let to_data_type = ScalarType::from_onnx_i32(to_value as i32).map_err(|_| {
                 ShapeInferenceError::InvalidNode(
                     node.get_name().to_string(),
                     format!(
@@ -528,11 +536,11 @@ pub(crate) fn infer_output_shapes(
             let outer_dim = if axis == 0 {
                 1
             } else {
-                input_dims[0..=(axis - 1)].iter().product::<u64>() as i64
+                input_dims[0..=(axis - 1)].iter().product::<usize>() as i64
             };
-            let inner_dim = input_dims[axis..].iter().product::<u64>() as i64;
+            let inner_dim = input_dims[axis..].iter().product::<usize>() as i64;
 
-            let new_dims = vec![outer_dim, inner_dim];
+            let new_dims = vec![outer_dim as usize, inner_dim as usize];
             Ok(vec![Shape::from(input_shapes[0].data_type, &new_dims)])
         }
 
@@ -579,14 +587,14 @@ pub(crate) fn infer_output_shapes(
                 (0..out_rank)
                     .map(|idx| {
                         if idx < axis {
-                            input_shapes[0].dim(idx as usize) as i64
+                            input_shapes[0].dim(idx as usize)
                         } else if idx >= axis && idx < (axis + q) {
-                            input_shapes[1].dim((idx - axis) as usize) as i64
+                            input_shapes[1].dim((idx - axis) as usize)
                         } else {
-                            input_shapes[0].dim((idx - q + 1) as usize) as i64
+                            input_shapes[0].dim((idx - q + 1) as usize)
                         }
                     })
-                    .collect::<Vec<i64>>()
+                    .collect::<Vec<usize>>()
                     .as_ref(),
             )])
         }
@@ -604,7 +612,7 @@ pub(crate) fn infer_output_shapes(
 
             Ok(vec![Shape::from(
                 ScalarType::I64,
-                &[rank.clamp(start, end)],
+                &[rank.clamp(start, end) as usize],
             )])
         }
 
@@ -691,8 +699,7 @@ pub(crate) fn infer_output_shapes(
                 })
                 .collect();
 
-            let mut output_shape: Vec<i64> =
-                input_shapes[0].dims.iter().map(|x| *x as i64).collect();
+            let mut output_shape: Vec<usize> = input_shapes[0].dims.clone();
 
             // https://github.com/onnx/onnx/blob/fb80e3ade84e9f406711aa41b9f3665753158371/onnx/defs/tensor/defs.cc#L969
             for (axis_index, axis) in axes.iter().enumerate() {
@@ -706,7 +713,7 @@ pub(crate) fn infer_output_shapes(
                     &mut step,
                 )?;
                 let temp = div_ceil(end - start, step).max(0);
-                output_shape[*axis as usize] = temp;
+                output_shape[*axis as usize] = temp as usize;
             }
 
             Ok(vec![Shape::from(data_shape.data_type, &output_shape)])
@@ -752,7 +759,7 @@ pub(crate) fn infer_output_shapes(
                 (0..input_ndim as i64)
                     .flat_map(|i| {
                         if !axes.contains(&i) {
-                            vec![input_shape.dim(i as usize) as i64]
+                            vec![input_shape.dim(i as usize)]
                         } else if keep_dims == 1 {
                             vec![1]
                         } else {
@@ -919,10 +926,10 @@ pub(crate) fn infer_output_shapes(
             };
 
             // Determine output shape
-            let mut output_shape: Vec<i64> = vec![];
-            output_shape.push(input_shape.dim(0) as i64);
+            let mut output_shape: Vec<usize> = vec![];
+            output_shape.push(input_shape.dim(0));
             if require_kernel_shape {
-                output_shape.push(input_shape.dim(1) as i64);
+                output_shape.push(input_shape.dim(1));
             } else {
                 if input_shapes[1].rank() < 1 {
                     return Err(ShapeInferenceError::InvalidNode(
@@ -930,7 +937,7 @@ pub(crate) fn infer_output_shapes(
                         "second input has incorrect rank".to_string(),
                     ));
                 }
-                output_shape.push(input_shapes[1].dim(0) as i64);
+                output_shape.push(input_shapes[1].dim(0));
             }
 
             let kernel_shape_size = kernel_shape.len();
@@ -951,7 +958,7 @@ pub(crate) fn infer_output_shapes(
                     (effective_input_size - effective_kernel_shape[i]) / strides[i]
                 };
 
-                output_shape.push(1 + strided_kernel_positions);
+                output_shape.push((1 + strided_kernel_positions) as usize);
             }
 
             // MaxPool can have two outputs
@@ -968,30 +975,36 @@ pub(crate) fn infer_output_shapes(
                 .get_attribute_value::<TensorProto>("value", None)
                 .map_err(ShapeInferenceError::MissingAttribute)?;
 
-            let data_type = ScalarType::from_i32(value.get_data_type())
+            let data_type = ScalarType::from_onnx_i32(value.get_data_type())
                 .map_err(ShapeInferenceError::UnsupportedDataType)?;
 
-            Ok(vec![Shape::from(data_type, shape)])
+            Ok(vec![Shape::from(
+                data_type,
+                &shape.iter().map(|x| *x as usize).collect::<Vec<usize>>(),
+            )])
         }
 
         ("Constant", 0, 1) => {
             if let Ok(values) = node.get_attribute_value::<Vec<f32>>("value_floats", None) {
-                Ok(vec![Shape::from(ScalarType::F32, &[values.len() as i64])])
+                Ok(vec![Shape::from(ScalarType::F32, &[values.len()])])
             } else if let Ok(values) = node.get_attribute_value::<Vec<i64>>("value_ints", None) {
-                Ok(vec![Shape::from(ScalarType::I64, &[values.len() as i64])])
+                Ok(vec![Shape::from(ScalarType::I64, &[values.len()])])
             } else if node.get_attribute_value::<f32>("value_float", None).is_ok() {
                 Ok(vec![Shape::from(ScalarType::F32, &[1])])
             } else if node.get_attribute_value::<i64>("value_int", None).is_ok() {
                 Ok(vec![Shape::from(ScalarType::I64, &[1])])
             } else if let Ok(tp) = node.get_attribute_value::<TensorProto>("value", None) {
                 Ok(vec![Shape::from(
-                    ScalarType::from_i32(tp.get_data_type()).map_err(|_| {
+                    ScalarType::from_onnx_i32(tp.get_data_type()).map_err(|_| {
                         ShapeInferenceError::InvalidNode(
                             node.get_name().to_string(),
                             "invalid tensor data type".to_string(),
                         )
                     })?,
-                    tp.get_dims(),
+                    &tp.get_dims()
+                        .iter()
+                        .map(|x| *x as usize)
+                        .collect::<Vec<usize>>(),
                 )])
             } else {
                 log::debug!("{:#?}", node);
@@ -1021,22 +1034,22 @@ pub(crate) fn infer_output_shapes(
 					}
                 }
 
-                let output_shape: Vec<i64> = shape_tensor_contents
+                let output_shape: Vec<usize> = shape_tensor_contents
                     .iter()
                     .enumerate()
                     .map(|(idx, dim)| {
                         if *dim == 0 && !allow_zero {
-                            input_shapes[0].dim(idx) as i64
+                            input_shapes[0].dim(idx)
                         } else {
-                            *dim
+                            *dim as usize
                         }
                     })
                     .collect();
 
-                if output_shape.iter().product::<i64>() != input_shapes[0].element_count() as i64 {
+                if output_shape.iter().product::<usize>() != input_shapes[0].element_count() {
                     return Err(ShapeInferenceError::InvalidNode(
             			node.get_name().to_string(),
-						format!("Reshape input tensor (element count={}) must have the same number of elements as specified by the new shape ({})", input_shapes[0].element_count(), output_shape.iter().product::<i64>())));
+						format!("Reshape input tensor (element count={}) must have the same number of elements as specified by the new shape ({})", input_shapes[0].element_count(), output_shape.iter().product::<usize>())));
                 }
 
                 Ok(vec![Shape::from(input_shapes[0].data_type, &output_shape)])
@@ -1053,7 +1066,7 @@ pub(crate) fn infer_output_shapes(
                 .map_err(ShapeInferenceError::MissingAttribute)?;
 
             // All input shapes must be the same except for the dimension at the specified axis
-            let mut shape: Vec<i64> = input_shapes[0].dims.iter().map(|x| *x as i64).collect();
+            let mut shape: Vec<usize> = input_shapes[0].dims.clone();
             if axis < -(shape.len() as i64) || axis > (shape.len() - 1) as i64 {
                 return Err(ShapeInferenceError::InvalidNode(
                     node.get_name().to_string(),
@@ -1066,7 +1079,7 @@ pub(crate) fn infer_output_shapes(
             } else {
                 axis as usize
             };
-            shape[axis_index] = input_shapes.iter().map(|s| s.dim(axis_index) as i64).sum();
+            shape[axis_index] = input_shapes.iter().map(|s| s.dim(axis_index)).sum();
             Ok(vec![Shape::from(input_shapes[0].data_type, &shape)])
         }
 
@@ -1092,8 +1105,7 @@ pub(crate) fn infer_output_shapes(
             };
 
             let output_rank = input_shapes[0].rank() + axes.len();
-            let mut input_shape: Vec<i64> =
-                input_shapes[0].dims.iter().map(|x| *x as i64).collect();
+            let mut input_shape: Vec<usize> = input_shapes[0].dims.clone();
             for i in axes {
                 let index = if i < 0 {
                     ((output_rank as i64) + i) as usize
@@ -1142,8 +1154,11 @@ pub(crate) fn infer_output_shapes(
                 ));
             }
 
-            let element_count = (end[0] - start[0]) / step[0];
-            Ok(vec![Shape::from(ScalarType::I64, &[element_count])])
+            let element_count: i64 = (end[0] - start[0]) / step[0];
+            Ok(vec![Shape::from(
+                ScalarType::I64,
+                &[element_count as usize],
+            )])
         }
 
         ("Squeeze", num_inputs @ 1..=2, 1) => {
@@ -1162,7 +1177,7 @@ pub(crate) fn infer_output_shapes(
                 vec![]
             };
 
-            let output_shape: Vec<i64> = input_shapes[0]
+            let output_shape: Vec<usize> = input_shapes[0]
                 .dims
                 .iter()
                 .enumerate()
@@ -1170,7 +1185,7 @@ pub(crate) fn infer_output_shapes(
                     if (has_axes && axes.contains(&(idx as i64))) || (!has_axes && *dim == 1) {
                         vec![]
                     } else {
-                        vec![*dim as i64]
+                        vec![*dim]
                     }
                 })
                 .collect();
@@ -1179,8 +1194,8 @@ pub(crate) fn infer_output_shapes(
         }
 
         ("Transpose", 1, 1) => {
-            let input_dims: Vec<i64> = input_shapes[0].dims.iter().map(|x| *x as i64).collect();
-            let output_dims: Vec<i64> = match node.get_attribute_value::<Vec<i64>>("perm", None) {
+            let input_dims = &input_shapes[0].dims;
+            let output_dims: Vec<usize> = match node.get_attribute_value::<Vec<i64>>("perm", None) {
                 Ok(perm) => perm.iter().map(|idx| input_dims[*idx as usize]).collect(),
                 Err(_) => input_dims.iter().rev().cloned().collect(),
             };
@@ -1270,7 +1285,7 @@ fn process_slice_inputs(
 fn fix_raw_tensor(tensor: &mut TensorProto) -> Result<(), ShapeInferenceError> {
     if tensor.has_raw_data() {
         let raw_data = tensor.take_raw_data();
-        match ScalarType::from_i32(tensor.get_data_type())
+        match ScalarType::from_onnx_i32(tensor.get_data_type())
             .map_err(ShapeInferenceError::UnsupportedDataType)?
         {
             ScalarType::F32 => tensor.set_float_data(bytemuck::cast_slice(&raw_data[..]).to_vec()),

@@ -1,5 +1,5 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::utils::{graph, model, node, tensor};
+use wonnx::onnx_model::{onnx_graph, onnx_model, onnx_node, onnx_tensor};
 mod common;
 
 #[test]
@@ -23,18 +23,12 @@ fn global_average_pool() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> GlobalAveragePool -> Y
-    let bn_model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &output_shape)],
+    let bn_model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &output_shape)],
         vec![],
         vec![],
-        vec![node(
-            vec!["X"],
-            vec!["Y"],
-            "gap",
-            "GlobalAveragePool",
-            vec![],
-        )],
+        vec![onnx_node(vec!["X"], vec!["Y"], "GlobalAveragePool", vec![])],
     ));
 
     let session =

@@ -5,16 +5,17 @@ use thiserror::Error;
 
 use wonnx::{
     constant_of_shape_output,
+    ir::{IrError, OperatorDefinition},
     onnx::{
         GraphProto, NodeProto, TensorProto, TensorShapeProto, TensorShapeProto_Dimension,
         TypeProto, TypeProto_Tensor, ValueInfoProto,
     },
-    utils::{
-        model_with_opset, DataTypeError, InputTensor, NodeAttributes, OutputTensor, ScalarType,
-        Shape,
-    },
+    onnx_model::onnx_model_with_opset,
+    tensor::{DataTypeError, ScalarType, Shape, TensorData},
     CompileError, GpuError, Session, SessionError,
 };
+
+use crate::utils::NodeAttributes;
 
 #[derive(Error, Debug)]
 pub enum ConstantFoldingError {
@@ -28,69 +29,72 @@ pub enum ConstantFoldingError {
     #[error("error calculating constant value: {0}")]
     #[from(SessionError)]
     CalculationError(SessionError),
+
+    #[error("error in IR: {0}")]
+    #[from(IrError)]
+    IrError(IrError),
 }
 
 pub(crate) async fn calculate_constant_node_outputs<'a>(
     node: &'a NodeProto,
     shapes: &'a HashMap<String, Shape>,
-    inputs: &'a [InputTensor<'a>],
+    inputs: &'a [TensorData<'a>],
     output_shapes: &[Shape],
     _initializers: &HashMap<String, Cow<'a, TensorProto>>,
     opset_version: i64,
-) -> Result<Option<Vec<OutputTensor>>, ConstantFoldingError> {
+) -> Result<Option<Vec<TensorData<'a>>>, ConstantFoldingError> {
     Ok(match node.get_op_type() {
-        "Identity" | "Unsqueeze" | "Squeeze" | "Reshape" => {
-            Some(inputs.iter().map(OutputTensor::from).collect())
-        }
+        "Identity" | "Unsqueeze" | "Squeeze" | "Reshape" => Some(inputs.to_vec()),
         "Cast" => {
-            let cast_to_type =
-                ScalarType::from_i32(node.get_attribute_value::<i64>("to", None).map_err(|_| {
+            let cast_to_type = ScalarType::from_onnx_i32(
+                node.get_attribute_value::<i64>("to", None).map_err(|_| {
                     ConstantFoldingError::InvalidNode("to attribute missing for Cast ".to_string())
-                })? as i32)
-                .map_err(ConstantFoldingError::UnsupportedDataType)?;
+                })? as i32,
+            )
+            .map_err(ConstantFoldingError::UnsupportedDataType)?;
             let input_tensor = &inputs[0];
 
-            let output_tensor = match (input_tensor, cast_to_type) {
-                (InputTensor::F32(v), ScalarType::F32) => OutputTensor::F32(v.to_vec()),
-                (InputTensor::F32(v), ScalarType::I64) => {
-                    OutputTensor::I64(v.iter().map(|x| *x as i64).collect())
+            let output_tensor: TensorData<'static> = match (input_tensor, cast_to_type) {
+                (TensorData::F32(v), ScalarType::F32) => TensorData::F32(Cow::Owned(v.to_vec())),
+                (TensorData::F32(v), ScalarType::I64) => {
+                    TensorData::I64(v.iter().map(|x| *x as i64).collect())
                 }
-                (InputTensor::F32(v), ScalarType::I32) => {
-                    OutputTensor::I32(v.iter().map(|x| *x as i32).collect())
+                (TensorData::F32(v), ScalarType::I32) => {
+                    TensorData::I32(v.iter().map(|x| *x as i32).collect())
                 }
-                (InputTensor::F32(v), ScalarType::U8) => {
-                    OutputTensor::U8(v.iter().map(|x| *x as u8).collect())
+                (TensorData::F32(v), ScalarType::U8) => {
+                    TensorData::U8(v.iter().map(|x| *x as u8).collect())
                 }
-                (InputTensor::I32(v), ScalarType::F32) => {
-                    OutputTensor::F32(v.iter().map(|x| *x as f32).collect())
+                (TensorData::I32(v), ScalarType::F32) => {
+                    TensorData::F32(v.iter().map(|x| *x as f32).collect())
                 }
-                (InputTensor::I32(v), ScalarType::I64) => {
-                    OutputTensor::I64(v.iter().map(|x| *x as i64).collect())
+                (TensorData::I32(v), ScalarType::I64) => {
+                    TensorData::I64(v.iter().map(|x| *x as i64).collect())
                 }
-                (InputTensor::I32(v), ScalarType::I32) => OutputTensor::I32(v.to_vec()),
-                (InputTensor::I32(v), ScalarType::U8) => {
-                    OutputTensor::U8(v.iter().map(|x| *x as u8).collect())
+                (TensorData::I32(v), ScalarType::I32) => TensorData::I32(Cow::Owned(v.to_vec())),
+                (TensorData::I32(v), ScalarType::U8) => {
+                    TensorData::U8(v.iter().map(|x| *x as u8).collect())
                 }
-                (InputTensor::I64(v), ScalarType::F32) => {
-                    OutputTensor::F32(v.iter().map(|x| *x as f32).collect())
+                (TensorData::I64(v), ScalarType::F32) => {
+                    TensorData::F32(v.iter().map(|x| *x as f32).collect())
                 }
-                (InputTensor::I64(v), ScalarType::I64) => OutputTensor::I64(v.to_vec()),
-                (InputTensor::I64(v), ScalarType::I32) => {
-                    OutputTensor::I32(v.iter().map(|x| *x as i32).collect())
+                (TensorData::I64(v), ScalarType::I64) => TensorData::I64(Cow::Owned(v.to_vec())),
+                (TensorData::I64(v), ScalarType::I32) => {
+                    TensorData::I32(v.iter().map(|x| *x as i32).collect())
                 }
-                (InputTensor::I64(v), ScalarType::U8) => {
-                    OutputTensor::U8(v.iter().map(|x| *x as u8).collect())
+                (TensorData::I64(v), ScalarType::U8) => {
+                    TensorData::U8(v.iter().map(|x| *x as u8).collect())
                 }
-                (InputTensor::U8(v), ScalarType::F32) => {
-                    OutputTensor::F32(v.iter().map(|x| *x as f32).collect())
+                (TensorData::U8(v), ScalarType::F32) => {
+                    TensorData::F32(v.iter().map(|x| *x as f32).collect())
                 }
-                (InputTensor::U8(v), ScalarType::I64) => {
-                    OutputTensor::I64(v.iter().map(|x| *x as i64).collect())
+                (TensorData::U8(v), ScalarType::I64) => {
+                    TensorData::I64(v.iter().map(|x| *x as i64).collect())
                 }
-                (InputTensor::U8(v), ScalarType::I32) => {
-                    OutputTensor::I32(v.iter().map(|x| *x as i32).collect())
+                (TensorData::U8(v), ScalarType::I32) => {
+                    TensorData::I32(v.iter().map(|x| *x as i32).collect())
                 }
-                (InputTensor::U8(v), ScalarType::U8) => OutputTensor::U8(v.to_vec()),
+                (TensorData::U8(v), ScalarType::U8) => TensorData::U8(Cow::Owned(v.to_vec())),
             };
 
             Some(vec![output_tensor])
@@ -104,9 +108,10 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
 
         // ConstantOfShape: produces an output of the shape specified by the input, filled with a constant value specified in an attribute
         "ConstantOfShape" => {
-            if let InputTensor::I64(input_shape) = &inputs[0] {
+            if let TensorData::I64(input_shape) = &inputs[0] {
                 let element_count = input_shape.iter().product::<i64>() as usize;
-                Some(vec![constant_of_shape_output(node, element_count)
+                let op_def = OperatorDefinition::from(node, output_shapes.to_vec());
+                Some(vec![constant_of_shape_output(&op_def, element_count)
                     .map_err(|e| {
                         ConstantFoldingError::InvalidNode(e.to_string())
                     })?])
@@ -159,7 +164,7 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
             ));
             graph.set_node(RepeatedField::from(vec![temp_node]));
 
-            let model = model_with_opset(graph, opset_version);
+            let model = onnx_model_with_opset(graph, opset_version);
 
             let session = match Session::from_model(model).await {
                 Ok(v) => v,
@@ -177,9 +182,9 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
                 }
             };
 
-            let mut named_inputs: HashMap<String, InputTensor> = HashMap::new();
+            let mut named_inputs: HashMap<String, TensorData> = HashMap::new();
             for (index, input) in inputs.iter().enumerate() {
-                let input: InputTensor = input.to_owned();
+                let input: TensorData = input.to_owned();
                 named_inputs.insert(format!("input_{}", index), input);
             }
 
@@ -188,7 +193,7 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
                 .await
                 .map_err(ConstantFoldingError::CalculationError)?;
 
-            let outputs: Vec<OutputTensor> = (0..node.output.len())
+            let outputs: Vec<TensorData> = (0..node.output.len())
                 .map(|output_index| {
                     let output_key = format!("output_{}", output_index);
                     output_values.remove(&output_key).unwrap()
@@ -202,7 +207,7 @@ pub(crate) async fn calculate_constant_node_outputs<'a>(
 
 fn input_to_value_info(shape: &Shape, name: &str) -> ValueInfoProto {
     let mut ttp = TypeProto_Tensor::new();
-    ttp.set_elem_type(shape.data_type.to_datatype().value());
+    ttp.set_elem_type(shape.data_type.to_onnx_datatype().value());
     let mut tsp = TensorShapeProto::new();
     tsp.set_dim(RepeatedField::from(
         shape
@@ -224,10 +229,10 @@ fn input_to_value_info(shape: &Shape, name: &str) -> ValueInfoProto {
     vip
 }
 
-fn calculate_shape_operator(
+fn calculate_shape_operator<'a>(
     node: &NodeProto,
     input_shape: &Shape,
-) -> Result<OutputTensor, ConstantFoldingError> {
+) -> Result<TensorData<'a>, ConstantFoldingError> {
     let input_dims: Vec<i64> = input_shape.dims.iter().map(|x| *x as i64).collect();
     let mut start = node.get_attribute_value("start", Some(0)).unwrap();
     let mut end = node
@@ -254,12 +259,15 @@ fn calculate_shape_operator(
         log::warn!("Shape operator results in an empty output shape which is probably an issue... start={start} end={end} input_shape={}", input_shape);
     }
 
-    Ok(OutputTensor::I64(output_shape))
+    Ok(TensorData::I64(output_shape.into()))
 }
 
 #[cfg(test)]
 mod test {
-    use wonnx::utils::{attribute, node, OutputTensor, Shape};
+    use wonnx::{
+        onnx_model::{onnx_attribute, onnx_node},
+        tensor::{Shape, TensorData},
+    };
 
     use super::calculate_shape_operator;
 
@@ -271,16 +279,19 @@ mod test {
     ) {
         let mut attrs = vec![];
         if let Some(start) = start {
-            attrs.push(attribute("start", start));
+            attrs.push(onnx_attribute("start", start));
         }
         if let Some(end) = end {
-            attrs.push(attribute("end", end));
+            attrs.push(onnx_attribute("end", end));
         }
-        let node = node(vec!["X"], vec!["Y"], "s", "Shape", attrs);
-        let shape = Shape::from(wonnx::utils::ScalarType::F32, dims);
+        let node = onnx_node(vec!["X"], vec!["Y"], "Shape", attrs);
+        let shape = Shape::from(
+            wonnx::tensor::ScalarType::F32,
+            &dims.iter().map(|x| *x as usize).collect::<Vec<usize>>(),
+        );
         assert_eq!(
             calculate_shape_operator(&node, &shape).unwrap(),
-            OutputTensor::I64(out_dims.to_vec())
+            TensorData::I64(out_dims.into())
         );
     }
 

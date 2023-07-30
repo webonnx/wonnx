@@ -1,5 +1,7 @@
 use std::{collections::HashMap, convert::TryInto};
-use wonnx::utils::{attribute, graph, initializer, model, node, tensor};
+use wonnx::onnx_model::{
+    onnx_attribute, onnx_graph, onnx_initializer, onnx_model, onnx_node, onnx_tensor,
+};
 mod common;
 
 #[test]
@@ -30,22 +32,21 @@ fn batch_normalization() {
     assert_eq!(b.len(), channels);
     assert_eq!(scale.len(), channels);
 
-    let bn_model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &shape)],
+    let bn_model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &shape)],
         vec![],
         vec![
-            initializer("scale", scale, vec![channels as i64]),
-            initializer("B", b, vec![channels as i64]),
-            initializer("input_mean", mean, vec![channels as i64]),
-            initializer("input_var", var, vec![channels as i64]),
+            onnx_initializer("scale", scale, vec![channels as i64]),
+            onnx_initializer("B", b, vec![channels as i64]),
+            onnx_initializer("input_mean", mean, vec![channels as i64]),
+            onnx_initializer("input_var", var, vec![channels as i64]),
         ],
-        vec![node(
+        vec![onnx_node(
             vec!["X", "scale", "B", "input_mean", "input_var"],
             vec!["Y"],
-            "bn",
             "BatchNormalization",
-            vec![attribute("epsilon", 0.1)],
+            vec![onnx_attribute("epsilon", 0.1)],
         )],
     ));
 

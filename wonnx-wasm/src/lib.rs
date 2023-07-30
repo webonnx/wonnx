@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
-use wonnx::utils::{InputTensor, OutputTensor};
+use wonnx::tensor::TensorData;
 
 #[wasm_bindgen(start)]
 pub fn main() {
@@ -78,24 +78,23 @@ impl Session {
         let engine = self.session.clone();
 
         future_to_promise(async move {
-            let input_data: HashMap<String, InputTensor<'_>> = input_copy
+            let input_data: HashMap<String, TensorData<'_>> = input_copy
                 .input_data
                 .iter()
                 .map(|(k, v)| (k.clone(), v.as_slice().into()))
                 .collect();
             let result = engine.run(&input_data).await.map_err(SessionError)?;
-            drop(input_copy);
             Ok(serde_wasm_bindgen::to_value(&result).unwrap())
         })
     }
 }
 
 /// Convert an OutputTensor to a JsValue (we cannot implement Into<JsValue> for OutputTensor here)
-pub fn tensor_to_js_value(tensor: OutputTensor) -> JsValue {
+pub fn tensor_to_js_value(tensor: TensorData) -> JsValue {
     match tensor {
-        OutputTensor::F32(fs) => serde_wasm_bindgen::to_value(&fs).unwrap(),
-        OutputTensor::I32(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
-        OutputTensor::I64(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
-        OutputTensor::U8(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
+        TensorData::F32(fs) => serde_wasm_bindgen::to_value(&fs).unwrap(),
+        TensorData::I32(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
+        TensorData::I64(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
+        TensorData::U8(ints) => serde_wasm_bindgen::to_value(&ints).unwrap(),
     }
 }

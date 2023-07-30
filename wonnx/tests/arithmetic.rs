@@ -2,10 +2,11 @@ use approx::assert_abs_diff_eq;
 use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{
-        graph, initializer, initializer_int64, model, node, tensor, tensor_of_type, InputTensor,
-        OutputTensor,
+    onnx_model::{
+        onnx_graph, onnx_initializer, onnx_initializer_int64, onnx_model, onnx_node, onnx_tensor,
+        onnx_tensor_of_type,
     },
+    tensor::TensorData,
 };
 
 mod common;
@@ -20,19 +21,19 @@ fn test_cos() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Cos -> Y
-    let model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &shape)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &shape)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "cos", "Cos", vec![])],
+        vec![onnx_node(vec!["X"], vec!["Y"], "Cos", vec![])],
     ));
 
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], OutputTensor::F32(vec![1.0; 16]));
+    assert_eq!(result["Y"], TensorData::F32(vec![1.0; 16].into()));
 }
 
 #[test]
@@ -46,12 +47,12 @@ fn test_reciprocal() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Reciprocal -> Y
-    let model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &shape)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &shape)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "rec", "Reciprocal", vec![])],
+        vec![onnx_node(vec!["X"], vec!["Y"], "Reciprocal", vec![])],
     ));
 
     let session =
@@ -72,22 +73,30 @@ fn test_integer() {
 
     let data = vec![21i32; n];
     let shape = vec![n as i64];
-    input_data.insert("X".to_string(), InputTensor::I32(data.as_slice().into()));
+    input_data.insert("X".to_string(), TensorData::I32(data.as_slice().into()));
 
     // Model: X -> Add -> Y
-    let model = model(graph(
-        vec![tensor_of_type("X", &shape, TensorProto_DataType::INT32)],
-        vec![tensor_of_type("Y", &shape, TensorProto_DataType::INT32)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor_of_type(
+            "X",
+            &shape,
+            TensorProto_DataType::INT32,
+        )],
+        vec![onnx_tensor_of_type(
+            "Y",
+            &shape,
+            TensorProto_DataType::INT32,
+        )],
         vec![],
         vec![],
-        vec![node(vec!["X", "X"], vec!["Y"], "add_ints", "Add", vec![])],
+        vec![onnx_node(vec!["X", "X"], vec!["Y"], "Add", vec![])],
     ));
 
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], OutputTensor::I32(vec![42; n]));
+    assert_eq!(result["Y"], TensorData::I32(vec![42; n].into()));
 }
 
 #[test]
@@ -99,22 +108,22 @@ fn test_int64_initializers() {
     let sum: Vec<i64> = (0..n).map(|x| (x * 3) as i64).collect();
     let dims = vec![n as i64];
 
-    let model = model(graph(
-        vec![tensor_of_type("X", &dims, TensorProto_DataType::INT64)],
-        vec![tensor_of_type("Z", &dims, TensorProto_DataType::INT64)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor_of_type("X", &dims, TensorProto_DataType::INT64)],
+        vec![onnx_tensor_of_type("Z", &dims, TensorProto_DataType::INT64)],
         vec![],
-        vec![initializer_int64("Y", right, dims.clone())],
-        vec![node(vec!["X", "Y"], vec!["Z"], "adder", "Add", vec![])],
+        vec![onnx_initializer_int64("Y", right, dims.clone())],
+        vec![onnx_node(vec!["X", "Y"], vec!["Z"], "Add", vec![])],
     ));
 
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
-    let mut input_data: HashMap<String, InputTensor> = HashMap::new();
+    let mut input_data: HashMap<String, TensorData> = HashMap::new();
     input_data.insert("X".to_string(), left.as_slice().into());
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    assert_eq!(result["Z"], OutputTensor::I64(sum))
+    assert_eq!(result["Z"], TensorData::I64(sum.into()))
 }
 
 pub fn assert_eq_vector_weak(xs: &[f32], ys: &[f32]) {
@@ -138,12 +147,12 @@ fn test_pow() {
     input_data.insert("Y".to_string(), y.as_slice().into());
 
     // Model: X,Y -> Pow -> Z
-    let model = model(graph(
-        vec![tensor("X", &shape), tensor("Y", &shape)],
-        vec![tensor("Z", &shape)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape), onnx_tensor("Y", &shape)],
+        vec![onnx_tensor("Z", &shape)],
         vec![],
         vec![],
-        vec![node(vec!["X", "Y"], vec!["Z"], "pow", "Pow", vec![])],
+        vec![onnx_node(vec!["X", "Y"], vec!["Z"], "Pow", vec![])],
     ));
 
     let session =
@@ -173,12 +182,12 @@ fn test_mul_broadcast() {
     input_data.insert("Y".to_string(), y.as_slice().into());
 
     // Model: X,Y -> Mul -> Z
-    let model = model(graph(
-        vec![tensor("X", &shape_x), tensor("Y", &shape_y)],
-        vec![tensor("Z", &shape_z)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape_x), onnx_tensor("Y", &shape_y)],
+        vec![onnx_tensor("Z", &shape_z)],
         vec![],
         vec![],
-        vec![node(vec!["X", "Y"], vec!["Z"], "mul", "Mul", vec![])],
+        vec![onnx_node(vec!["X", "Y"], vec!["Z"], "Mul", vec![])],
     ));
 
     let session =
@@ -203,12 +212,12 @@ fn test_prelu() {
         input_data.insert("X".to_string(), data.into());
         input_data.insert("Y".to_string(), slope.into());
 
-        let model = model(graph(
-            vec![tensor("X", data_shape), tensor("Y", slope_shape)],
-            vec![tensor("Z", data_shape)],
+        let model = onnx_model(onnx_graph(
+            vec![onnx_tensor("X", data_shape), onnx_tensor("Y", slope_shape)],
+            vec![onnx_tensor("Z", data_shape)],
             vec![],
             vec![],
-            vec![node(vec!["X", "Y"], vec!["Z"], "prelu", "PRelu", vec![])],
+            vec![onnx_node(vec!["X", "Y"], vec!["Z"], "PRelu", vec![])],
         ));
 
         let session =
@@ -264,12 +273,12 @@ fn test_sign() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Cos -> Y
-    let model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &shape)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &shape)],
         vec![],
         vec![],
-        vec![node(vec!["X"], vec!["Y"], "sign", "Sign", vec![])],
+        vec![onnx_node(vec!["X"], vec!["Y"], "Sign", vec![])],
     ));
 
     let session =
@@ -289,25 +298,24 @@ fn test_sign() {
         .collect();
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], OutputTensor::F32(expected));
+    assert_eq!(result["Y"], TensorData::F32(expected.into()));
 }
 
 #[test]
 fn test_clip() {
     // Model: X -> Clip -> Y
     let shape = vec![1, 1, 2, 2];
-    let model = model(graph(
-        vec![tensor("X", &shape)],
-        vec![tensor("Y", &shape)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &shape)],
+        vec![onnx_tensor("Y", &shape)],
         vec![],
         vec![
-            initializer("min", vec![0.0], vec![]),
-            initializer("max", vec![1.0], vec![]),
+            onnx_initializer("min", vec![0.0], vec![]),
+            onnx_initializer("max", vec![1.0], vec![]),
         ],
-        vec![node(
+        vec![onnx_node(
             vec!["X", "min", "max"],
             vec!["Y"],
-            "clip",
             "Clip",
             vec![],
         )],
@@ -315,12 +323,15 @@ fn test_clip() {
     let mut input_data = HashMap::new();
     input_data.insert(
         "X".to_string(),
-        InputTensor::F32([-1.0, 0.0, 1.0, 2.0].as_slice().into()),
+        TensorData::F32([-1.0, 0.0, 1.0, 2.0].as_slice().into()),
     );
 
     let session =
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
 
     let result = pollster::block_on(session.run(&input_data)).unwrap();
-    assert_eq!(result["Y"], OutputTensor::F32(vec![0.0, 0.0, 1.0, 1.0]));
+    assert_eq!(
+        result["Y"],
+        TensorData::F32(vec![0.0, 0.0, 1.0, 1.0].into())
+    );
 }

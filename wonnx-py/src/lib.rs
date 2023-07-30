@@ -1,6 +1,7 @@
-use ::wonnx::utils::OutputTensor;
+use ::wonnx::tensor::TensorData;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use ::wonnx::Session;
@@ -10,15 +11,15 @@ pub struct PySession {
     pub session: Session,
 }
 
-pub struct PyOutputTensor(OutputTensor);
+pub struct PyOutputTensor(TensorData<'static>);
 
 impl IntoPy<PyObject> for PyOutputTensor {
     fn into_py(self, py: Python) -> PyObject {
         match self.0 {
-            OutputTensor::F32(fs) => fs.into_py(py),
-            OutputTensor::I32(fs) => fs.into_py(py),
-            OutputTensor::I64(fs) => fs.into_py(py),
-            OutputTensor::U8(fs) => fs.into_py(py),
+            TensorData::F32(fs) => fs.into_owned().into_py(py),
+            TensorData::I32(fs) => fs.into_owned().into_py(py),
+            TensorData::I64(fs) => fs.into_owned().into_py(py),
+            TensorData::U8(fs) => fs.into_py(py),
         }
     }
 }
@@ -40,8 +41,8 @@ impl PySession {
     pub fn run(&self, dict: &PyDict) -> PyResult<HashMap<String, PyOutputTensor>> {
         let map: HashMap<String, Vec<f32>> = dict.extract().unwrap();
         let mut inputs = HashMap::new();
-        for (key, value) in map.iter() {
-            inputs.insert(key.clone(), value.as_slice().into());
+        for (key, value) in map.into_iter() {
+            inputs.insert(key.clone(), TensorData::F32(Cow::Owned(value)));
         }
         let result = pollster::block_on(self.session.run(&inputs)).unwrap();
         Ok(result

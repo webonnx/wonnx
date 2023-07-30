@@ -1,9 +1,14 @@
+#![cfg(test)]
+
 use std::collections::HashMap;
 
 use protobuf::ProtobufEnum;
 use wonnx::{
     onnx::TensorProto_DataType,
-    utils::{attribute, graph, model, node, tensor, tensor_of_type, OutputTensor},
+    onnx_model::{
+        onnx_attribute, onnx_graph, onnx_model, onnx_node, onnx_tensor, onnx_tensor_of_type,
+    },
+    tensor::TensorData,
 };
 
 #[test]
@@ -17,17 +22,19 @@ fn test_cast() {
     input_data.insert("X".to_string(), data.as_slice().into());
 
     // Model: X -> Identity -> Y; Y==Z
-    let model = model(graph(
-        vec![tensor("X", &dims)],
-        vec![tensor_of_type("Y", &dims, TensorProto_DataType::INT32)],
+    let model = onnx_model(onnx_graph(
+        vec![onnx_tensor("X", &dims)],
+        vec![onnx_tensor_of_type("Y", &dims, TensorProto_DataType::INT32)],
         vec![],
         vec![],
-        vec![node(
+        vec![onnx_node(
             vec!["X"],
             vec!["Y"],
-            "a",
             "Cast",
-            vec![attribute("to", TensorProto_DataType::INT32.value() as i64)],
+            vec![onnx_attribute(
+                "to",
+                TensorProto_DataType::INT32.value() as i64,
+            )],
         )],
     ));
 
@@ -37,6 +44,6 @@ fn test_cast() {
     let result = pollster::block_on(session.run(&input_data)).unwrap();
     assert_eq!(
         result["Y"],
-        OutputTensor::I32(vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5])
+        TensorData::I32(vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5].into())
     );
 }

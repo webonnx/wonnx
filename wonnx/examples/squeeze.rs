@@ -9,7 +9,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use wonnx::utils::OutputTensor;
+use wonnx::tensor::TensorData;
 use wonnx::WonnxError;
 
 // Args Management
@@ -31,7 +31,7 @@ async fn run() {
 }
 
 // Hardware management
-async fn execute_gpu() -> Result<HashMap<String, OutputTensor>, WonnxError> {
+async fn execute_gpu<'a>() -> Result<HashMap<String, TensorData<'a>>, WonnxError> {
     let mut input_data = HashMap::new();
     let image = load_image();
     input_data.insert("data".to_string(), image.as_slice().unwrap().into());

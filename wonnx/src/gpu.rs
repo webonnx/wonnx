@@ -15,13 +15,9 @@ use wgpu::{Buffer, BufferAsyncError, BufferUsages, CommandEncoder, Device};
 
 use crate::{
     compiler::{compile, CompileError, CompiledNode},
-    ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition},
-    onnx::TensorProto,
+    ir::{Node, NodeDefinition, NodeIdentifier, OperatorDefinition, Tensor},
     resource::{self, resize},
-    utils::{
-        ceil, DataTypeError, InputTensor, OutputTensor, ScalarType, Shape,
-        MINIMUM_BUFFER_SIZE_BYTES,
-    },
+    tensor::{ceil, DataTypeError, ScalarType, Shape, TensorData, MINIMUM_BUFFER_SIZE_BYTES},
 };
 
 /// The maximum number of bindings in a binding group (defined by wgpu)
@@ -47,7 +43,7 @@ enum GpuStep {
     Operator {
         pipeline: wgpu::ComputePipeline,
         bind_groups: Vec<wgpu::BindGroup>,
-        threads: (u32, u32, u32),
+        threads: (usize, usize, usize),
         output_tensors: Vec<GpuTensor>,
     },
 
@@ -355,14 +351,14 @@ impl GpuModel {
                             let tensor = outputs[input.output_index].clone();
                             InferenceOutput::Tensor(tensor)
                         }
-                        NodeDefinition::Input(proto) => {
-                            InferenceOutput::InferenceInput(proto.get_name().to_string())
+                        NodeDefinition::Input { name, .. } => {
+                            InferenceOutput::InferenceInput(name.clone())
+                        }
+                        NodeDefinition::Missing => {
+                            unimplemented!("missing input as output");
                         }
                         NodeDefinition::Outputs { .. } => {
                             unimplemented!("output after output node")
-                        }
-                        NodeDefinition::Missing => {
-                            unimplemented!("optional input after output node")
                         }
                     },
                 );
@@ -426,7 +422,7 @@ impl GpuModel {
                     while let NodeDefinition::Operator(ultimate_input_op_def) =
                         ultimate_input.source_node.definition()
                     {
-                        if op_forwards_input(ultimate_input_op_def.proto.get_op_type()) {
+                        if op_forwards_input(ultimate_input_op_def.get_op_type()) {
                             assert_eq!(ultimate_input.source_node.inputs.len(), 1);
                             ultimate_input = ultimate_input.source_node.inputs[0].clone();
                         } else {
@@ -434,7 +430,7 @@ impl GpuModel {
                         }
                     }
 
-                    let output_shape = &source_node_def.output_shapes[node_input.output_index];
+                    let output_shape = &source_node_def.output_shapes()[node_input.output_index];
                     buffer_manager.lease(
                         ultimate_input.source_node.identifier(),
                         ultimate_input.output_index,
@@ -452,7 +448,7 @@ impl GpuModel {
                 if outputs_readable {
                     if let NodeDefinition::Operator(op_def) = &node.definition {
                         // For these ops we just forward the buffer (so we should also forward readability)
-                        if op_forwards_input(op_def.proto.get_op_type()) {
+                        if op_forwards_input(op_def.get_op_type()) {
                             nodes_readable.insert(source_node_identifier.clone());
                         }
                     }
@@ -461,8 +457,8 @@ impl GpuModel {
 
             // Tell the buffer manager we are producing an intermediate value; nodes that run 'before' us may reuse this buffer
             if let NodeDefinition::Operator(op_def) = &node.definition {
-                if !op_forwards_input(op_def.proto.get_op_type()) {
-                    for (output_index, output_shape) in op_def.output_shapes.iter().enumerate() {
+                if !op_forwards_input(op_def.get_op_type()) {
+                    for (output_index, output_shape) in op_def.output_shapes().iter().enumerate() {
                         buffer_manager.release(
                             node_identifier.clone(),
                             output_index,
@@ -537,7 +533,7 @@ impl GpuModel {
                 NodeDefinition::Operator(op_def) => {
                     // Can we use shared buffers for outputs of this node?
                     let shared_buffers: Vec<Option<Arc<RefCell<LeaseableBuffer>>>> =
-                        (0..op_def.output_shapes.len())
+                        (0..op_def.output_shapes().len())
                             .map(|output_index| {
                                 let identifier = node.identifier();
                                 buffer_manager
@@ -573,50 +569,49 @@ impl GpuModel {
                 // For tensor (initializer) nodes, we just create a buffer and fill it with the initializer data
                 NodeDefinition::Tensor(tensor_def) => {
                     let tensor_buffer =
-                        Arc::new(tensor_def.buffer(&self.device, outputs_readable)?);
+                        Arc::new(self.tensor_to_buffer(tensor_def, outputs_readable)?);
                     output_tensors.push(GpuTensor {
-                        shape: Shape::from(
-                            ScalarType::from_i32(tensor_def.get_data_type())?,
-                            tensor_def.get_dims(),
-                        ),
+                        shape: tensor_def.shape(),
                         buffer: tensor_buffer.clone(),
                     });
                     GpuStep::Initializer(tensor_buffer)
                 }
                 // For inputs we create an empty buffer that can be used at inference time to supply input data
-                NodeDefinition::Input(input_def) => {
+                NodeDefinition::Input {
+                    name: input_name,
+                    shape: input_shape,
+                } => {
                     if outputs_readable {
                         log::warn!(
                             "it looks like you will be reading back inference input '{}' as output",
-                            input_def.get_name()
+                            input_name
                         );
                     }
 
-                    let input_shape = input_def.get_shape()?;
                     let buffer_size_aligned = input_shape.buffer_bytes_aligned();
                     log::debug!(
                         "creating input buffer for {} shape {} size {}",
-                        input_def.get_name(),
+                        input_name,
                         input_shape,
                         buffer_size_aligned
                     );
                     let input_buffer = Arc::new(resource::buffer(
                         &self.device,
                         input_shape.buffer_bytes_aligned(),
-                        input_def.get_name(),
+                        input_name,
                         // Usage is not COPY_SRC/MAP_READ even when outputs_readable is true; we'll deal with the special
                         // case of reading back inputs as outputs separately.
                         BufferUsages::STORAGE | BufferUsages::COPY_DST,
                     ));
 
                     output_tensors.push(GpuTensor {
-                        shape: input_shape,
+                        shape: input_shape.clone(),
                         buffer: input_buffer.clone(),
                     });
 
-                    GpuStep::Input(input_def.get_name().to_string(), input_buffer)
+                    GpuStep::Input(input_name.clone(), input_buffer)
                 }
-                NodeDefinition::Missing | NodeDefinition::Outputs { .. } => {
+                NodeDefinition::Outputs { .. } | NodeDefinition::Missing => {
                     // Nothing to sequence
                     GpuStep::None
                 }
@@ -635,8 +630,8 @@ impl GpuModel {
     /// Perform inference using this model and the specified inference inputs.
     pub async fn infer<'a>(
         &self,
-        inference_inputs: &HashMap<String, InputTensor<'a>>,
-    ) -> Result<HashMap<String, OutputTensor>, GpuError> {
+        inference_inputs: &HashMap<String, TensorData<'a>>,
+    ) -> Result<HashMap<String, TensorData<'static>>, GpuError> {
         log::info!("encode inference steps");
         let mut encoder = self
             .device
@@ -647,99 +642,64 @@ impl GpuModel {
         log::debug!("submit inference steps");
         self.queue.submit(Some(encoder.finish()));
         log::info!("inference completed");
-        self.read_outputs(inference_inputs).await
+        Ok(self.read_outputs(inference_inputs).await?.to_owned())
     }
 
     /// Reads the relevant buffers for the requested inference outputs
     async fn read_outputs<'a>(
         &self,
-        inference_inputs: &HashMap<String, InputTensor<'a>>,
-    ) -> Result<HashMap<String, OutputTensor>, GpuError> {
-        let mut output_data: HashMap<String, OutputTensor> = HashMap::new();
+        inference_inputs: &HashMap<String, TensorData<'a>>,
+    ) -> Result<HashMap<String, TensorData<'static>>, GpuError> {
+        let mut output_data: HashMap<String, TensorData<'static>> = HashMap::new();
 
         for (output_name, output_source) in &self.inference_outputs {
-            output_data.insert(
-                output_name.to_string(),
-                match output_source {
-                    InferenceOutput::InferenceInput(input_name) => {
-                        (&inference_inputs[input_name]).into()
-                    }
-                    InferenceOutput::Tensor(tensor) => {
-                        tensor.read_to_vec(&self.device, &self.queue).await?
-                    }
-                },
-            );
+            let v: TensorData<'static> = match output_source {
+                InferenceOutput::InferenceInput(input_name) => {
+                    inference_inputs[input_name].clone().into_static()
+                }
+                InferenceOutput::Tensor(tensor) => {
+                    tensor.read_to_vec(&self.device, &self.queue).await?
+                }
+            }
+            .to_owned();
+            output_data.insert(output_name.to_string(), v);
         }
 
         Ok(output_data)
     }
-}
 
-trait TensorProtoExtra {
-    fn buffer(&self, device: &wgpu::Device, readable: bool) -> Result<Buffer, GpuError>;
-}
-
-impl TensorProtoExtra for TensorProto {
-    /// Create a GPU buffer containing the data of this initializer
-    fn buffer(&self, device: &wgpu::Device, readable: bool) -> Result<Buffer, GpuError> {
-        let scalar_type = ScalarType::from_i32(self.get_data_type())?;
-        let input_shape = Shape::from(scalar_type, self.get_dims());
-        log::debug!(
-            "creating buffer for tensor {} shape {}",
-            self.get_name(),
-            input_shape
-        );
-
-        match scalar_type {
-            ScalarType::F32 => {
-                let data = self.get_float_data();
-                buffer_with_bytes(
-                    device,
-                    readable,
-                    self.get_name(),
-                    if !data.is_empty() {
-                        bytemuck::cast_slice(data)
-                    } else {
-                        self.get_raw_data()
-                    },
-                )
-            }
-            ScalarType::U8 => {
-                // WGSL doesn't support 8 bit unsigned integers, so we load them as 32 bit ints
-                log::warn!("initializers with uint8 data type are not supported, converting into int32 initializer");
-                let ints: Vec<i32> = self
-                    .get_raw_data()
-                    .iter()
-                    .map(|x| (*x).try_into())
-                    .collect::<Result<Vec<i32>, _>>()
-                    .map_err(|_e| GpuError::OutOfBoundsError)?;
-                let raw_data = bytemuck::cast_slice(&ints);
-                buffer_with_bytes(device, readable, self.get_name(), raw_data)
-            }
-            ScalarType::I64 => {
+    fn tensor_to_buffer(&mut self, tensor: &Tensor, readable: bool) -> Result<Buffer, GpuError> {
+        match tensor.data() {
+            TensorData::F32(data) => buffer_with_bytes(
+                &self.device,
+                readable,
+                tensor.display_name(),
+                bytemuck::cast_slice(data),
+            ),
+            TensorData::I32(data) => buffer_with_bytes(
+                &self.device,
+                readable,
+                tensor.display_name(),
+                bytemuck::cast_slice(data),
+            ),
+            TensorData::I64(data) => {
                 // WGSL doesn't support 64 bit integers, so we load 64 bit tensors as 32 bit ints
                 log::warn!("initializers with int64 data type are not supported, converting into int32 initializer");
-                let ints: Vec<i32> = self
-                    .get_int64_data()
+                let ints: Vec<i32> = data
                     .iter()
                     .map(|x| (*x).try_into())
                     .collect::<Result<Vec<i32>, _>>()
                     .map_err(|_e| GpuError::OutOfBoundsError)?;
-                let raw_data = bytemuck::cast_slice(&ints);
-                buffer_with_bytes(device, readable, self.get_name(), raw_data)
-            }
-            ScalarType::I32 => {
-                let data = self.get_int32_data();
+
                 buffer_with_bytes(
-                    device,
+                    &self.device,
                     readable,
-                    self.get_name(),
-                    if !data.is_empty() {
-                        bytemuck::cast_slice(data)
-                    } else {
-                        self.get_raw_data()
-                    },
+                    tensor.display_name(),
+                    bytemuck::cast_slice(&ints),
                 )
+            }
+            TensorData::U8(data) => {
+                buffer_with_bytes(&self.device, readable, tensor.display_name(), data)
             }
         }
     }
@@ -751,6 +711,7 @@ fn buffer_with_bytes(
     name: &str,
     raw_data: &[u8],
 ) -> Result<Buffer, GpuError> {
+    log::info!("creating buffer: {} {}b", name, raw_data.len());
     let buffer_usage = match readable {
         true => BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         false => BufferUsages::STORAGE,
@@ -775,7 +736,7 @@ fn op_forwards_input(op_type: &str) -> bool {
     )
 }
 
-impl<'model> OperatorDefinition<'model> {
+impl OperatorDefinition {
     fn gpu_op(
         &self,
         device: &wgpu::Device,
@@ -784,12 +745,10 @@ impl<'model> OperatorDefinition<'model> {
         input_tensors: &[GpuTensor],
         shared_buffers: &[Option<Arc<RefCell<LeaseableBuffer>>>],
     ) -> Result<GpuStep, GpuError> {
-        let proto = &self.proto;
-
         // Some nodes have specific GPU implementations, match these here
-        if op_forwards_input(proto.get_op_type()) {
+        if op_forwards_input(self.get_op_type()) {
             // Some ops do nothing but forward their input
-            let value_shape = &self.output_shapes[0];
+            let value_shape = &self.output_shapes()[0];
             let output_tensor = GpuTensor {
                 buffer: input_tensors[0].buffer.clone(),
                 shape: value_shape.clone(),
@@ -797,16 +756,15 @@ impl<'model> OperatorDefinition<'model> {
             return Ok(GpuStep::Forward(output_tensor));
         }
 
-        let label = Some(proto.get_name());
+        let label = Some(self.get_display_name());
 
         // Create output buffers for this op node
-        let output_tensors: Vec<GpuTensor> = proto
-            .get_output()
+        let output_tensors: Vec<GpuTensor> = self
+            .output_shapes()
             .iter()
             .enumerate()
-            .map(|(output_index, output_name)| {
-                let value_shape = &self.output_shapes[output_index];
-
+            .map(|(output_index, value_shape)| {
+                let output_name = format!("{}_{}", self.get_display_name(), output_index);
                 let buffer = match shared_buffers.get(output_index) {
                     Some(Some(shared_buffer)) if !outputs_readable => {
                         let mut shared_buffer = shared_buffer.borrow_mut();
@@ -817,7 +775,7 @@ impl<'model> OperatorDefinition<'model> {
                             "creating non-shared buffer for output #{} ({}) of {} shaped {}",
                             output_index,
                             output_name,
-                            proto.get_name(),
+                            self.get_display_name(),
                             value_shape
                         );
 
@@ -844,17 +802,13 @@ impl<'model> OperatorDefinition<'model> {
             .collect();
 
         let input_shapes: Vec<&Shape> = input_tensors.iter().map(|input| &input.shape).collect();
-        let output_shapes: Vec<&Shape> = self.output_shapes.iter().collect();
+        let output_shapes: Vec<&Shape> = self.output_shapes().iter().collect();
 
         // Compile shader for node
         let CompiledNode { shader, threads } =
-            compile(proto, &input_shapes, &output_shapes, opset_version).map_err(|ce| {
+            compile(self, &input_shapes, &output_shapes, opset_version).map_err(|ce| {
                 GpuError::CompileError {
-                    node: if proto.has_name() {
-                        proto.get_name().to_string()
-                    } else {
-                        proto.get_op_type().to_string()
-                    },
+                    node: self.get_display_name().to_string(),
                     error: ce,
                 }
             })?;
@@ -901,7 +855,7 @@ impl<'model> OperatorDefinition<'model> {
         });
 
         // Create 'bind groups' (groups of bound buffers)
-        let number_of_groups = ceil(binding_counter as u64, MAX_BINDINGS_PER_GROUP as u64) as usize;
+        let number_of_groups = ceil(binding_counter, MAX_BINDINGS_PER_GROUP);
         for group_index in 0..number_of_groups {
             let group_range = group_index * MAX_BINDINGS_PER_GROUP
                 ..usize::min(
@@ -931,7 +885,7 @@ impl GpuStep {
         &self,
         queue: &wgpu::Queue,
         encoder: &mut CommandEncoder,
-        inputs: &HashMap<String, InputTensor>,
+        inputs: &HashMap<String, TensorData>,
     ) -> Result<(), GpuError> {
         match self {
             GpuStep::None | GpuStep::Forward(_) | GpuStep::Initializer(_) => {
@@ -947,21 +901,21 @@ impl GpuStep {
                 log::debug!("write input data for {}", input_name);
 
                 match input_data {
-                    InputTensor::F32(float_input) => {
+                    TensorData::F32(float_input) => {
                         queue.write_buffer(
                             input_buffer,
                             0,
                             bytemuck::cast_slice(&resize(float_input.to_vec())),
                         );
                     }
-                    InputTensor::I32(int_input) => {
+                    TensorData::I32(int_input) => {
                         queue.write_buffer(
                             input_buffer,
                             0,
                             bytemuck::cast_slice(&resize(int_input.to_vec())),
                         );
                     }
-                    InputTensor::I64(int_input) => {
+                    TensorData::I64(int_input) => {
                         log::warn!("reading int64 input '{input_name}' as int32 (int64 is not supported for calculation but can be used as input as long as values fit in int32)");
                         let int32_input = int_input
                             .iter()
@@ -973,7 +927,7 @@ impl GpuStep {
                             bytemuck::cast_slice(&resize(int32_input)),
                         );
                     }
-                    InputTensor::U8(int_input) => {
+                    TensorData::U8(int_input) => {
                         log::warn!("reading uint8 input as int32 (uint8 is not supported for calculation but can be used as input)");
                         let int32_input = int_input
                             .iter()
@@ -1003,7 +957,7 @@ impl GpuStep {
                     compute_pass.set_bind_group(index as u32, bind_group, &[]);
                 }
                 let (x, y, z) = *threads;
-                compute_pass.dispatch_workgroups(x, y, z);
+                compute_pass.dispatch_workgroups(x as u32, y as u32, z as u32);
                 Ok(())
             }
         }
@@ -1016,14 +970,14 @@ impl GpuTensor {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> Result<OutputTensor, GpuError> {
+    ) -> Result<TensorData<'static>, GpuError> {
         let shape = self.shape.clone();
 
         #[cfg(target_arch = "wasm32")]
         {
             let buffer_slice = self.buffer.slice(..);
             let (sender, receiver) =
-                futures::channel::oneshot::channel::<Result<OutputTensor, GpuError>>();
+                futures::channel::oneshot::channel::<Result<TensorData, GpuError>>();
 
             wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
                 // Called on download completed
@@ -1050,39 +1004,40 @@ impl GpuTensor {
             wgpu::util::DownloadBuffer::read_buffer(device, queue, &buffer_slice, move |buffer| {
                 // Called on download completed
                 tx.send(match buffer {
-                    Ok(bytes) => Ok(Self::read_bytes_to_vec(&bytes, shape)),
+                    Ok(bytes) => Ok(bytes.to_vec()),
                     Err(error) => Err(GpuError::BufferAsyncError(error)),
                 })
                 .unwrap();
             });
             device.poll(wgpu::Maintain::Wait);
             // The callback will have been called by now due to poll(Wait)
-            rx.recv().unwrap()
+            let bytes_vec = rx.recv().unwrap()?;
+            Ok(Self::read_bytes_to_vec(&bytes_vec, shape))
         }
     }
 
-    fn read_bytes_to_vec<A>(output_data: &[A], shape: Shape) -> OutputTensor
+    fn read_bytes_to_vec<A>(output_data: &[A], shape: Shape) -> TensorData<'static>
     where
         A: NoUninit,
     {
         // The actual buffer may be bigger than what we should return, because buffers have a minimum size in wgpu
         // Fetch the size we should expect so we can chop the buffer to the correct size
-        let output_buffer_size = shape.element_count() as usize;
+        let output_buffer_size = shape.element_count();
         match shape.data_type {
-            ScalarType::F32 => {
-                OutputTensor::F32(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
-            }
-            ScalarType::I32 => {
-                OutputTensor::I32(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
-            }
-            ScalarType::U8 => {
-                OutputTensor::U8(bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec())
-            }
+            ScalarType::F32 => TensorData::F32(Cow::Owned(
+                bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec(),
+            )),
+            ScalarType::I32 => TensorData::I32(Cow::Owned(
+                bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec(),
+            )),
+            ScalarType::U8 => TensorData::U8(Cow::Owned(
+                bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec(),
+            )),
             ScalarType::I64 => {
                 log::warn!("reading int64 output as int32 because internally int64 scalars are not supported");
                 let result_ints: Vec<i32> =
                     bytemuck::cast_slice(output_data)[..output_buffer_size].to_vec();
-                OutputTensor::I64(result_ints.iter().map(|i| *i as i64).collect())
+                TensorData::I64(Cow::Owned(result_ints.iter().map(|i| *i as i64).collect()))
             }
         }
     }

@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use thiserror::Error;
 use tokenizers::{EncodeInput, Encoding, InputSequence, Tokenizer};
-use wonnx::utils::Shape;
+use wonnx::tensor::Shape;
 
 use crate::Tensor;
 
@@ -83,7 +83,7 @@ impl TextTokenizer {
         text: &str,
         shape: &Shape,
     ) -> Result<Tensor, PreprocessingError> {
-        let segment_length = shape.dim(shape.rank() - 1) as usize;
+        let segment_length = shape.dim(shape.rank() - 1);
         let tokenized = self.tokenize(text)?;
         let mut tokens = tokenized.get_mask();
         tokens.resize(segment_length, 0);
@@ -92,7 +92,7 @@ impl TextTokenizer {
     }
 
     pub fn get_input_for(&self, text: &str, shape: &Shape) -> Result<Tensor, PreprocessingError> {
-        let segment_length = shape.dim(shape.rank() - 1) as usize;
+        let segment_length = shape.dim(shape.rank() - 1);
         let tokenized = self.tokenize(text)?;
         let mut tokens = tokenized.get_tokens();
         tokens.resize(segment_length, 0);
