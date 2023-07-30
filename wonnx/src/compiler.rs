@@ -1308,6 +1308,7 @@ pub fn compile(
             let mode = node.get_attribute_value("mode", Some("constant".to_string()))?;
             match mode.as_str() {
                 "constant" => {}
+                "reflect" => {}
                 _ => {
                     return Err(CompileError::UnimplementedVariant {
                         op: String::from("Pad"),
@@ -1315,6 +1316,7 @@ pub fn compile(
                     })
                 }
             }
+            context.insert("mode", &mode);
 
             let pads: Vec<i64> = node.get_attribute_value("pads", None)?;
             if pads.len() != input_shapes[0].rank() * 2 {
