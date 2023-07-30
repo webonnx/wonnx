@@ -2,7 +2,7 @@
 use crate::utils::{
     ceil, AttributeNotFoundError, DataTypeError, MultiType, NodeAttributes, ScalarType, Shape,
 };
-use num::integer::gcd;
+use num::integer::{gcd, Roots};
 use tera::{Context, Tera};
 use thiserror::Error;
 
@@ -792,10 +792,13 @@ pub fn compile(
             }
             context.insert("cum_len", &input_cumulative_len);
 
+            let root = output_lengths[0].sqrt() + 1;
+            let per_dim = ceil(root, 16) + 1;
+
             NodeTemplate {
                 scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "matrix/concat.wgsl",
-                threads: (ceil(output_lengths[0], 256) as u32, 1, 1),
+                threads: (per_dim as u32, per_dim as u32, 1),
             }
         }
         op @ ("MaxPool" | "AveragePool" | "Conv" | "ConvRelu" | "ConvLeakyRelu" | "ConvMish"
