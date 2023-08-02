@@ -135,6 +135,11 @@ lazy_static! {
             include_str!("../templates/endomorphism/broadcast.wgsl"),
         )
         .unwrap();
+        tera.add_raw_template(
+            "unpool/convtranspose.wgsl",
+            include_str!("../templates/unpool/convtranspose.wgsl"),
+        )
+        .unwrap();
         tera
     };
 }
@@ -196,6 +201,12 @@ pub enum CompileError {
     InvalidBroadcast {
         input_shapes: Vec<Shape>,
         output_shape: Shape,
+    },
+
+    #[error("output shape mismatch")]
+    UnexpectedOutputShape {
+        output_shape: Shape,
+        expected_shape: Vec<i64>,
     },
 }
 
@@ -1382,6 +1393,139 @@ pub fn compile(
                 scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "matrix/transpose.wgsl",
                 threads: (ceil(output_lengths[0], 256) as _, 1, 1),
+            }
+        }
+        "ConvTranspose" => {
+            // FIXME: Add support for dilations, group, output_padding, pads, auto_pad,
+            //        1d and 3d inputs
+
+            // Only support 2D input at the moment
+            if input_shapes[0].rank() != 4 {
+                return Err(CompileError::InvalidInputShape {
+                    input_index: 0,
+                    input_shape: input_shapes[0].clone(),
+                });
+            }
+
+            let input_height = input_shapes[0].dims[2] as i64;
+            let input_width = input_shapes[0].dims[3] as i64;
+
+            let dilations = node.get_attribute_value("dilations", Some(vec![1, 1]))?;
+            if dilations != vec![1, 1] {
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "dilations".into(),
+                    value: format!("{:?}", dilations),
+                    opset_version,
+                });
+            }
+
+            let group = node.get_attribute_value("group", Some(1))?;
+            if group != 1 {
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "group".into(),
+                    value: group.to_string(),
+                    opset_version,
+                });
+            }
+
+            let inferred_kernel_shape = input_shapes[1]
+                .dims
+                .iter()
+                .skip(2)
+                .map(|&x| x as i64)
+                .collect::<Vec<_>>();
+
+            let kernel_shape =
+                node.get_attribute_value("kernel_shape", Some(inferred_kernel_shape.clone()))?;
+            if inferred_kernel_shape != kernel_shape {
+                log::error!("Inferred kernel shape: {:?}", inferred_kernel_shape);
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "kernel_shape".to_string(),
+                    value: format!("{:?}", kernel_shape),
+                    opset_version,
+                });
+            }
+
+            let output_padding = node.get_attribute_value("output_padding", Some(vec![0, 0]))?;
+            if output_padding != vec![0, 0] {
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "output_padding".into(),
+                    value: format!("{:?}", output_padding),
+                    opset_version,
+                });
+            }
+
+            let auto_pad = node.get_attribute_value("auto_pad", Some("NOTSET".to_string()))?;
+            if auto_pad != "NOTSET" {
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "auto_pad".into(),
+                    value: auto_pad,
+                    opset_version,
+                });
+            }
+
+            let pads = node.get_attribute_value("pads", Some(vec![0, 0, 0, 0]))?;
+            if pads.iter().any(|pad| *pad < 0) {
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "pads".into(),
+                    value: format!("{:?}", pads),
+                    opset_version,
+                });
+            }
+
+            context.insert("pads", &pads);
+
+            let strides = node.get_attribute_value("strides", Some(vec![1, 1]))?;
+            if strides.iter().any(|stride| *stride <= 0) {
+                return Err(CompileError::InvalidAttributeValue {
+                    attribute: "strides".into(),
+                    value: format!("{:?}", strides),
+                    opset_version,
+                });
+            }
+
+            context.insert("stride", &strides);
+
+            let output_height = strides[0] * (input_height - 1)
+                + output_padding[0]
+                + ((kernel_shape[0] - 1) * dilations[0] + 1)
+                - pads[0]
+                - pads[2];
+            let output_width = strides[1] * (input_width - 1)
+                + output_padding[1]
+                + ((kernel_shape[1] - 1) * dilations[1] + 1)
+                - pads[1]
+                - pads[3];
+
+            if output_shapes[0].dim(2) as i64 != output_height
+                || output_shapes[0].dim(3) as i64 != output_width
+            {
+                return Err(CompileError::UnexpectedOutputShape {
+                    output_shape: output_shapes[0].clone(),
+                    expected_shape: vec![output_height, output_width],
+                });
+            }
+
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                output_lengths[0],
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+            context.insert("workgroup_size_x", &workgroup_size_x);
+
+            let scalar_type = agreed_type(input_shapes, output_shapes)?;
+
+            if scalar_type.is_float() {
+                NodeTemplate {
+                    scalar_type,
+                    template: "unpool/convtranspose.wgsl",
+                    threads: (x_threads, 1, 1),
+                }
+            } else {
+                return Err(CompileError::UnimplementedVariant {
+                    variant: "Non-Float".into(),
+                    op: "ConvTranspose".into(),
+                });
             }
         }
         op => return Err(CompileError::UnimplementedOp(op.to_string())),
