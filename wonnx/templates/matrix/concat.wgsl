@@ -17,9 +17,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(num_workgr
 	let gidx = global_id.x;
         let gidy = global_id.y;
 
-        let nx = num_workgroups.x;
+        let x_executions = num_workgroups.x * 16u;
 
-        let actual_idx = gidx + gidy * nx;
+        let actual_idx = gidx + gidy * x_executions;
 	
 	{% for input in i_lens %}
 		{% if loop.first %}
