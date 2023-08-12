@@ -197,6 +197,11 @@ backend_test.include(f"test_softmax_example_cpu$")
 backend_test.include(f"test_softmax_negative_axis_cpu$")
 backend_test.include(f"test_softmax_default_axis_cpu$")
 
+# ConvTranspose
+# We only have partial attribute support right now, so we hand select a few test cases limited to the supported ones
+backend_test.include(f"test_convtranspose$")
+backend_test.include(f"test_convtranspose_pads$")
+
 globals().update(backend_test.enable_report().test_cases)
 
 if __name__ == "__main__":
