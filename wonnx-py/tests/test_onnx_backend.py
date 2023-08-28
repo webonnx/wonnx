@@ -124,7 +124,6 @@ def do_enforce_test_coverage_safelist(model):  # type: (ModelProto) -> bool
 backend_test = onnx.backend.test.BackendTest(DummyBackend, __name__)
 
 
-
 backend_test.include(f"test_constant_cpu")
 backend_test.include(f"test_conv_[a-z,_]*")
 backend_test.include(f"test_Conv2d[a-z,_]*")
@@ -146,6 +145,7 @@ backend_test.include(f"test_reciprocal_[a-z,_]*")
 backend_test.include(f"test_shape_[a-z,_]*")
 backend_test.include(f"test_size_[a-z,_]*")
 backend_test.include(f"test_celu_[a-z,_]*")
+backend_test.include(f"test_hardsigmoid_[a-z,_]*")
 
 # For these we only test the default version, as we don't support the bool type
 backend_test.include(f"test_prelu_broadcast_cpu$")

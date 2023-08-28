@@ -5,7 +5,7 @@ mod common;
 /// Test HardSigmoid node with default alpha and beta
 /// https://github.com/onnx/onnx/blob/main/docs/Operators.md#examples-68
 #[test]
-fn test_hard_sigmoid_default() {
+fn test_hardsigmoid_default() {
     let input_data = [-2.0, -1.0, 1.0, 2.0];
     let shape = vec![2, 2];
 
@@ -40,7 +40,7 @@ fn test_hard_sigmoid_default() {
 /// Test HardSigmoid node with predefined alpha and beta
 /// https://github.com/onnx/onnx/blob/main/docs/Operators.md#examples-68
 #[test]
-fn test_hard_sigmoid() {
+fn test_hardsigmoid() {
     let input_data: Vec<f32> = vec![-1.0, 0.0, 1.0];
     let shape = vec![1, 3];
 
