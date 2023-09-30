@@ -494,7 +494,7 @@ fn test_matmul_stacks_4d() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    let out: Vec<f32> = vec![
+    let out: Vec<f32> = [
         18, 19, 86, 91, 190, 199, 274, 287, 426, 443, 526, 547, 726, 751, 842, 871,
     ]
     .iter()
@@ -529,7 +529,7 @@ fn test_matmul_stacks() {
         pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
     let result = pollster::block_on(session.run(&input_data)).unwrap();
 
-    let out: Vec<f32> = vec![
+    let out: Vec<f32> = [
         18, 19, 86, 91, 190, 199, 274, 287, 426, 443, 526, 547, 726, 751, 842, 871,
     ]
     .iter()

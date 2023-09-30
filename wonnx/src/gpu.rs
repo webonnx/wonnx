@@ -5,6 +5,7 @@ use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
     ops::Sub,
+    rc::Rc,
     sync::Arc,
 };
 
@@ -101,8 +102,8 @@ enum InferenceOutput {
 /// on the buffer manager, indicating that the buffer is now free to be re-used for nodes that execute before this node.
 /// When assigning buffers, the buffer manager takes care to assign a buffer of a matching size whenever possible.
 struct BufferManager<'a> {
-    assignments: HashMap<Output<'a>, Arc<RefCell<LeaseableBuffer>>>,
-    free: Vec<Arc<RefCell<LeaseableBuffer>>>,
+    assignments: HashMap<Output<'a>, Rc<RefCell<LeaseableBuffer>>>,
+    free: Vec<Rc<RefCell<LeaseableBuffer>>>,
 
     /// Counter for assigning buffer IDs (only available in debug)
     #[cfg(debug_assertions)]
@@ -203,14 +204,14 @@ impl<'a> BufferManager<'a> {
     }
 
     /// Allocates a new leaseable shared buffer
-    fn new_buffer(&mut self, size: usize) -> Arc<RefCell<LeaseableBuffer>> {
+    fn new_buffer(&mut self, size: usize) -> Rc<RefCell<LeaseableBuffer>> {
         #[cfg(debug_assertions)]
         let id = {
             let x = self.buffer_id_counter;
             self.buffer_id_counter += 1;
             x
         };
-        Arc::new(RefCell::new(LeaseableBuffer {
+        Rc::new(RefCell::new(LeaseableBuffer {
             #[cfg(debug_assertions)]
             id,
             largest_size: size,
@@ -221,7 +222,7 @@ impl<'a> BufferManager<'a> {
     /// Returns a buffer that can be (re-)used. If there are multiple buffers on the free list, the function will look for
     /// the buffer that has a `largest_size` that is the closest match to the requested size. If there is just one buffer
     /// on the free list, it will be returned. If the free list is empty, the function will create a new leaseable buffer.
-    fn new_or_free_buffer(&mut self, output_bytes: usize) -> Arc<RefCell<LeaseableBuffer>> {
+    fn new_or_free_buffer(&mut self, output_bytes: usize) -> Rc<RefCell<LeaseableBuffer>> {
         // TODO remove when usize::abs_diff is stabilized / MSRV is raised
         fn abs_difference<T: Sub<Output = T> + Ord>(x: T, y: T) -> T {
             if x < y {
@@ -536,7 +537,7 @@ impl GpuModel {
                 // metadata, e.g. shapes, or is a no-op).
                 NodeDefinition::Operator(op_def) => {
                     // Can we use shared buffers for outputs of this node?
-                    let shared_buffers: Vec<Option<Arc<RefCell<LeaseableBuffer>>>> =
+                    let shared_buffers: Vec<Option<Rc<RefCell<LeaseableBuffer>>>> =
                         (0..op_def.output_shapes.len())
                             .map(|output_index| {
                                 let identifier = node.identifier();
@@ -782,7 +783,7 @@ impl<'model> OperatorDefinition<'model> {
         outputs_readable: bool,
         opset_version: i64,
         input_tensors: &[GpuTensor],
-        shared_buffers: &[Option<Arc<RefCell<LeaseableBuffer>>>],
+        shared_buffers: &[Option<Rc<RefCell<LeaseableBuffer>>>],
     ) -> Result<GpuStep, GpuError> {
         let proto = &self.proto;
 
