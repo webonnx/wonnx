@@ -72,9 +72,9 @@ impl TextTokenizer {
     }
 
     pub fn decode(&self, encoding: &EncodedText) -> Result<String, PreprocessingError> {
-        let ids = encoding.get_tokens().iter().map(|x| *x as u32).collect();
+        let ids: Vec<u32> = encoding.get_tokens().iter().map(|x| *x as u32).collect();
         self.tokenizer
-            .decode(ids, true)
+            .decode(&ids, true)
             .map_err(PreprocessingError::TextTokenizationError)
     }
 
