@@ -7,7 +7,7 @@ on:
 
 env:
   RUST_BACKTRACE: 1
-  RUST_VERSION: 1.66
+  RUST_VERSION: 1.72
 
 jobs:
   build_manylinux:
