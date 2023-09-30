@@ -96,7 +96,13 @@ fn test_concat4() {
         vec![tensor("O", &output_dims)],
         vec![],
         vec![],
-        vec![node(vec!["X", "Y", "Z", "W"], vec!["O"], "a", "Concat", vec![])],
+        vec![node(
+            vec!["X", "Y", "Z", "W"],
+            vec!["O"],
+            "a",
+            "Concat",
+            vec![],
+        )],
     ));
 
     let session =
