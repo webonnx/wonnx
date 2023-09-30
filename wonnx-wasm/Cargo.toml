@@ -1,7 +1,10 @@
 [package]
 name = "wonnx-wasm"
-version = "0.5.0"
-authors = ["haixuanTao <tao.xavier@outlook.com>", "Tommy van der Vorst <tommy@pixelspark.nl>"]
+version = "0.5.1"
+authors = [
+    "haixuanTao <tao.xavier@outlook.com>",
+    "Tommy van der Vorst <tommy@pixelspark.nl>",
+]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "Wonnx is an ONNX runtime based on wgpu aimed at being a universal GPU runtime, written in Rust."
@@ -12,7 +15,7 @@ exclude = [
     "etc/**/*",
     ".github/**/**",
     "coverage/**/**",
-    "examples/**/*", 
+    "examples/**/*",
     "target/**/*",
     "tests/**/*",
     "Cargo.lock",
@@ -22,12 +25,14 @@ exclude = [
 crate-type = ["cdylib"]
 
 [dependencies]
-wonnx = { version = "^0.5.0" }
+wonnx = { version = "^0.5.1" }
 log = "0.4.17"
 console_log = "0.2.2"
 console_error_panic_hook = "0.1.7"
 getrandom = { version = "0.2.6", features = ["js"] }
-wasm-bindgen = { version = "0.2.80", features = ["serde-serialize"] } # remember to change version in wiki as well
+wasm-bindgen = { version = "0.2.80", features = [
+    "serde-serialize",
+] } # remember to change version in wiki as well
 wasm-bindgen-futures = "0.4.30"
 wasm-bindgen-test = "0.3.30"
 serde-wasm-bindgen = "0.5.0"
