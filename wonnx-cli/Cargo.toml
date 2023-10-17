@@ -30,7 +30,7 @@ protobuf = { version = "2.27.1", features = ["with-bytes"] }
 structopt = { version = "0.3.26", features = ["paw"] }
 thiserror = "1.0.31"
 tract-onnx = { version = "0.19.12", optional = true }
-wgpu = "0.16.0"
+wgpu = "0.17.1"
 wonnx = { version = "^0.5.1" }
 wonnx-preprocessing = { version = "^0.5.1" }
 human_bytes = "0.4.1"
