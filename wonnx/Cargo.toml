@@ -22,7 +22,7 @@ exclude = [
 ]
 
 [dependencies]
-wgpu = "0.16.0"
+wgpu = "0.17.1"
 bytemuck = { version = "1.9.1", features = ["extern_crate_alloc"] }
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
 log = "0.4.17"

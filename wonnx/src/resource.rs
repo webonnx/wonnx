@@ -8,7 +8,7 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
         dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
     };
     let instance = wgpu::Instance::new(instance_descriptor);
-    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, backends, None)
+    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, None)
         .await
         .expect("No GPU found given preference");
 
