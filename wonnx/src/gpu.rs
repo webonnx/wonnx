@@ -997,8 +997,7 @@ impl GpuStep {
                 ..
             } => {
                 // Encode a command for invocation of a shader.
-                let mut compute_pass =
-                    encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+                let mut compute_pass = encoder.begin_compute_pass(&Default::default());
                 compute_pass.set_pipeline(pipeline);
                 for (index, bind_group) in bind_groups.iter().enumerate() {
                     compute_pass.set_bind_group(index as u32, bind_group, &[]);
