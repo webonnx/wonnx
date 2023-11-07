@@ -27,7 +27,6 @@ bytemuck = { version = "1.9.1", features = ["extern_crate_alloc"] }
 protobuf = { version = "2.27.1", features = ["with-bytes"] }
 log = "0.4.17"
 tera = { version = "1.15.0", default-features = false }
-lazy_static = "1.4.0"
 thiserror = "1.0.31"
 serde_derive = "1.0.137"
 serde = { version = "1.0.137", features = ["derive"] }

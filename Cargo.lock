@@ -4202,7 +4202,6 @@ dependencies = [
  "env_logger",
  "futures",
  "image",
- "lazy_static",
  "log",
  "ndarray",
  "num",

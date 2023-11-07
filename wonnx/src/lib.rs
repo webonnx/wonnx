@@ -6,9 +6,6 @@ mod optimizer;
 mod resource;
 pub mod utils;
 
-#[macro_use]
-extern crate lazy_static;
-
 pub use compiler::CompileError;
 pub use gpu::GpuError;
 use ir::IrError;

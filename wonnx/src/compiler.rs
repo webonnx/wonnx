@@ -1,4 +1,6 @@
 //! Compiles individual ONNX ops to a WebGPU shader using WGSL templates
+use std::sync::OnceLock;
+
 use crate::utils::{
     ceil, AttributeNotFoundError, DataTypeError, MultiType, NodeAttributes, ScalarType, Shape,
 };
@@ -15,9 +17,10 @@ pub const MAX_WORKGROUP_SIZE_X: u32 = 256;
 pub const MAX_WORKGROUP_SIZE_Y: u32 = 256;
 // pub const MAX_WORKGROUP_SIZE_Z: u32 = 64;
 
-lazy_static! {
-    // Templates for shader source code that we generate for nodes
-    pub static ref TEMPLATES: Tera = {
+static TEMPLATES: OnceLock<Tera> = OnceLock::new();
+
+fn get_templates() -> &'static Tera {
+    TEMPLATES.get_or_init(|| {
         let mut tera = Tera::default();
         tera.add_raw_template(
             "endomorphism/activation.wgsl",
@@ -66,8 +69,9 @@ lazy_static! {
         .unwrap();
         tera.add_raw_template(
             "matrix/pad.wgsl",
-            include_str!("../templates/matrix/pad.wgsl")
-        ).unwrap();
+            include_str!("../templates/matrix/pad.wgsl"),
+        )
+        .unwrap();
         tera.add_raw_template(
             "matrix/resize.wgsl",
             include_str!("../templates/matrix/resize.wgsl"),
@@ -136,7 +140,7 @@ lazy_static! {
         )
         .unwrap();
         tera
-    };
+    })
 }
 
 pub struct CompiledNode {
@@ -1428,7 +1432,7 @@ pub fn compile(
     context.insert("mat3x3_stride", &(48));
 
     // Render template
-    let shader = TEMPLATES
+    let shader = get_templates()
         .render(node_template.template, &context)
         .expect("failed to render shader");
 
