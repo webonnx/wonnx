@@ -31,6 +31,7 @@ async fn run() -> Result<(), NNXError> {
             let instance_descriptor = wgpu::InstanceDescriptor {
                 backends,
                 dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+                ..Default::default()
             };
             let instance = wgpu::Instance::new(instance_descriptor);
             let adapters = instance.enumerate_adapters(wgpu::Backends::all());

@@ -6,6 +6,7 @@ pub async fn request_device_queue() -> (wgpu::Device, wgpu::Queue) {
     let instance_descriptor = wgpu::InstanceDescriptor {
         backends,
         dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+        ..Default::default()
     };
     let instance = wgpu::Instance::new(instance_descriptor);
     let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, None)
