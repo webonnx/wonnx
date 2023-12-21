@@ -43,6 +43,11 @@ fn get_templates() -> &'static Tera {
         )
         .unwrap();
         tera.add_raw_template(
+            "endomorphism/erf.wgsl",
+            include_str!("../templates/endomorphism/erf.wgsl"),
+        )
+        .unwrap();
+        tera.add_raw_template(
             "endomorphism/map.wgsl",
             include_str!("../templates/endomorphism/map.wgsl"),
         )
@@ -297,6 +302,20 @@ pub fn compile(
             NodeTemplate {
                 scalar_type: agreed_type(input_shapes, output_shapes)?,
                 template: "endomorphism/map.wgsl",
+                threads: (x_threads, 1, 1),
+            }
+        }
+
+        "Erf" => {
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                ceil(output_lengths[0], 4),
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+            context.insert("workgroup_size_x", &workgroup_size_x);
+            NodeTemplate {
+                scalar_type: agreed_type(input_shapes, output_shapes)?,
+                template: "endomorphism/erf.wgsl",
                 threads: (x_threads, 1, 1),
             }
         }
