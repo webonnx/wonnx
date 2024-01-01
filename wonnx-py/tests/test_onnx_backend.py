@@ -124,7 +124,6 @@ def do_enforce_test_coverage_safelist(model):  # type: (ModelProto) -> bool
 backend_test = onnx.backend.test.BackendTest(DummyBackend, __name__)
 
 
-
 backend_test.include(f"test_constant_cpu")
 backend_test.include(f"test_conv_[a-z,_]*")
 backend_test.include(f"test_Conv2d[a-z,_]*")
@@ -147,6 +146,9 @@ backend_test.include(f"test_shape_[a-z,_]*")
 backend_test.include(f"test_size_[a-z,_]*")
 backend_test.include(f"test_celu_[a-z,_]*")
 
+# Disabled until CastLike is implemented
+# backend_test.include(f"test_hardsigmoid_[a-z,_]*")
+
 # For these we only test the default version, as we don't support the bool type
 backend_test.include(f"test_prelu_broadcast_cpu$")
 backend_test.include(f"test_elu_cpu$")
@@ -162,15 +164,15 @@ backend_test.include(f"test_leakyrelu_default_cpu$")
 # Disable tests for ReduceSum because ReduceSum accepts the 'axes' list as input instead of as an attribute, and the test
 # case sets the 'axes' input dynamically, which we don't support (yet?).
 # backend_test.include(f"test_reduce_sum_[a-z,_]*")
-#backend_test.include(f"test_reduce_mean_[a-z,_]*")
-#backend_test.include(f"test_reduce_l1_[a-z,_]*")
-#backend_test.include(f"test_reduce_l2_[a-z,_]*")
-#backend_test.include(f"test_reduce_min_[a-z,_]*")
-#backend_test.include(f"test_reduce_prod_[a-z,_]*")
-#backend_test.include(f"test_reduce_sum_square_[a-z,_]*")
-#backend_test.include(f"test_reduce_max_[a-z,_]*")
-#backend_test.include(f"test_reduce_log_sum_[a-z,_]*")
-#backend_test.include(f"test_reduce_log_sum_exp_[a-z,_]*")
+# backend_test.include(f"test_reduce_mean_[a-z,_]*")
+# backend_test.include(f"test_reduce_l1_[a-z,_]*")
+# backend_test.include(f"test_reduce_l2_[a-z,_]*")
+# backend_test.include(f"test_reduce_min_[a-z,_]*")
+# backend_test.include(f"test_reduce_prod_[a-z,_]*")
+# backend_test.include(f"test_reduce_sum_square_[a-z,_]*")
+# backend_test.include(f"test_reduce_max_[a-z,_]*")
+# backend_test.include(f"test_reduce_log_sum_[a-z,_]*")
+# backend_test.include(f"test_reduce_log_sum_exp_[a-z,_]*")
 
 # Takes dynamic input, we don't support that yet
 # backend_test.include(f"test_constantofshape_[a-z,_]*")

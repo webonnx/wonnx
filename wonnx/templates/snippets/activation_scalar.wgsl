@@ -38,6 +38,15 @@
 			{{ scalar_type }}({{ alpha }}) * (exp(input_vec) - {{ scalar_type }}(1))
 		);
 
+{%- elif activation_type == "HardSigmoid" -%}
+	{{ activation_output }} = max(
+		{{ scalar_type }}(0),
+		min(
+			{{ scalar_type }}(1),
+			{{ scalar_type }}({{ alpha }}) * {{ activation_input }} + {{ scalar_type }}({{ beta }})
+		)
+	);
+
 {%- elif activation_output != activation_input -%}
 	{{ activation_output }} = {{ activation_input }};
 
