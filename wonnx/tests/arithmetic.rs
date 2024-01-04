@@ -1,5 +1,4 @@
 use approx::assert_abs_diff_eq;
-use log::error;
 use std::{collections::HashMap, convert::TryInto};
 use wonnx::{
     onnx::TensorProto_DataType,
@@ -9,11 +8,12 @@ use wonnx::{
     },
 };
 
+use ndarray_rand::rand_distr::Uniform;
+use ndarray_rand::RandomExt;
+
 mod common;
 #[test]
 fn test_erf() {
-    use ndarray_rand::rand_distr::Uniform;
-    use ndarray_rand::RandomExt;
     let n: usize = 16;
     let mut input_data = HashMap::new();
     let data = ndarray::Array1::<f32>::random(n, Uniform::new(-100f32, 100f32));
