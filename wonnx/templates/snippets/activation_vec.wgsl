@@ -46,6 +46,15 @@
 	{{ activation_output }} = max({{ activation_input }}, Vec4(Scalar(), Scalar(), Scalar(), Scalar()))
 	                         + min({{ scalar_type }}({{ alpha }}) * {{ activation_input }}, Vec4(Scalar(), Scalar(), Scalar(), Scalar()));
 
+{%- elif activation_type == "HardSigmoid" -%}
+	{{ activation_output }} = max(
+		Vec4(Scalar(), Scalar(), Scalar(), Scalar()),
+		min(
+			Vec4({{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1), {{ scalar_type }}(1)),
+			{{ scalar_type }}({{ alpha }}) * {{ activation_input }} + {{ scalar_type }}({{ beta }})
+		)
+	);
+
 {%- elif activation_output != activation_input -%}
 	{{ activation_output }} = {{ activation_input }};
 

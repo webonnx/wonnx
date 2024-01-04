@@ -762,13 +762,21 @@ pub fn compile(
             }
         }
         op @ ("Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu"
-        | "LeakyRelu") => {
-            let alpha = if op == "LeakyRelu" {
-                node.get_attribute_value("alpha", Some(0.01))?
-            } else {
-                node.get_attribute_value("alpha", Some(1.0))?
+        | "LeakyRelu" | "HardSigmoid") => {
+            let alpha = match op {
+                "LeakyRelu" => node.get_attribute_value("alpha", Some(0.01))?,
+                "HardSigmoid" => node.get_attribute_value("alpha", Some(0.2))?,
+                _ => node.get_attribute_value("alpha", Some(1.0))?,
             };
+
+            let beta = if op == "HardSigmoid" {
+                node.get_attribute_value("beta", Some(0.5))?
+            } else {
+                node.get_attribute_value("beta", Some(1.0))?
+            };
+
             context.insert("alpha", &alpha);
+            context.insert("beta", &beta);
 
             if op == "Clip" {
                 let min: Vec<f32> =
