@@ -292,7 +292,8 @@ impl<'model> Optimizer<'model> {
     }
 
     /// Optimize a branch of a graph (memoized)
-    #[async_recursion]
+    #[cfg_attr(target_arch = "wasm32", async_recursion(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_recursion)]
     pub async fn optimize(
         &mut self,
         node: Arc<Node<'model>>,
@@ -310,7 +311,8 @@ impl<'model> Optimizer<'model> {
 
     /// Optimize a branch of a graph. Takes a node an attempts to form a chain of nodes with single (dynamic) inputs by
     /// traversing towards the inputs.
-    #[async_recursion]
+    #[cfg_attr(target_arch = "wasm32", async_recursion(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_recursion)]
     async fn optimize_actual(
         &mut self,
         node: Arc<Node<'model>>,
