@@ -303,7 +303,7 @@ pub fn compile(
 
         op @ ("ReduceMean" | "ReduceSum" | "ReduceMax" | "ReduceMin" | "ReduceProd"
         | "ReduceL1" | "ReduceL2" | "ReduceLogSum" | "ReduceLogSumExp"
-        | "ReduceSumSquare") => {
+        | "ReduceSumSquare" | "ArgMax") => {
             let all_axes: Vec<i64> = (0..(i_dims[0].len() as i64)).collect();
             let axes: Vec<i64> = node
                 .get_attribute_value("axes", Some(all_axes))?

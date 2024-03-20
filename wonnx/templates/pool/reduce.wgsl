@@ -40,7 +40,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		Now for each reduced axis, iterate all values and reduce. Note, starting value may not always be zero. For 
 		ReduceMin/Max we should initialize as NaN and keep a flag to check if we have seen at least one element -#}
 
-		var accumulator = {% if op_type == "ReduceProd" %} {{ scalar_type }}(1) {% else %} Scalar() {% endif %}; 
+		var accumulator = {% if op_type == "ReduceProd" %} {{ scalar_type }}(1) {% else %} Scalar() {% endif %};
+	    var max_element: Scalar = log(Scalar());
+
 		var count = 0u;
 
 		{% for reducing_axis in axes %}
@@ -79,6 +81,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 					else if(accumulator < input_val) {
 						accumulator = input_val;
 					}
+				{% elif op_type == "ArgMax" %}
+					if(input_val > max_element) {
+                        max_element = input_val;
+                        accumulator = f32(count);
+                    }
 				{% endif %}
 
 				count = count + 1u;
