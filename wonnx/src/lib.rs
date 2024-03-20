@@ -1,4 +1,5 @@
 mod compiler;
+mod einsum;
 mod gpu;
 mod ir;
 pub mod onnx;
