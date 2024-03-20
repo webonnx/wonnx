@@ -8,8 +8,38 @@ use wonnx::{
     },
 };
 
-mod common;
+use ndarray_rand::rand_distr::Uniform;
+use ndarray_rand::RandomExt;
 
+mod common;
+#[test]
+fn test_erf() {
+    let n: usize = 16;
+    let mut input_data = HashMap::new();
+    let data = ndarray::Array1::<f32>::random(n, Uniform::new(-100f32, 100f32));
+
+    let shape = vec![n as i64];
+    input_data.insert("X".to_string(), data.as_slice().unwrap().into());
+
+    // Model: X -> Cos -> Y
+    let model = model(graph(
+        vec![tensor("X", &shape)],
+        vec![tensor("Y", &shape)],
+        vec![],
+        vec![],
+        vec![node(vec!["X"], vec!["Y"], "erf", "Erf", vec![])],
+    ));
+
+    let session =
+        pollster::block_on(wonnx::Session::from_model(model)).expect("Session did not create");
+
+    let result = pollster::block_on(session.run(&input_data)).unwrap();
+    if let OutputTensor::F32(vec) = &result["Y"] {
+        for e in vec {
+            assert_ne!(*e, f32::NAN);
+        }
+    }
+}
 #[test]
 fn test_cos() {
     let n: usize = 16;

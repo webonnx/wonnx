@@ -743,7 +743,7 @@ pub fn compile(
             }
         }
         op @ ("Relu" | "Sigmoid" | "Softsign" | "Softplus" | "Clip" | "Celu" | "Elu"
-        | "LeakyRelu" | "HardSigmoid") => {
+        | "LeakyRelu" | "HardSigmoid" | "Erf") => {
             let alpha = match op {
                 "LeakyRelu" => node.get_attribute_value("alpha", Some(0.01))?,
                 "HardSigmoid" => node.get_attribute_value("alpha", Some(0.2))?,
