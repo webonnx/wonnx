@@ -139,6 +139,11 @@ fn get_templates() -> &'static Tera {
             include_str!("../templates/endomorphism/broadcast.wgsl"),
         )
         .unwrap();
+        tera.add_raw_template(
+            "endomorphism/slice.wgsl",
+            include_str!("../templates/endomorphism/slice.wgsl"),
+        )
+        .unwrap();
         tera
     })
 }
@@ -442,6 +447,85 @@ pub fn compile(
                 template: "endomorphism/gather.wgsl",
                 threads: (x_threads, y_threads, 1),
             }
+        }
+
+        "Slice" => {
+            // TODO @ Raphael
+            // Goal: Implementing slice in version 11:
+            // https://onnx.ai/onnx/operators/onnx__Slice.html#slice-11
+            // 1. Create input buffer.
+            // 2. Create output buffer.
+            // 3. Provide attributes to compute shader.
+            // 4. Call compute shader over output.
+            // 5. Fill output in compute shader.
+
+            // There must be at least starts and ends defined in the inputs
+            let input_count = input_lengths.len();
+            if input_count < 3 {
+                return Err(CompileError::InvalidInputCount {
+                    expected: 3,
+                    actual: input_count,
+                });
+            }
+
+            // Print inputs.
+            println!("starts rank: {:?}", input_shapes[1].rank());
+            println!("starts dim: {:?}", input_shapes[1].dim(0));
+            println!("ends rank: {:?}", input_shapes[2].rank());
+            println!("ends dim: {:?}", input_shapes[2].dim(0));
+            if input_count > 3 {
+                println!("axes rank: {:?}", input_shapes[3].rank());
+                println!("axes dim: {:?}", input_shapes[3].dim(0));
+            }
+            if input_count > 4 {
+                println!("steps rank: {:?}", input_shapes[4].rank());
+                println!("steps dim: {:?}", input_shapes[4].dim(0));
+            }
+
+            // TODO: Create fallback input buffers for axes and steps if not provided.
+
+            // Copied from Gather to avoid compilation error.
+            // Input 0 is data, input 1 is indices
+            // Which axis to gather on. Negative value means counting dimensions from the back. Accepted range is [-r, r-1] where r = rank(data).
+            // Default is 0. See https://github.com/onnx/onnx/blob/main/docs/Operators.md#attributes-25
+            let axis = node.get_attribute_value("axis", Some(0))?;
+            if axis != 0 {
+                return Err(CompileError::UnimplementedVariant {
+                    variant: format!("axis={}", axis),
+                    op: String::from("Gather"),
+                });
+            }
+
+            let elements_per_index = input_chunks[0][0];
+            let scalar_type = agreed_type(&input_shapes[0..1], output_shapes)?;
+            let chunk_type = MultiType::for_size(elements_per_index as usize, scalar_type);
+            let chunk_size = chunk_type.elements();
+
+            // The X dimension represents the indexes
+            let (x_threads, workgroup_size_x) = workgroup_size(
+                input_lengths[1],
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_X,
+            )?;
+
+            // The Y dimension represents the elements to copy for each index
+            let (y_threads, workgroup_size_y) = workgroup_size(
+                ceil(elements_per_index, chunk_size as u64),
+                MAX_COMPUTE_WORKGROUPS_PER_DIMENSION,
+                MAX_WORKGROUP_SIZE_Y,
+            )?;
+
+            context.insert("chunk_type", &chunk_type.wgsl_type_name());
+            context.insert("chunk_size", &chunk_size);
+            context.insert("workgroup_size_x", &workgroup_size_x);
+            context.insert("workgroup_size_y", &workgroup_size_y);
+
+            NodeTemplate {
+                scalar_type,
+                template: "endomorphism/slice.wgsl",
+                threads: (x_threads, y_threads, 1),
+            }
+            // Above to be removed / replaced.
         }
 
         "Cast" => {
