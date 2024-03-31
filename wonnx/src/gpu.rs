@@ -39,7 +39,7 @@ pub struct GpuModel {
 /// An operation that is performed on the GPU as part of inference
 enum GpuStep {
     /// A statically, pre-filled buffer containing tensor data
-    Initializer(Arc<Buffer>),
+    Initializer(),
 
     /// A buffer containing tensor data that is obtained from inference input
     Input(String, Arc<Buffer>),
@@ -582,7 +582,7 @@ impl GpuModel {
                         ),
                         buffer: tensor_buffer.clone(),
                     });
-                    GpuStep::Initializer(tensor_buffer)
+                    GpuStep::Initializer()
                 }
                 // For inputs we create an empty buffer that can be used at inference time to supply input data
                 NodeDefinition::Input(input_def) => {
@@ -711,9 +711,8 @@ impl TensorProtoExtra for TensorProto {
                 let ints: Vec<i32> = self
                     .get_raw_data()
                     .iter()
-                    .map(|x| (*x).try_into())
-                    .collect::<Result<Vec<i32>, _>>()
-                    .map_err(|_e| GpuError::OutOfBoundsError)?;
+                    .map(|x| (*x as i32))
+                    .collect::<Vec<i32>>();
                 let raw_data = bytemuck::cast_slice(&ints);
                 buffer_with_bytes(device, readable, self.get_name(), raw_data)
             }
@@ -935,7 +934,7 @@ impl GpuStep {
         inputs: &HashMap<String, InputTensor>,
     ) -> Result<(), GpuError> {
         match self {
-            GpuStep::None | GpuStep::Forward(_) | GpuStep::Initializer(_) => {
+            GpuStep::None | GpuStep::Forward(_) | GpuStep::Initializer() => {
                 // Buffer already filled, no need to encode anything at this point.
                 Ok(())
             }

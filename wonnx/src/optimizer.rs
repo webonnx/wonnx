@@ -174,7 +174,7 @@ impl<'model> Optimizer<'model> {
         };
         assert_eq!(op_def.proto.get_op_type(), "Constant");
         let proto = &op_def.proto;
-        let output_name = proto.output.get(0).unwrap().to_owned();
+        let output_name = proto.output.first().unwrap().to_owned();
 
         let mut tp: TensorProto =
             if let Ok(values) = proto.get_attribute_value::<Vec<f32>>("value_floats", None) {
@@ -249,7 +249,7 @@ impl<'model> Optimizer<'model> {
 
         // Create an output node so we can perform inference for this node
         if let NodeDefinition::Operator(op_def) = node.definition() {
-            let output_name = op_def.proto.output.get(0).unwrap().to_owned();
+            let output_name = op_def.proto.output.first().unwrap().to_owned();
 
             let out_node = Arc::new(Node {
                 definition: NodeDefinition::Outputs {
