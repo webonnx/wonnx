@@ -46,6 +46,11 @@
 	{{ activation_output }} = max({{ activation_input }}, Vec4(Scalar(), Scalar(), Scalar(), Scalar()))
 	                         + min({{ scalar_type }}({{ alpha }}) * {{ activation_input }}, Vec4(Scalar(), Scalar(), Scalar(), Scalar()));
 
+{%- elif activation_type == "Erf" -%}
+    var intermediate = 2.0/sqrt(pi)*({{ activation_input }}+ pow({{activation_input}},vec4(3.0,3.0,3.0,3.0))*0.08943 );
+    intermediate = clamp(intermediate,vec4(-10.0,-10.0,-10.0,-10.0),vec4(10.0,10.0,10.0,10.0));
+	{{ activation_output }} = tanh(intermediate);
+
 {%- elif activation_type == "HardSigmoid" -%}
 	{{ activation_output }} = max(
 		Vec4(Scalar(), Scalar(), Scalar(), Scalar()),
